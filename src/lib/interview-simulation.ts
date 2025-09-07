@@ -1,0 +1,321 @@
+import { QuestionGenerationRequest, QuestionGenerationResponse } from './llm-service';
+
+export interface InterviewSession {
+  id: string;
+  userId: string;
+  visaType: 'F1' | 'B1/B2' | 'H1B' | 'other';
+  studentProfile: {
+    name: string;
+    country: string;
+    intendedUniversity?: string;
+    fieldOfStudy?: string;
+    previousEducation?: string;
+  };
+  conversationHistory: Array<{
+    question: string;
+    answer: string;
+    timestamp: string;
+    questionType: string;
+    difficulty: string;
+  }>;
+  currentQuestionNumber: number;
+  status: 'active' | 'completed' | 'paused';
+  startTime: string;
+  endTime?: string;
+  score?: {
+    overall: number;
+    communication: number;
+    knowledge: number;
+    confidence: number;
+  };
+}
+
+export class InterviewSimulationService {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = '') {
+    this.baseUrl = baseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+  }
+
+  /**
+   * Start a new interview session
+   */
+  async startInterview(
+    userId: string,
+    visaType: 'F1' | 'B1/B2' | 'H1B' | 'other',
+    studentProfile: InterviewSession['studentProfile']
+  ): Promise<{ session: InterviewSession; firstQuestion: QuestionGenerationResponse }> {
+    const sessionId = `interview_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const session: InterviewSession = {
+      id: sessionId,
+      userId,
+      visaType,
+      studentProfile,
+      conversationHistory: [],
+      currentQuestionNumber: 1,
+      status: 'active',
+      startTime: new Date().toISOString()
+    };
+
+    // Generate the first question
+    const firstQuestion = await this.generateNextQuestion(session);
+
+    return { session, firstQuestion };
+  }
+
+  /**
+   * Process student's answer and generate next question
+   */
+  async processAnswer(
+    session: InterviewSession,
+    answer: string
+  ): Promise<{ 
+    updatedSession: InterviewSession; 
+    nextQuestion?: QuestionGenerationResponse;
+    isComplete: boolean;
+  }> {
+    // Get the current question (last question asked)
+    const currentQuestion = session.conversationHistory.length > 0 
+      ? session.conversationHistory[session.conversationHistory.length - 1].question
+      : "Welcome to your visa interview. Let's begin.";
+
+    // Add the answer to conversation history
+    const updatedHistory = [...session.conversationHistory];
+    if (session.conversationHistory.length > 0) {
+      // Update the last question entry with the answer
+      updatedHistory[updatedHistory.length - 1] = {
+        ...updatedHistory[updatedHistory.length - 1],
+        answer,
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    const updatedSession: InterviewSession = {
+      ...session,
+      conversationHistory: updatedHistory,
+      currentQuestionNumber: session.currentQuestionNumber + 1
+    };
+
+    // Check if interview should end (after 8-10 questions typically)
+    const isComplete = updatedSession.currentQuestionNumber > 8;
+
+    if (isComplete) {
+      updatedSession.status = 'completed';
+      updatedSession.endTime = new Date().toISOString();
+      return { updatedSession, isComplete: true };
+    }
+
+    // Generate next question based on the answer
+    const nextQuestion = await this.generateNextQuestion(updatedSession, currentQuestion, answer);
+
+    // Add the new question to history
+    updatedSession.conversationHistory.push({
+      question: nextQuestion.question,
+      answer: '', // Will be filled when student responds
+      timestamp: new Date().toISOString(),
+      questionType: nextQuestion.questionType,
+      difficulty: nextQuestion.difficulty
+    });
+
+    return { updatedSession, nextQuestion, isComplete: false };
+  }
+
+  /**
+   * Generate the next question using the LLM API
+   */
+  private async generateNextQuestion(
+    session: InterviewSession,
+    previousQuestion?: string,
+    studentAnswer?: string
+  ): Promise<QuestionGenerationResponse> {
+    const request: QuestionGenerationRequest = {
+      previousQuestion,
+      studentAnswer,
+      interviewContext: {
+        visaType: session.visaType,
+        studentProfile: session.studentProfile,
+        currentQuestionNumber: session.currentQuestionNumber,
+        conversationHistory: session.conversationHistory.map(item => ({
+          question: item.question,
+          answer: item.answer,
+          timestamp: item.timestamp
+        }))
+      }
+    };
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/interview/generate-question`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error generating question:', error);
+      // Return fallback question if API fails
+      return this.getFallbackQuestion(session.currentQuestionNumber);
+    }
+  }
+
+  /**
+   * Get a fallback question if the API fails
+   */
+  private getFallbackQuestion(questionNumber: number): QuestionGenerationResponse {
+    const fallbackQuestions = [
+      {
+        question: "Good morning. Please tell me about yourself and why you want to study in the United States.",
+        questionType: 'background' as const,
+        difficulty: 'easy' as const,
+        expectedAnswerLength: 'medium' as const
+      },
+      {
+        question: "What is your intended major and why did you choose this field of study?",
+        questionType: 'academic' as const,
+        difficulty: 'easy' as const,
+        expectedAnswerLength: 'medium' as const
+      },
+      {
+        question: "How will you finance your education in the United States?",
+        questionType: 'financial' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'long' as const
+      },
+      {
+        question: "Why did you choose this particular university over others?",
+        questionType: 'academic' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'medium' as const
+      },
+      {
+        question: "What are your career plans after completing your studies?",
+        questionType: 'intent' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'long' as const
+      },
+      {
+        question: "What ties do you have to your home country that will ensure your return?",
+        questionType: 'intent' as const,
+        difficulty: 'hard' as const,
+        expectedAnswerLength: 'long' as const
+      },
+      {
+        question: "How did you learn about this university and program?",
+        questionType: 'academic' as const,
+        difficulty: 'easy' as const,
+        expectedAnswerLength: 'short' as const
+      },
+      {
+        question: "Do you have any relatives or friends in the United States?",
+        questionType: 'background' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'short' as const
+      }
+    ];
+
+    const index = (questionNumber - 1) % fallbackQuestions.length;
+    return fallbackQuestions[index];
+  }
+
+  /**
+   * Calculate interview score based on responses
+   */
+  calculateScore(session: InterviewSession): InterviewSession['score'] {
+    const responses = session.conversationHistory.filter(item => item.answer.trim() !== '');
+    
+    if (responses.length === 0) {
+      return { overall: 0, communication: 0, knowledge: 0, confidence: 0 };
+    }
+
+    // Simple scoring algorithm - in production, this could use NLP analysis
+    let communicationScore = 0;
+    let knowledgeScore = 0;
+    let confidenceScore = 0;
+
+    responses.forEach(response => {
+      const answerLength = response.answer.length;
+      const wordCount = response.answer.split(' ').length;
+
+      // Communication score based on answer length and structure
+      if (wordCount >= 20 && answerLength >= 100) {
+        communicationScore += 20;
+      } else if (wordCount >= 10) {
+        communicationScore += 15;
+      } else {
+        communicationScore += 10;
+      }
+
+      // Knowledge score based on specific keywords and detail
+      const knowledgeKeywords = ['university', 'degree', 'program', 'research', 'career', 'goals'];
+      const keywordMatches = knowledgeKeywords.filter(keyword => 
+        response.answer.toLowerCase().includes(keyword)
+      ).length;
+      knowledgeScore += Math.min(keywordMatches * 5, 20);
+
+      // Confidence score based on definitive language
+      const confidenceIndicators = ['will', 'plan to', 'definitely', 'certainly', 'committed'];
+      const confidenceMatches = confidenceIndicators.filter(indicator =>
+        response.answer.toLowerCase().includes(indicator)
+      ).length;
+      confidenceScore += Math.min(confidenceMatches * 4, 20);
+    });
+
+    // Normalize scores to 0-100 range
+    const maxPossibleScore = responses.length * 20;
+    communicationScore = Math.min((communicationScore / maxPossibleScore) * 100, 100);
+    knowledgeScore = Math.min((knowledgeScore / maxPossibleScore) * 100, 100);
+    confidenceScore = Math.min((confidenceScore / maxPossibleScore) * 100, 100);
+
+    const overall = (communicationScore + knowledgeScore + confidenceScore) / 3;
+
+    return {
+      overall: Math.round(overall),
+      communication: Math.round(communicationScore),
+      knowledge: Math.round(knowledgeScore),
+      confidence: Math.round(confidenceScore)
+    };
+  }
+
+  /**
+   * Pause an active interview
+   */
+  pauseInterview(session: InterviewSession): InterviewSession {
+    return {
+      ...session,
+      status: 'paused'
+    };
+  }
+
+  /**
+   * Resume a paused interview
+   */
+  resumeInterview(session: InterviewSession): InterviewSession {
+    return {
+      ...session,
+      status: 'active'
+    };
+  }
+
+  /**
+   * End an interview and calculate final score
+   */
+  endInterview(session: InterviewSession): InterviewSession {
+    const score = this.calculateScore(session);
+    
+    return {
+      ...session,
+      status: 'completed',
+      endTime: new Date().toISOString(),
+      score
+    };
+  }
+}
+
+export type { QuestionGenerationResponse };

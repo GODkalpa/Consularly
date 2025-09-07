@@ -1,0 +1,146 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to get user data
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Helper function to check if user is admin or super_admin
+    function isAdmin() {
+      return request.auth != null && getUserData().role in ['admin', 'super_admin'];
+    }
+    
+    // Helper function to check if user is super_admin
+    function isSuperAdmin() {
+      return request.auth != null && getUserData().role == 'super_admin';
+    }
+    
+    // Helper function to check if user belongs to the same organization
+    function isSameOrg(orgId) {
+      return getUserData().orgId == orgId;
+    }
+    
+    // Users collection - role-based access control
+    match /users/{userId} {
+      // Users can read and write their own profile
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Admins can read all users in their organization
+      allow read: if isAdmin() && isSameOrg(resource.data.orgId);
+      
+      // Super admins can read all users
+      allow read: if isSuperAdmin();
+      
+      // Admins can update users in their organization (except role changes)
+      allow update: if isAdmin() && 
+        isSameOrg(resource.data.orgId) && 
+        request.resource.data.role == resource.data.role;
+      
+      // Super admins can update any user including role changes
+      allow update: if isSuperAdmin();
+      
+      // Only super admins can create new admin users
+      allow create: if request.auth != null && (
+        (request.resource.data.role == 'user') ||
+        (isSuperAdmin() && request.resource.data.role in ['admin', 'super_admin'])
+      );
+    }
+    
+    // Interviews collection - admin-level access control
+    match /interviews/{interviewId} {
+      // Students can only read their own interviews
+      allow read: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+      
+      // Students can create interviews for themselves
+      allow create: if request.auth != null && 
+        request.resource.data.userId == request.auth.uid &&
+        isSameOrg(request.resource.data.orgId);
+      
+      // Students can update their own ongoing interviews
+      allow update: if request.auth != null && 
+        resource.data.userId == request.auth.uid &&
+        resource.data.status in ['scheduled', 'in_progress'];
+      
+      // Admins can read all interviews in their organization
+      allow read: if isAdmin() && isSameOrg(resource.data.orgId);
+      
+      // Super admins can read all interviews
+      allow read: if isSuperAdmin();
+      
+      // Admins can create, update, and delete interviews in their organization
+      allow write: if isAdmin() && (
+        (request.resource.data.orgId == getUserData().orgId) ||
+        (resource != null && isSameOrg(resource.data.orgId))
+      );
+      
+      // Super admins have full access
+      allow write: if isSuperAdmin();
+      
+      // Interview metrics sub-collection
+      match /metrics/{metricId} {
+        // Students can read their own interview metrics
+        allow read: if request.auth != null && 
+          get(/databases/$(database)/documents/interviews/$(interviewId)).data.userId == request.auth.uid;
+        
+        // System can write metrics during interviews
+        allow write: if request.auth != null && (
+          get(/databases/$(database)/documents/interviews/$(interviewId)).data.userId == request.auth.uid ||
+          isAdmin()
+        );
+        
+        // Admins can read metrics for interviews in their organization
+        allow read: if isAdmin() && 
+          isSameOrg(get(/databases/$(database)/documents/interviews/$(interviewId)).data.orgId);
+        
+        // Super admins can read all metrics
+        allow read: if isSuperAdmin();
+        
+        // Admins can write metrics in their organization
+        allow write: if isAdmin() && 
+          isSameOrg(get(/databases/$(database)/documents/interviews/$(interviewId)).data.orgId);
+        
+        // Super admins have full access
+        allow write: if isSuperAdmin();
+      }
+    }
+    
+    // Organizations collection - admin access only
+    match /organizations/{orgId} {
+      // Admins can read their own organization
+      allow read: if isAdmin() && isSameOrg(orgId);
+      
+      // Super admins can read all organizations
+      allow read: if isSuperAdmin();
+      
+      // Admins can update their own organization (limited fields)
+      allow update: if isAdmin() && 
+        isSameOrg(orgId) &&
+        request.resource.data.keys().hasAll(['name', 'settings']) &&
+        request.resource.data.quotaLimit == resource.data.quotaLimit &&
+        request.resource.data.plan == resource.data.plan;
+      
+      // Super admins have full access
+      allow write: if isSuperAdmin();
+    }
+    
+    // System settings - super admin only
+    match /systemSettings/{settingId} {
+      allow read, write: if isSuperAdmin();
+    }
+    
+    // Legacy collections for backward compatibility
+    match /mockSessions/{sessionId} {
+      allow read, write: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && 
+        request.resource.data.userId == request.auth.uid;
+    }
+    
+    match /userProgress/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

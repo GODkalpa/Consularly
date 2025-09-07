@@ -1,0 +1,41 @@
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import { ClientAuthProvider } from '@/components/ClientAuthProvider'
+
+// ClientAuthProvider is a client component; importing it statically avoids first-load spinners
+
+const inter = Inter({ subsets: ['latin'] })
+
+export const metadata: Metadata = {
+  title: 'Consularly - Ace Your US Visa Interview',
+  description: 'AI-powered visa interview mock test platform for Nepalese F-1 students. Practice with realistic questions, get instant feedback, and increase your success rate.',
+  keywords: 'visa interview, F-1 visa, Nepal, USA, mock test, AI feedback, student visa, visa preparation',
+  authors: [{ name: 'Consularly Team' }],
+  openGraph: {
+    title: 'Consularly - Ace Your US Visa Interview',
+    description: 'AI-powered visa interview preparation for Nepalese students',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Consularly - Ace Your US Visa Interview',
+    description: 'AI-powered visa interview preparation for Nepalese students',
+  },
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        <ClientAuthProvider>
+          {children}
+        </ClientAuthProvider>
+      </body>
+    </html>
+  )
+}
