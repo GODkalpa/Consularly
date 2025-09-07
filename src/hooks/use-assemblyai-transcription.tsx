@@ -113,11 +113,6 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
 
       isInitializedRef.current = true;
 
-      // Auto-start if requested
-      if (options.autoStart) {
-        await startTranscription();
-      }
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Initialization failed';
       setState(prev => ({ ...prev, error: errorMessage }));
@@ -148,6 +143,14 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
       console.error('Failed to start transcription:', error);
     }
   }, [initialize]);
+
+  // Handle auto-start outside of initialize to satisfy hooks deps
+  useEffect(() => {
+    if (options.autoStart) {
+      startTranscription();
+    }
+    // It's intentional to depend only on the flag and the stable callback
+  }, [options.autoStart, startTranscription]);
 
   // Stop transcription
   const stopTranscription = useCallback(async () => {
@@ -275,14 +278,15 @@ export function useContinuousTranscription(options: UseAssemblyAITranscriptionOp
   }, [transcription]);
 
   // Auto-restart on disconnection if still active
+  const { startTranscription: startTx, isConnected, isRecording } = transcription;
   useEffect(() => {
-    if (isActive && !transcription.isConnected && !transcription.isRecording) {
+    if (isActive && !isConnected && !isRecording) {
       const timer = setTimeout(() => {
-        transcription.startTranscription();
+        startTx();
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [isActive, transcription.isConnected, transcription.isRecording]);
+  }, [isActive, isConnected, isRecording, startTx]);
 
   return {
     transcripts,

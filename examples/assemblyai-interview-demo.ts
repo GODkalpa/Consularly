@@ -309,7 +309,7 @@ export async function testApiConnection() {
   console.log('🔑 API Key found, testing connection...');
 
   try {
-    const isValid = await AssemblyAIService.testApiKey(apiKey);
+    const isValid = await AssemblyAIService.testApiKey();
     
     if (isValid) {
       console.log('✅ AssemblyAI API connection successful!');

@@ -57,7 +57,7 @@ export default function SignInPage() {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center">Sign in</CardTitle>
             <CardDescription className="text-center">
-              You don't have administrator privileges to access this page. Enter your email and password to access your account
+              You don&apos;t have administrator privileges to access this page. Enter your email and password to access your account
             </CardDescription>
           </CardHeader>
         <CardContent className="space-y-4">

@@ -141,12 +141,16 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
         hint = 'The requested camera constraints are not supported. Try a different camera or resolution.'
       } else if (name === 'NotFoundError') {
         hint = 'Requested camera device not found. Select a different camera from the dropdown and try again.'
-        try { await refreshCameras() } catch {}
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices()
+          const vids = devices.filter((d) => d.kind === 'videoinput')
+          setCameras(vids)
+        } catch {}
       }
       setState((s) => ({ ...s, errors: [...s.errors, `${name}: ${e?.message || e}. ${hint}`] }))
       // Don't rethrow; allow UI to present the error and user to retry or switch camera
     }
-  }, [cfg.height, cfg.width])
+  }, [cfg.height, cfg.width, stopStream])
 
   const loadDetectors = useCallback(async () => {
     const errors: string[] = []

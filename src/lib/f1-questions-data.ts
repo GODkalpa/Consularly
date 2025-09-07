@@ -177,6 +177,19 @@ export const getAllCategories = (): string[] => {
   return F1_VISA_QUESTIONS.map(c => c.category);
 };
 
+// Backward-compatible flat list of questions for examples and utilities
+export interface FlatF1Question {
+  category: string;
+  question: string;
+}
+
+export const f1Questions: FlatF1Question[] = F1_VISA_QUESTIONS.reduce<FlatF1Question[]>((acc, cat) => {
+  for (const q of cat.questions) {
+    acc.push({ category: cat.category, question: q });
+  }
+  return acc;
+}, []);
+
 // Map question types to F1 categories
 export const mapQuestionTypeToF1Category = (questionType: string): string => {
   const mapping: Record<string, string> = {
