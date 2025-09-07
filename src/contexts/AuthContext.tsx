@@ -13,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import { auth, db } from '@/lib/firebase';
+import { auth, db, firebaseEnabled } from '@/lib/firebase';
 import { getUserProfile, isUserAdmin, UserProfile } from '@/lib/database';
 
 interface AuthContextType {
@@ -46,6 +46,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    // If Firebase isn't configured, skip setting up auth listeners
+    if (!firebaseEnabled) {
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       
@@ -86,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
+      if (!firebaseEnabled) throw new Error('Authentication is not configured. Please contact support.');
       const result = await signInWithEmailAndPassword(auth, email, password);
       // Redirect will be handled by the auth state change listener
     } catch (error) {
@@ -95,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, displayName: string) => {
     try {
+      if (!firebaseEnabled) throw new Error('Authentication is not configured. Please contact support.');
       const { user } = await createUserWithEmailAndPassword(auth, email, password);
       
       // Update the user's display name
@@ -124,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = async () => {
     try {
+      if (!firebaseEnabled) throw new Error('Authentication is not configured. Please contact support.');
       const provider = new GoogleAuthProvider();
       const { user } = await signInWithPopup(auth, provider);
       
@@ -161,6 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      if (!firebaseEnabled) return;
       await signOut(auth);
       router.push('/'); // Redirect to home after logout
     } catch (error) {
