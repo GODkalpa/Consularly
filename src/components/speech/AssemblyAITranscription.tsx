@@ -31,6 +31,10 @@ interface AssemblyAITranscriptionProps {
   showControls?: boolean;
   showTranscripts?: boolean;
   autoStart?: boolean;
+  // If provided, the component will start/stop recording based on this flag
+  running?: boolean;
+  // Increment this key to clear transcripts (useful when moving to next question)
+  resetKey?: number;
 }
 
 export function AssemblyAITranscription({
@@ -39,7 +43,9 @@ export function AssemblyAITranscription({
   className = '',
   showControls = true,
   showTranscripts = true,
-  autoStart = false
+  autoStart = false,
+  running,
+  resetKey
 }: AssemblyAITranscriptionProps) {
   const [recordingDuration, setRecordingDuration] = useState(0);
 
@@ -50,9 +56,8 @@ export function AssemblyAITranscription({
 
   // Update parent component with current transcript
   useEffect(() => {
-    const currentText = transcription.getFullTranscript();
-    onTranscriptUpdate?.(currentText);
-  }, [transcription.currentTranscript, transcription.finalTranscripts, onTranscriptUpdate, transcription]);
+    onTranscriptUpdate?.(transcription.currentTranscript);
+  }, [transcription.currentTranscript, onTranscriptUpdate]);
 
   // Recording duration timer
   useEffect(() => {
@@ -66,6 +71,32 @@ export function AssemblyAITranscription({
     }
     return () => clearInterval(interval);
   }, [transcription.isRecording]);
+
+  // Parent-controlled running flag
+  useEffect(() => {
+    if (running === undefined) return;
+    const control = async () => {
+      try {
+        if (running && !transcription.isRecording) {
+          await transcription.startTranscription();
+        } else if (!running && transcription.isRecording) {
+          await transcription.stopTranscription();
+        }
+      } catch (e) {
+        // no-op; hook already surfaces errors
+      }
+    };
+    control();
+    // We intentionally depend only on 'running' and the booleans to avoid re-creating functions
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, transcription.isRecording]);
+
+  // Clear transcripts when resetKey changes
+  useEffect(() => {
+    if (resetKey === undefined) return;
+    transcription.clearTranscripts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
 
   // Format duration
   const formatDuration = (seconds: number) => {

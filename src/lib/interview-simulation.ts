@@ -157,7 +157,22 @@ export class InterviewSimulationService {
         throw new Error(`API request failed: ${response.status}`);
       }
 
-      return await response.json();
+      const next: QuestionGenerationResponse = await response.json();
+
+      // Deduplicate: avoid repeating previously asked questions
+      const normalize = (s: string) => s
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ') // remove punctuation/symbols (ASCII-safe)
+        .replace(/\s+/g, ' ')
+        .trim();
+      const asked = new Set(session.conversationHistory.map(h => normalize(h.question)));
+      const candidate = normalize(next.question);
+      if (asked.has(candidate)) {
+        // Fallback to a unique question
+        return this.getUniqueFallbackQuestion(session.currentQuestionNumber, asked);
+      }
+
+      return next;
     } catch (error) {
       console.error('Error generating question:', error);
       // Return fallback question if API fails
@@ -222,6 +237,88 @@ export class InterviewSimulationService {
 
     const index = (questionNumber - 1) % fallbackQuestions.length;
     return fallbackQuestions[index];
+  }
+
+  /**
+   * Get a unique fallback question that hasn't been asked yet
+   */
+  private getUniqueFallbackQuestion(
+    questionNumber: number,
+    askedNormalized: Set<string>
+  ): QuestionGenerationResponse {
+    const normalized = (s: string) => s
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const pool = [
+      {
+        question: "Why do you want to study in the US?",
+        questionType: 'background' as const,
+        difficulty: 'easy' as const,
+        expectedAnswerLength: 'medium' as const
+      },
+      {
+        question: "Why can't you continue your education in your home country?",
+        questionType: 'background' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'medium' as const
+      },
+      {
+        question: "How many schools did you apply to? How many rejected you?",
+        questionType: 'academic' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'short' as const
+      },
+      {
+        question: "Why did you choose this particular university over others?",
+        questionType: 'academic' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'medium' as const
+      },
+      {
+        question: "Who is sponsoring your education? What is their annual income?",
+        questionType: 'financial' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'short' as const
+      },
+      {
+        question: "How will you pay for your tuition and living expenses?",
+        questionType: 'financial' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'long' as const
+      },
+      {
+        question: "What are your GRE and TOEFL scores? Did you fail any subjects?",
+        questionType: 'academic' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'short' as const
+      },
+      {
+        question: "What are your plans after graduation? Do you plan to return to Nepal?",
+        questionType: 'intent' as const,
+        difficulty: 'hard' as const,
+        expectedAnswerLength: 'long' as const
+      },
+      {
+        question: "What is the guarantee that you will come back to Nepal after your studies?",
+        questionType: 'intent' as const,
+        difficulty: 'hard' as const,
+        expectedAnswerLength: 'long' as const
+      },
+      {
+        question: "Do you have any relatives or friends in the United States?",
+        questionType: 'background' as const,
+        difficulty: 'medium' as const,
+        expectedAnswerLength: 'short' as const
+      }
+    ];
+
+    // Choose the first not yet asked; otherwise fallback to default rotation
+    for (const q of pool) {
+      if (!askedNormalized.has(normalized(q.question))) return q;
+    }
+    return this.getFallbackQuestion(questionNumber);
   }
 
   /**

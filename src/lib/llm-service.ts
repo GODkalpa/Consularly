@@ -93,10 +93,17 @@ export class LLMQuestionService {
 
 Key Guidelines:
 1. Generate questions that mirror real F1 visa interview patterns
-2. Base follow-up questions on the student's previous answers to probe deeper
+2. Base follow-up questions on the student's previous answers to probe deeper and be explicitly relevant
 3. Test academic preparedness, financial capability, genuine intent, and ties to home country
 4. Vary question difficulty and probe inconsistencies or vague responses
-5. Focus on these core areas:
+5. Do NOT repeat any previously asked question; every question must be unique. If a topic was already covered, only ask a follow-up that builds on specific details or clarifies contradictions.
+6. Maintain a coherent flow across the interview: start with Study Plans, then University Choice, Academic Capability, Financial Status, and Intent to Return. Only deviate for targeted follow-ups.
+7. Keep questions concise and officer-like.
+8. Avoid multi-part questions unless necessary.
+9. If the previous answer was vague, demand specifics (numbers, names, evidence).
+10. If the previous answer was detailed, challenge depth and consistency.
+
+Focus areas pattern:
    - Study Plans: Why US? Why this major? Academic background?
    - University Choice: Why this university? Application process? Rejections?
    - Academic Capability: Test scores, GPA, English proficiency, past failures?
@@ -168,6 +175,11 @@ Interview Progress: Question ${currentQuestionNumber}`;
         prompt += `\n- Explores potential concerns or red flags`;
       }
       
+      // Hard constraints
+      prompt += `\n- MUST be clearly connected to the student's answer (reference a detail or missing detail)`;
+      prompt += `\n- MUST NOT repeat any previously asked question verbatim`;
+      prompt += `\n- If a topic was covered, only ask a targeted follow-up (no restating)`;
+
       // Suggest question categories based on conversation history
       const coveredTopics = conversationHistory.map(h => h.question.toLowerCase());
       const needsFinancial = !coveredTopics.some(q => q.includes('sponsor') || q.includes('pay') || q.includes('cost'));
@@ -183,6 +195,7 @@ Interview Progress: Question ${currentQuestionNumber}`;
       if (needsAcademic && currentQuestionNumber > 1) {
         prompt += `\n- Consider asking about academic qualifications if not covered`;
       }
+      prompt += `\n- Keep the overall pattern in mind (Study Plans → University → Academic → Financial → Intent)`;
     } else {
       // First question or starting new topic - follow real F1 interview flow
       const questionFlow = [
@@ -197,6 +210,7 @@ Interview Progress: Question ${currentQuestionNumber}`;
       const focusIndex = Math.min(currentQuestionNumber - 1, questionFlow.length - 1);
       prompt += `\n\nGenerate a question focusing on: ${questionFlow[focusIndex]}`;
       prompt += `\nQuestion ${currentQuestionNumber} - Make it direct and challenging like a real visa officer.`;
+      prompt += `\nDo NOT repeat any previously asked question. Keep the flow coherent.`;
     }
 
     return prompt;

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,13 +8,20 @@ import { Progress } from '@/components/ui/progress'
 import { NoSSR } from '@/components/NoSSR'
 import { useBodyLanguageTracker } from '@/hooks/use-body-language-tracker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import type { BodyLanguageScore } from '@/lib/body-language-scoring'
 
 export interface BodyLanguageTrackerProps {
   width?: number
   height?: number
+  // Parent-controlled running flag to auto start/stop
+  running?: boolean
+  // Hide Start/Stop buttons when parent is controlling
+  showControls?: boolean
+  // Notify parent on score updates
+  onScore?: (score: BodyLanguageScore) => void
 }
 
-export const BodyLanguageTracker: React.FC<BodyLanguageTrackerProps> = ({ width = 640, height = 480 }) => {
+export const BodyLanguageTracker: React.FC<BodyLanguageTrackerProps> = ({ width = 640, height = 480, running, showControls = true, onScore }) => {
   const { state, start, stop, videoRef, canvasRef, cameras, switchCamera, refreshCameras } = useBodyLanguageTracker({
     width,
     height,
@@ -28,6 +35,27 @@ export const BodyLanguageTracker: React.FC<BodyLanguageTrackerProps> = ({ width 
 
   const overall = state.score?.overallScore ?? 0
 
+  // React to parent-controlled running flag
+  useEffect(() => {
+    if (running === undefined) return
+    const control = async () => {
+      try {
+        if (running && !state.running) {
+          await start()
+        } else if (!running && state.running) {
+          await stop()
+        }
+      } catch {}
+    }
+    control()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, state.running])
+
+  // Notify parent on score updates
+  useEffect(() => {
+    if (state.score && onScore) onScore(state.score)
+  }, [state.score, onScore])
+
   return (
     <NoSSR>
       <Card>
@@ -40,19 +68,21 @@ export const BodyLanguageTracker: React.FC<BodyLanguageTrackerProps> = ({ width 
                 <Badge variant="outline">{state.backend}</Badge>
               )}
             </CardTitle>
-            <div className="flex gap-2">
-              {!state.running ? (
-                <>
-                  <Button onClick={start}>Start</Button>
-                  <Button variant="outline" onClick={refreshCameras}>Refresh Cameras</Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="secondary" onClick={stop}>Stop</Button>
-                  <Button variant="outline" onClick={start}>Retry</Button>
-                </>
-              )}
-            </div>
+            {showControls && (
+              <div className="flex gap-2">
+                {!state.running ? (
+                  <>
+                    <Button onClick={start}>Start</Button>
+                    <Button variant="outline" onClick={refreshCameras}>Refresh Cameras</Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="secondary" onClick={stop}>Stop</Button>
+                    <Button variant="outline" onClick={start}>Retry</Button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>

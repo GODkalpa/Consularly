@@ -6,7 +6,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action, userId, visaType, studentProfile, sessionId, answer } = body;
 
-    const simulationService = new InterviewSimulationService();
+    // Build absolute origin for server-side fetches
+    const origin = request.nextUrl?.origin || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const simulationService = new InterviewSimulationService(origin);
 
     switch (action) {
       case 'start':
