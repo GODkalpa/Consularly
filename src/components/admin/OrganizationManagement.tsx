@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,102 +21,115 @@ import {
   CheckCircle,
   Pause
 } from "lucide-react"
+import { collection, onSnapshot, orderBy, query, where, getCountFromServer, documentId } from "firebase/firestore"
+import type { QuerySnapshot, DocumentData, QueryDocumentSnapshot } from "firebase/firestore"
+import { auth, db, firebaseEnabled } from "@/lib/firebase"
+import { toast } from "sonner"
+import { useAuth } from "@/contexts/AuthContext"
 
-interface Organization {
+type OrgRow = {
   id: string
   name: string
-  email: string
-  contactPerson: string
-  phone: string
+  email?: string
+  contactPerson?: string
+  phone?: string
   type: 'visa_consultancy' | 'educational' | 'corporate'
   status: 'active' | 'suspended' | 'pending'
   subscriptionPlan: 'basic' | 'premium' | 'enterprise'
   monthlyQuota: number
   usedQuota: number
-  totalUsers: number
-  joinDate: string
-  lastPayment: string
-  nextBilling: string
+  joinDate?: string
+  nextBilling?: string
 }
 
-const mockOrganizations: Organization[] = [
-  {
-    id: "1",
-    name: "Global Visa Services",
-    email: "admin@globalvisa.com",
-    contactPerson: "Sarah Johnson",
-    phone: "+1-555-0123",
-    type: "visa_consultancy",
-    status: "active",
-    subscriptionPlan: "premium",
-    monthlyQuota: 500,
-    usedQuota: 342,
-    totalUsers: 45,
-    joinDate: "2024-01-10",
-    lastPayment: "2024-01-01",
-    nextBilling: "2024-02-01"
-  },
-  {
-    id: "2",
-    name: "ABC Immigration Consultancy",
-    email: "contact@abcimmigration.com",
-    contactPerson: "Michael Chen",
-    phone: "+1-555-0456",
-    type: "visa_consultancy",
-    status: "active",
-    subscriptionPlan: "basic",
-    monthlyQuota: 100,
-    usedQuota: 85,
-    totalUsers: 12,
-    joinDate: "2023-12-15",
-    lastPayment: "2024-01-01",
-    nextBilling: "2024-02-01"
-  },
-  {
-    id: "3",
-    name: "Education Plus Institute",
-    email: "info@educationplus.edu",
-    contactPerson: "Dr. Emily Watson",
-    phone: "+1-555-0789",
-    type: "educational",
-    status: "suspended",
-    subscriptionPlan: "enterprise",
-    monthlyQuota: 1000,
-    usedQuota: 0,
-    totalUsers: 150,
-    joinDate: "2023-11-20",
-    lastPayment: "2023-12-01",
-    nextBilling: "2024-01-01"
-  },
-  {
-    id: "4",
-    name: "Corporate Training Solutions",
-    email: "admin@corptraining.com",
-    contactPerson: "James Wilson",
-    phone: "+1-555-0321",
-    type: "corporate",
-    status: "pending",
-    subscriptionPlan: "premium",
-    monthlyQuota: 300,
-    usedQuota: 0,
-    totalUsers: 0,
-    joinDate: "2024-01-18",
-    lastPayment: "-",
-    nextBilling: "2024-02-18"
-  }
-]
-
 export function OrganizationManagement() {
-  const [organizations, setOrganizations] = useState<Organization[]>(mockOrganizations)
+  const { user, userProfile } = useAuth()
+  const [organizations, setOrganizations] = useState<OrgRow[]>([])
+  const [userCounts, setUserCounts] = useState<Record<string, number>>({})
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+
+  // Create dialog state
+  const [newName, setNewName] = useState("")
+  const [newEmail, setNewEmail] = useState("")
+  const [newContactPerson, setNewContactPerson] = useState("")
+  const [newPhone, setNewPhone] = useState("")
+  const [newType, setNewType] = useState<string>("")
+  const [newPlan, setNewPlan] = useState<string>("")
+  const [newQuota, setNewQuota] = useState<string>("")
+
+  // Real-time subscription to organizations
+  useEffect(() => {
+    if (!firebaseEnabled) return
+
+    // Super admins see all orgs; admins see only their org
+    const baseCol = collection(db, 'organizations')
+    const isSuper = userProfile?.role === 'super_admin'
+    const orgId = (userProfile as any)?.orgId as string | undefined
+
+    // Build query: super admins see all; admins see their org by id if known,
+    // otherwise fall back to orgs where they are listed as an admin user.
+    let q: any
+    if (isSuper) {
+      q = query(baseCol, orderBy('createdAt', 'desc'))
+    } else if (orgId) {
+      q = query(baseCol, where(documentId(), '==', orgId))
+    } else if (user?.uid) {
+      q = query(baseCol, where('adminUsers', 'array-contains', user.uid))
+    } else {
+      setOrganizations([])
+      setUserCounts({})
+      return
+    }
+    const unsub = onSnapshot(q, async (snap: QuerySnapshot<DocumentData>) => {
+      const orgs: OrgRow[] = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => {
+        const data = d.data() as any
+        const createdAt = (data?.createdAt?.toDate?.() as Date | undefined)
+        return {
+          id: d.id,
+          name: data?.name || d.id,
+          email: data?.email || '',
+          contactPerson: data?.contactPerson || '',
+          phone: data?.phone || '',
+          type: (data?.type || 'visa_consultancy') as OrgRow['type'],
+          status: (data?.status || 'active') as OrgRow['status'],
+          subscriptionPlan: (data?.plan || 'basic') as OrgRow['subscriptionPlan'],
+          monthlyQuota: Number(data?.quotaLimit || data?.monthlyQuota || 0),
+          usedQuota: Number(data?.quotaUsed || 0),
+          joinDate: createdAt ? createdAt.toISOString() : undefined,
+          nextBilling: data?.nextBilling || undefined,
+        }
+      })
+      setOrganizations(orgs)
+
+      // Fetch per-org user counts efficiently
+      try {
+        const entries = await Promise.all(
+          orgs.map(async (o) => {
+            try {
+              const countSnap = await getCountFromServer(query(collection(db, 'users'), where('orgId', '==', o.id)))
+              return [o.id, Number((countSnap.data() as any)?.count || 0)] as const
+            } catch {
+              return [o.id, 0] as const
+            }
+          })
+        )
+        setUserCounts(Object.fromEntries(entries))
+      } catch {
+        // ignore count errors
+      }
+    })
+
+    return () => unsub()
+  }, [userProfile, user])
 
   const filteredOrganizations = organizations.filter(org => {
     const matchesSearch = org.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         org.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         org.contactPerson.toLowerCase().includes(searchTerm.toLowerCase())
+                         (org.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (org.contactPerson || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesType = typeFilter === "all" || org.type === typeFilter
     const matchesStatus = statusFilter === "all" || org.status === statusFilter
     
@@ -161,13 +174,59 @@ export function OrganizationManagement() {
     return "text-green-600"
   }
 
-  const orgStats = {
+  const orgStats = useMemo(() => ({
     total: organizations.length,
     active: organizations.filter(o => o.status === 'active').length,
     suspended: organizations.filter(o => o.status === 'suspended').length,
     pending: organizations.filter(o => o.status === 'pending').length,
-    totalQuota: organizations.reduce((sum, o) => sum + o.monthlyQuota, 0),
-    totalUsed: organizations.reduce((sum, o) => sum + o.usedQuota, 0)
+    totalQuota: organizations.reduce((sum, o) => sum + (o.monthlyQuota || 0), 0),
+    totalUsed: organizations.reduce((sum, o) => sum + (o.usedQuota || 0), 0)
+  }), [organizations])
+
+  async function handleCreateOrganization() {
+    if (!newName || !newPlan || !newQuota) {
+      toast.error('Please fill in organization name, plan and monthly quota')
+      return
+    }
+    try {
+      setCreating(true)
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch('/api/admin/organizations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: newName,
+          email: newEmail,
+          contactPerson: newContactPerson,
+          phone: newPhone,
+          type: newType || 'visa_consultancy',
+          plan: newPlan,
+          quotaLimit: Number(newQuota),
+          status: 'active',
+          settings: {
+            allowSelfRegistration: false,
+            defaultInterviewDuration: 30,
+            enableMetricsCollection: true,
+            customBranding: { companyName: newName }
+          }
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Failed to create organization')
+
+      toast.success('Organization created')
+      setIsCreateDialogOpen(false)
+      setNewName(''); setNewEmail(''); setNewContactPerson(''); setNewPhone(''); setNewType(''); setNewPlan(''); setNewQuota('')
+    } catch (e: any) {
+      toast.error('Create organization failed', { description: e?.message })
+    } finally {
+      setCreating(false)
+    }
   }
 
   return (
@@ -235,23 +294,23 @@ export function OrganizationManagement() {
                 <div className="grid grid-cols-2 gap-4 py-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Organization Name</label>
-                    <Input placeholder="Enter organization name" />
+                    <Input placeholder="Enter organization name" value={newName} onChange={(e) => setNewName(e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Email</label>
-                    <Input type="email" placeholder="Enter email address" />
+                    <Input type="email" placeholder="Enter email address" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Contact Person</label>
-                    <Input placeholder="Enter contact person name" />
+                    <Input placeholder="Enter contact person name" value={newContactPerson} onChange={(e) => setNewContactPerson(e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Phone</label>
-                    <Input placeholder="Enter phone number" />
+                    <Input placeholder="Enter phone number" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Organization Type</label>
-                    <Select>
+                    <Select value={newType} onValueChange={setNewType}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
@@ -264,7 +323,7 @@ export function OrganizationManagement() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Subscription Plan</label>
-                    <Select>
+                    <Select value={newPlan} onValueChange={setNewPlan}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select plan" />
                       </SelectTrigger>
@@ -277,15 +336,15 @@ export function OrganizationManagement() {
                   </div>
                   <div className="col-span-2 space-y-2">
                     <label className="text-sm font-medium">Monthly Test Quota</label>
-                    <Input type="number" placeholder="Enter monthly quota" />
+                    <Input type="number" placeholder="Enter monthly quota" value={newQuota} onChange={(e) => setNewQuota(e.target.value)} />
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={() => setIsCreateDialogOpen(false)}>
-                    Create Organization
+                  <Button onClick={handleCreateOrganization} disabled={creating}>
+                    {creating ? 'Creating…' : 'Create Organization'}
                   </Button>
                 </div>
               </DialogContent>
@@ -345,7 +404,7 @@ export function OrganizationManagement() {
               </TableHeader>
               <TableBody>
                 {filteredOrganizations.map((org) => {
-                  const quotaPercentage = (org.usedQuota / org.monthlyQuota) * 100
+                  const quotaPercentage = org.monthlyQuota > 0 ? (org.usedQuota / org.monthlyQuota) * 100 : 0
                   
                   return (
                     <TableRow key={org.id}>
@@ -385,11 +444,11 @@ export function OrganizationManagement() {
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Users className="h-4 w-4 text-muted-foreground" />
-                          {org.totalUsers}
+                          {userCounts[org.id] ?? 0}
                         </div>
                       </TableCell>
                       <TableCell>
-                        {org.nextBilling !== "-" ? new Date(org.nextBilling).toLocaleDateString() : "-"}
+                        {org.nextBilling ? new Date(org.nextBilling).toLocaleDateString() : "-"}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -410,7 +469,11 @@ export function OrganizationManagement() {
 
           {filteredOrganizations.length === 0 && (
             <div className="text-center py-8">
-              <p className="text-muted-foreground">No organizations found matching your criteria.</p>
+              {userProfile?.role === 'admin' && !(userProfile as any)?.orgId ? (
+                <p className="text-muted-foreground">Your admin account is not assigned to any organization yet. Please contact a super admin.</p>
+              ) : (
+                <p className="text-muted-foreground">No organizations found matching your criteria.</p>
+              )}
             </div>
           )}
         </CardContent>

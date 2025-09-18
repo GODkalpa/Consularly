@@ -9,9 +9,10 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { auth, db, firebaseEnabled } from '@/lib/firebase';
 import { getUserProfile, isUserAdmin, UserProfile } from '@/lib/database';
@@ -53,28 +54,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      
+
       if (user) {
         try {
+          // Initial fetch to populate quickly
           const [profile, adminStatus] = await Promise.all([
             getUserProfile(user.uid),
             isUserAdmin(user.uid)
           ]);
-          
           setUserProfile(profile);
           setIsAdmin(adminStatus);
-          
-          // Auto-redirect after successful authentication - only on home page
-          if (typeof window !== 'undefined' && window.location.pathname === '/') {
-            const targetPath = (profile?.role === 'admin' || profile?.role === 'super_admin') 
-              ? '/admin' 
-              : '/dashboard';
-            
-            // Use a small delay for smooth UX
-            setTimeout(() => {
-              router.push(targetPath);
-            }, 500);
-          }
+
+          // Live subscribe to user profile to reflect role/org changes immediately
+          const unsubProfile = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+            const latest = (snap.data() as UserProfile | undefined) || null;
+            setUserProfile(latest);
+            setIsAdmin(latest?.role === 'admin' || latest?.role === 'super_admin');
+
+            // Auto-redirect after successful authentication is disabled to keep users on the homepage.
+            // Users can navigate to their dashboard via the navbar button.
+          });
+
+          // Cleanup the profile subscription when auth changes
+          return () => unsubProfile();
         } catch (error) {
           console.error('Error loading user profile:', error);
           setUserProfile(null);
@@ -123,6 +125,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           language: 'en'
         }
       });
+
+      // Always send password setup email so the user can set/confirm their password via email link
+      try {
+        await sendPasswordResetEmail(auth, email);
+      } catch (e) {
+        // Non-fatal: continue even if email fails here; user can use "Forgot password" later
+        // eslint-disable-next-line no-console
+        console.warn('[AuthContext] sendPasswordResetEmail after signup failed:', e);
+      }
       // Redirect will be handled by the auth state change listener
     } catch (error) {
       throw error;
@@ -183,8 +194,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Redirect based on user role
     if (userProfile.role === 'admin' || userProfile.role === 'super_admin') {
       router.push('/admin');
+    } else if ((userProfile as any).orgId) {
+      router.push('/org');
     } else {
-      router.push('/dashboard');
+      router.push('/');
     }
   };
 

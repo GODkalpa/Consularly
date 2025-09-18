@@ -1,0 +1,86 @@
+{
+  "section": {
+    "id": "results-section",
+    "title": "Real results with VisaPrep AI",
+    "subtitle": "From first mock to embassy window—AI drills that build clarity, confidence, and composure for student visa interviews.",
+    "rows": [
+      {
+        "layout": "imageLeft_metricsRight",
+        "image_card_title": "Innovation Meets Practice",
+        "testimonial": {
+          "title": "Intuitive Mock Interview Experience",
+          "quote": "Felt like the real counter window. The body‑language tips helped me keep eye contact and answer straight to the point.",
+          "name": "Aarav Mehta",
+          "role": "F‑1 Applicant, Kathmandu"
+        },
+        "metrics": [
+          {
+            "value": "42%",
+            "label": "Faster Prep",
+            "note": "Time to first 'ready' mock (pilot cohort)"
+          },
+          {
+            "value": "93%",
+            "label": "More Confident",
+            "note": "Post‑session self‑report after 2–3 mocks"
+          }
+        ]
+      },
+      {
+        "layout": "metricsLeft_imageRight",
+        "metrics": [
+          {
+            "value": "3.4×",
+            "label": "More Practice",
+            "note": "Weekly sessions after onboarding"
+          },
+          {
+            "value": "70%",
+            "label": "Better Keyword Coverage",
+            "note": "Study/finance/intent checklist hits"
+          }
+        ],
+        "image_card_title": "Developers build solutions.",
+        "testimonial": {
+          "title": "Unified Coaching View",
+          "quote": "One report for speech, content, and posture means faster feedback for every student.",
+          "name": "Sophiya Poudel",
+          "role": "Visa Counselor, EduPath Nepal"
+        }
+      },
+      {
+        "layout": "imageLeft_metricsRight",
+        "image_card_title": "Data you can act on",
+        "testimonial": {
+          "title": "Easy for Institutes",
+          "quote": "We launched UK/Canada tracks in minutes. Students joined with a link—no installs.",
+          "name": "Dipesh Rana",
+          "role": "Program Lead, BrightFuture Prep"
+        },
+        "metrics": [
+          {
+            "value": "2×",
+            "label": "Faster Setup",
+            "note": "Track creation vs. previous tool"
+          },
+          {
+            "value": "88%",
+            "label": "First‑Mock Completion",
+            "note": "Students finishing within 24 hours"
+          }
+        ]
+      }
+    ],
+    "footer_microcopy": [
+      "Adaptive follow‑ups",
+      "Camera motion cues",
+      "Voice STT (AssemblyAI)",
+      "Shareable PDF report",
+      "Not affiliated with any embassy"
+    ],
+    "disclaimers": [
+      "Metrics are early pilot/self‑reported and for illustrative use. Replace with your live data when available."
+    ],
+    "roadmap_note": "U.S. F‑1 live today; Canada, UK, Australia & EU next."
+  }
+}

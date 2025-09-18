@@ -21,6 +21,8 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
+  // Organization membership (optional for personal users)
+  orgId?: string;
   photoURL?: string;
   role: 'user' | 'admin' | 'super_admin';
   createdAt: string;

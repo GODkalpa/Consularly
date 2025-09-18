@@ -2,6 +2,10 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { ClientAuthProvider } from '@/components/ClientAuthProvider'
+import { Toaster } from '@/components/ui/sonner'
+import { HeroHeader } from '@/components/Header'
+import FooterSection from '@/components/ui/footer'
+import ScrollRevealProvider from '@/components/animations/ScrollRevealProvider'
 
 // ClientAuthProvider is a client component; importing it statically avoids first-load spinners
 
@@ -13,6 +17,7 @@ export const metadata: Metadata = {
   description: 'AI-powered visa interview mock test platform for Nepalese F-1 students. Practice with realistic questions, get instant feedback, and increase your success rate.',
   keywords: 'visa interview, F-1 visa, Nepal, USA, mock test, AI feedback, student visa, visa preparation',
   authors: [{ name: 'Consularly Team' }],
+  themeColor: '#121417',
   openGraph: {
     title: 'Consularly - Ace Your US Visa Interview',
     description: 'AI-powered visa interview preparation for Nepalese students',
@@ -31,11 +36,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body className={inter.className}>
         <ClientAuthProvider>
+          <ScrollRevealProvider />
+          <HeroHeader />
           {children}
         </ClientAuthProvider>
+        <FooterSection />
+        <Toaster richColors />
       </body>
     </html>
   )

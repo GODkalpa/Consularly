@@ -175,7 +175,7 @@ export function InterviewSimulation() {
         currentQuestionIndex: 0,
         questions: [uiFirst],
         responses: [],
-        status: 'active'
+        status: 'preparing'
       };
 
       setSession(newSession);
@@ -206,28 +206,72 @@ export function InterviewSimulation() {
         feedback: []
       } as BodyLanguageScore;
 
+      // Combine local heuristics with AI scoring service (fallback to heuristics if AI unavailable)
       const perf = scorePerformance({
         transcript: transcriptText,
         body,
         assemblyConfidence: typeof confidence === 'number' ? confidence : undefined
       });
-      const score10 = Math.min(10, Math.max(1, Math.round(perf.overall / 10)));
-      const feedback = [
+
+      let combinedOverall = perf.overall;
+      let combinedCategories = perf.categories;
+      let aiFeedback: string | null = null;
+      let aiSuggestions: string[] | null = null;
+
+      try {
+        const ic = apiSession ? {
+          visaType: apiSession.visaType,
+          studentProfile: apiSession.studentProfile,
+          conversationHistory: apiSession.conversationHistory.map(h => ({
+            question: h.question,
+            answer: h.answer,
+            timestamp: h.timestamp,
+          }))
+        } : {
+          visaType: 'F1' as const,
+          studentProfile: { name: session.studentName, country: 'Nepal' },
+          conversationHistory: [] as Array<{ question: string; answer: string; timestamp: string }>
+        };
+
+        const res = await fetch('/api/interview/score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: currentQuestion.question,
+            answer: transcriptText,
+            bodyLanguage: body,
+            assemblyConfidence: typeof confidence === 'number' ? confidence : undefined,
+            interviewContext: ic,
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          combinedOverall = data.overall ?? combinedOverall;
+          combinedCategories = data.categories ?? combinedCategories;
+          aiFeedback = data.summary || null;
+          aiSuggestions = Array.isArray(data.recommendations) ? data.recommendations.slice(0, 3) : null;
+        }
+      } catch (e) {
+        // Ignore AI errors, rely on heuristics
+      }
+
+      const score10 = Math.min(10, Math.max(1, Math.round((combinedOverall) / 10)));
+      const fallbackFeedback = [
         ...perf.details.content.notes,
         ...perf.details.speech.notes,
         ...body.feedback
       ].slice(0, 3).join(' ');
-      const suggestions: string[] = [];
-      if (perf.details.content.accuracyScore < 60) suggestions.push('Address all parts of the question with specific examples.');
-      if (perf.details.speech.fillerRate > 0.05) suggestions.push('Reduce filler words and slow down slightly.');
-      if ((bodyScore?.overallScore ?? body.overallScore) < 65) suggestions.push('Maintain eye contact and sit upright.');
+      const fallbackSuggestions: string[] = [];
+      if (perf.details.content.accuracyScore < 60) fallbackSuggestions.push('Address all parts of the question with specific examples.');
+      if (perf.details.speech.fillerRate > 0.05) fallbackSuggestions.push('Reduce filler words and slow down slightly.');
+      if ((bodyScore?.overallScore ?? body.overallScore) < 65) fallbackSuggestions.push('Maintain eye contact and sit upright.');
 
       const analysis = {
         score: score10,
-        feedback: feedback || 'Good effort. Aim for clearer structure and specific details.',
-        suggestions: suggestions.length ? suggestions : ['Provide concrete numbers or evidence where possible.'],
+        feedback: (aiFeedback || fallbackFeedback) || 'Good effort. Aim for clearer structure and specific details.',
+        suggestions: (aiSuggestions && aiSuggestions.length ? aiSuggestions : (fallbackSuggestions.length ? fallbackSuggestions : ['Provide concrete numbers or evidence where possible.'])),
         bodyScore: bodyScore?.overallScore,
-        perf: { overall: perf.overall, categories: perf.categories }
+        perf: { overall: combinedOverall, categories: combinedCategories }
       };
 
       const newResponse = {
@@ -345,6 +389,16 @@ export function InterviewSimulation() {
     } catch (e) {
       console.error('Failed to skip to next question:', e);
     }
+  };
+
+  // Confirm and start the interview (mic + camera start on user gesture)
+  const beginInterview = () => {
+    if (!session) return;
+    setSession(prev => prev ? { ...prev, status: 'active', startTime: new Date() } : prev);
+    // Arm timers for the first question after state update
+    setTimeout(() => {
+      armTimers();
+    }, 0);
   };
 
   // Pause/Resume interview
@@ -480,8 +534,29 @@ export function InterviewSimulation() {
       ) : (
         // Interview Phase
         <div className="space-y-6">
-          {/* Unified Interview Stage (video + overlays + controls) */}
-          {currentQuestion && (
+          {/* Pre-start confirmation */}
+          {session.status === 'preparing' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Play className="h-4 w-4" />
+                  Ready to start the interview?
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  When you click Start Interview, your microphone and camera will turn on, the first question will be shown, and live transcription will begin.
+                </p>
+                <Button onClick={beginInterview} className="w-full">
+                  <Play className="h-4 w-4 mr-2" />
+                  Start Interview
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Unified Interview Stage (video + overlays + controls) - visible only after start */}
+          {currentQuestion && session.status !== 'preparing' && (
             <InterviewStage
               running={session.status === 'active'}
               questionCategory={currentQuestion.category}
@@ -589,7 +664,7 @@ export function InterviewSimulation() {
                                 <div className="text-sm text-muted-foreground mb-2">
                                   Q: {latest.question}
                                 </div>
-                                <div className="p-3 bg-gray-50 rounded-md mb-3">
+                                <div className="p-3 bg-muted rounded-md mb-3">
                                   <p className="text-sm">{latest.transcription}</p>
                                 </div>
                                 {latest.analysis && (

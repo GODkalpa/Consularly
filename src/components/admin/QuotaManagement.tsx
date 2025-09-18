@@ -156,13 +156,13 @@ export function QuotaManagement() {
             </Card>
             <Card>
               <CardContent className="p-4">
-                <div className="text-2xl font-bold text-red-600">{totalStats.criticalOrgs}</div>
+                <div className="text-2xl font-bold text-[hsl(var(--destructive))]">{totalStats.criticalOrgs}</div>
                 <p className="text-sm text-muted-foreground">Critical Organizations</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <div className="text-2xl font-bold text-orange-600">{totalStats.warningOrgs}</div>
+                <div className="text-2xl font-bold text-[hsl(var(--warn))]">{totalStats.warningOrgs}</div>
                 <p className="text-sm text-muted-foreground">Warning Organizations</p>
               </CardContent>
             </Card>
@@ -216,7 +216,7 @@ export function QuotaManagement() {
                   return (
                     <div key={item.organizationId} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex items-center gap-4">
-                        <AlertTriangle className={`h-5 w-5 ${item.status === 'critical' ? 'text-red-500' : 'text-orange-500'}`} />
+                        <AlertTriangle className={`h-5 w-5 ${item.status === 'critical' ? 'text-[hsl(var(--destructive))]' : 'text-[hsl(var(--warn))]'}`} />
                         <div>
                           <div className="font-medium">{item.organizationName}</div>
                           <div className="text-sm text-muted-foreground">

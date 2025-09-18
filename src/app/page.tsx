@@ -1,24 +1,24 @@
-import { Navbar } from '@/components/navbar'
-import { HeroSection } from '@/components/hero-section'
+import HeroSection from '@/components/hero-section'
 import { FeaturesSection } from '@/components/features-section'
 import { BenefitsSection } from '@/components/benefits-section'
 import { TestimonialsSection } from '@/components/testimonials-section'
-import { CTASection } from '@/components/cta-section'
+import { Pricing } from '@/components/ui/pricing-cards'
 
 export default function Home() {
   return (
     <>
-      <Navbar />
       <HeroSection />
-      <section id="features">
+      <section id="features" data-animate="up">
         <FeaturesSection />
       </section>
-      <BenefitsSection />
-      <section id="testimonials">
+      <section data-animate="up">
+        <BenefitsSection />
+      </section>
+      <section id="testimonials" data-animate="up">
         <TestimonialsSection />
       </section>
-      <section id="pricing">
-        <CTASection />
+      <section id="pricing" data-animate="up">
+        <Pricing />
       </section>
     </>
   )

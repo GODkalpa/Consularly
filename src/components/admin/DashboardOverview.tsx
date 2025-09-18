@@ -37,9 +37,9 @@ const testUsageData = [
 ]
 
 const organizationTypeData = [
-  { name: "Visa Consultancies", value: 89, color: "#0088FE" },
-  { name: "Educational Institutions", value: 45, color: "#00C49F" },
-  { name: "Corporate Training", value: 22, color: "#FFBB28" }
+  { name: "Visa Consultancies", value: 89, color: "hsl(var(--chart-1))" },
+  { name: "Educational Institutions", value: 45, color: "hsl(var(--chart-2))" },
+  { name: "Corporate Training", value: 22, color: "hsl(var(--chart-3))" }
 ]
 
 const recentActivities = [
@@ -62,7 +62,7 @@ export function DashboardOverview() {
           <CardContent>
             <div className="text-2xl font-bold">{mockData.totalUsers.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+12.5%</span> from last month
+              <span className="text-[hsl(var(--success))]">+12.5%</span> from last month
             </p>
           </CardContent>
         </Card>
@@ -75,7 +75,7 @@ export function DashboardOverview() {
           <CardContent>
             <div className="text-2xl font-bold">{mockData.totalOrganizations}</div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+8.2%</span> from last month
+              <span className="text-[hsl(var(--success))]">+8.2%</span> from last month
             </p>
           </CardContent>
         </Card>
@@ -88,7 +88,7 @@ export function DashboardOverview() {
           <CardContent>
             <div className="text-2xl font-bold">{mockData.totalTests.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+23.1%</span> from last month
+              <span className="text-[hsl(var(--success))]">+23.1%</span> from last month
             </p>
           </CardContent>
         </Card>
@@ -125,9 +125,9 @@ export function DashboardOverview() {
                   <Line 
                     type="monotone" 
                     dataKey="tests" 
-                    stroke="#0088FE" 
+                    stroke="hsl(var(--chart-1))" 
                     strokeWidth={2}
-                    dot={{ fill: "#0088FE" }}
+                    dot={{ fill: "hsl(var(--chart-1))" }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -174,7 +174,7 @@ export function DashboardOverview() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Overall Health</span>
-              <Badge variant="default" className="bg-green-100 text-green-800">
+              <Badge variant="default" className="bg-[hsla(var(--success),0.15)] text-[hsl(var(--success))]">
                 {mockData.systemHealth}% Healthy
               </Badge>
             </div>
@@ -205,9 +205,9 @@ export function DashboardOverview() {
               {recentActivities.map((activity) => (
                 <div key={activity.id} className="flex items-start gap-3">
                   <div className={`mt-1 h-2 w-2 rounded-full ${
-                    activity.status === 'success' ? 'bg-green-500' :
-                    activity.status === 'warning' ? 'bg-orange-500' :
-                    'bg-blue-500'
+                    activity.status === 'success' ? 'bg-[hsl(var(--success))]' :
+                    activity.status === 'warning' ? 'bg-[hsl(var(--warn))]' :
+                    'bg-[hsl(var(--primary))]'
                   }`} />
                   <div className="flex-1 space-y-1">
                     <p className="text-sm font-medium">{activity.message}</p>

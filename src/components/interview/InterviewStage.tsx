@@ -114,21 +114,21 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   }, [])
 
   return (
-    <div ref={containerRef} className="relative w-full bg-black rounded-xl overflow-hidden shadow-lg aspect-video">
+    <div ref={containerRef} className="relative w-full bg-background rounded-xl overflow-hidden shadow-lg aspect-video">
       {/* Video layer */}
       <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted autoPlay />
       {/* Canvas overlay */}
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
 
       {/* Gradient for readability */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50" />
+      <div className="absolute inset-0 bg-gradient-to-b from-[hsl(var(--background)/0.3)] via-transparent to-[hsl(var(--background)/0.6)]" />
 
       {/* Top bar */}
       <div className="absolute top-3 left-4 right-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Badge variant="secondary">{questionCategory}</Badge>
           <Badge variant={running ? 'default' : 'secondary'} className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="inline-block h-2 w-2 rounded-full bg-[hsl(var(--destructive))] animate-pulse" />
             {statusBadge}
           </Badge>
           <Badge variant="outline">Body {Math.round(body)}/100</Badge>
@@ -146,15 +146,15 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
       {/* Progress bar */}
       {questionTotal && (
         <div className="absolute top-12 left-0 right-0">
-          <div className="h-1 w-full bg-white/20">
-            <div className="h-1 bg-blue-500" style={{ width: `${progressPct}%` }} />
+          <div className="h-1 w-full bg-foreground/20">
+            <div className="h-1 bg-primary" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
       )}
 
       {/* Question text */}
       <div className="absolute top-16 left-6 right-6">
-        <div className="inline-block rounded-lg bg-black/50 text-white px-4 py-2 backdrop-blur-sm">
+        <div className="inline-block rounded-lg bg-background/60 text-foreground px-4 py-2 backdrop-blur-sm">
           <div className="text-sm opacity-80">Current Question</div>
           <div className="text-base md:text-lg font-medium leading-snug">{questionText}</div>
         </div>
@@ -163,7 +163,7 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
       {/* Live captions */}
       <div className="absolute bottom-16 left-6 right-6 flex justify-center">
         {currentTranscript ? (
-          <div className="max-w-3xl w-full text-center text-white text-base md:text-lg bg-black/50 px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm">
+          <div className="max-w-3xl w-full text-center text-foreground text-base md:text-lg bg-background/60 px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm">
             {currentTranscript}
           </div>
         ) : null}
@@ -171,7 +171,7 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
 
       {/* Bottom controls */}
       <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center">
-        <div className="flex items-center gap-2 bg-black/50 backdrop-blur-md px-3 py-2 rounded-full shadow-lg">
+        <div className="flex items-center gap-2 bg-background/60 backdrop-blur-md px-3 py-2 rounded-full shadow-lg">
           {onTogglePause && (
             <Button size="sm" variant={running ? 'secondary' : 'default'} onClick={onTogglePause} className="rounded-full px-3">
               {running ? <><Pause className="h-4 w-4 mr-1" /> Pause</> : <><Play className="h-4 w-4 mr-1" /> Resume</>}
@@ -182,7 +182,7 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
               Next <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           )}
-          <Button size="icon" variant="ghost" onClick={toggleFullscreen} className="text-white hover:bg-white/10 rounded-full">
+          <Button size="icon" variant="ghost" onClick={toggleFullscreen} className="text-foreground hover:bg-foreground/10 rounded-full">
             {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
           </Button>
         </div>

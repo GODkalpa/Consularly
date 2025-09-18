@@ -1,0 +1,30 @@
+{
+    "featureGrid": {
+      "cards": [
+        {
+          "title": "Real Embassy Flow",
+          "body": "Practice the way officers interview—short, direct questions, timed answers, and follow-ups that react to what you say."
+        },
+        {
+          "title": "USA & UK Tracks Only",
+          "body": "Laser-focused prep for U.S. F-1 and UK Student Route. Country-specific question banks and scoring rubrics kept up to date."
+        },
+        {
+          "title": "Adaptive AI Interviewer",
+          "body": "AI listens via AssemblyAI, understands your answer, and pivots with realistic follow-ups (finances, ties, study plan, intent). No scripts—every session feels new.",
+          "span": "wide"
+        },
+        {
+          "title": "Body-Language Insights",
+          "body": "On-device TF.js checks posture, gaze, and movement. See a confidence score with cues: sit tall, maintain eye contact, reduce fidgeting."
+        },
+        {
+          "title": "Fast, Private, Browser-Only",
+          "body": "No installs. Works on typical broadband. Your recordings stay under your control with clear privacy settings and exportable reports."
+        }
+      ],
+      "headline": "Built for real embassy windows.\nDesigned for focused prep.",
+      "subtext": "VisaPrep AI prepares you for U.S. F-1 and UK Student Route interviews only—nothing else. Adaptive questions, clear speaking feedback, and body-language coaching deliver an instant, actionable report after every session."
+    }
+  }
+  

@@ -97,6 +97,76 @@ Manages interview sessions with actions: start, answer, end.
 }
 ```
 
+### Scoring Endpoint (AI/ML)
+
+**POST** `/api/interview/score`
+
+Combines an LLM rubric scorer (content quality aligned to Nepal F1 patterns) with local heuristics for speech (fluency, clarity, tone) and body language (posture, eye contact, gestures) into a fair, transparent score.
+
+Request Body:
+```typescript
+{
+  question: string,
+  answer: string,
+  bodyLanguage?: BodyLanguageScore, // optional; defaults to baseline if omitted
+  assemblyConfidence?: number, // 0..1 (optional)
+  interviewContext: {
+    visaType: 'F1' | 'B1/B2' | 'H1B' | 'other',
+    studentProfile: {
+      name: string,
+      country: string,
+      intendedUniversity?: string,
+      fieldOfStudy?: string,
+      previousEducation?: string,
+    },
+    conversationHistory: Array<{ question: string; answer: string; timestamp: string }>
+  }
+}
+```
+
+Response Body:
+```typescript
+{
+  rubric: { // present when LLM is available
+    communication: number,
+    relevance: number,
+    specificity: number,
+    consistency: number,
+    academicPreparedness: number,
+    financialCapability: number,
+    intentToReturn: number,
+  },
+  summary: string,
+  recommendations: string[],
+  redFlags: string[],
+  contentScore: number, // 0-100 (LLM or heuristic)
+  speechScore: number,  // 0-100 (heuristic)
+  bodyScore: number,    // 0-100 (heuristic)
+  overall: number,      // 0-100 combined with weights
+  categories: {
+    content: number,
+    speech: number,
+    bodyLanguage: number
+  },
+  weights: { content: 0.5, speech: 0.25, bodyLanguage: 0.25 },
+  diagnostics: { usedLLM: boolean }
+}
+```
+
+Fallback behavior: if the LLM is not configured or temporarily unavailable, the endpoint returns a fair score using local heuristics only (speech + body + heuristic content), with `diagnostics.usedLLM = false`.
+
+Environment variables:
+```bash
+# Required for LLM scoring (get a free key at https://openrouter.ai/keys)
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+
+# Optional: choose model (defaults to openai/gpt-3.5-turbo)
+LLM_MODEL=openai/gpt-4o-mini
+
+# Optional: site URL for OpenRouter headers
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
 ## Usage Examples
 
 ### Basic Question Generation

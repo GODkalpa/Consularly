@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { X, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -19,6 +21,7 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   const { signIn, signUp, signInWithGoogle, redirectToDashboard } = useAuth();
 
@@ -59,6 +62,24 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
     }
   };
 
+  const handlePasswordReset = async () => {
+    setError('');
+    setMessage('');
+    try {
+      if (!email) {
+        setError('Enter your email and click "Forgot password" to receive a reset link.');
+        return;
+      }
+      setLoading(true);
+      await sendPasswordResetEmail(auth, email);
+      setMessage('If this email is registered, a password reset link has been sent.');
+    } catch (error: any) {
+      setError(error?.message || 'Failed to send password reset email');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const resetForm = () => {
     setEmail('');
     setPassword('');
@@ -75,42 +96,47 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[hsl(var(--background)/0.6)] backdrop-blur-sm">
+      <div className="bg-card text-foreground rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-border">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="text-2xl font-bold text-foreground">
             {mode === 'signin' ? 'Welcome Back' : 'Create Account'}
           </h2>
           <button
             onClick={onCloseAction}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 hover:bg-muted rounded-full transition-colors"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
 
         {/* Content */}
         <div className="p-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
               {error}
+            </div>
+          )}
+          {message && (
+            <div className="mb-4 p-3 bg-[hsl(var(--success)/0.1)] border border-[hsl(var(--success)/0.3)] rounded-lg text-[hsl(var(--success))] text-sm">
+              {message}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Full Name
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <input
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-3 border border-input bg-background text-foreground rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                     placeholder="Enter your full name"
                     required
                   />
@@ -119,16 +145,16 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 border border-input bg-background text-foreground rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                   placeholder="Enter your email"
                   required
                 />
@@ -136,33 +162,45 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-10 pr-12 py-3 border border-input bg-background text-foreground rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                   placeholder="Enter your password"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
+            {mode === 'signin' && (
+              <div className="text-right -mt-2">
+                <button
+                  type="button"
+                  onClick={handlePasswordReset}
+                  disabled={loading}
+                  className="text-sm text-primary hover:text-primary/90"
+                >
+                  Forgot your password?
+                </button>
+              </div>
+            )}
 
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 rounded-lg font-medium transition-colors"
             >
               {loading ? 'Please wait...' : mode === 'signin' ? 'Sign In' : 'Create Account'}
             </Button>
@@ -170,9 +208,9 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
 
           {/* Divider */}
           <div className="my-6 flex items-center">
-            <div className="flex-1 border-t border-gray-300"></div>
-            <span className="px-4 text-sm text-gray-500">or</span>
-            <div className="flex-1 border-t border-gray-300"></div>
+            <div className="flex-1 border-t border-border"></div>
+            <span className="px-4 text-sm text-muted-foreground">or</span>
+            <div className="flex-1 border-t border-border"></div>
           </div>
 
           {/* Google Sign In */}
@@ -180,7 +218,7 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
             onClick={handleGoogleSignIn}
             disabled={loading}
             variant="outline"
-            className="w-full py-3 border-gray-300 hover:bg-gray-50 transition-colors"
+            className="w-full py-3 border-border hover:bg-muted transition-colors"
           >
             <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
               <path
@@ -205,11 +243,11 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
 
           {/* Switch Mode */}
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}
               <button
                 onClick={switchMode}
-                className="ml-1 text-blue-600 hover:text-blue-700 font-medium"
+                className="ml-1 text-primary hover:text-primary/90 font-medium"
               >
                 {mode === 'signin' ? 'Sign up' : 'Sign in'}
               </button>

@@ -1,26 +1,44 @@
 "use client"
 
-import { useState } from "react"
-import { 
-  Users, 
-  Building2, 
-  BarChart3, 
-  CreditCard, 
-  Settings, 
-  MessageSquare, 
+import { useMemo, useState } from "react"
+import {
+  Users,
+  Building2,
+  BarChart3,
+  CreditCard,
+  Settings,
+  MessageSquare,
   Shield,
   TestTube,
   PieChart,
-  UserCheck,
-  AlertTriangle,
-  TrendingUp,
-  Mic
+  Mic,
+  Search,
+  Home
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  SidebarHeader,
+  SidebarFooter,
+  SidebarMenuBadge,
+  SidebarRail,
+  SidebarInset,
+} from "@/components/ui/sidebar"
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import Link from "next/link"
 
 import { UserManagement } from "./UserManagement"
 import { OrganizationManagement } from "./OrganizationManagement"
@@ -80,8 +98,22 @@ const menuItems = [
   }
 ]
 
+// Lightweight grouping to organize the sidebar without overdoing it
+const groupedMenu: { label: string; ids: Array<(typeof menuItems)[number]["id"]> }[] = [
+  { label: "Platform", ids: ["overview", "users", "organizations", "quotas"] },
+  { label: "Insights", ids: ["analytics"] },
+  { label: "Operations", ids: ["billing", "settings", "support", "interview"] },
+]
+
+const SUPPORT_BADGE_COUNT = 3
+
 export function AdminDashboard() {
   const [activeSection, setActiveSection] = useState("overview")
+
+  const activeTitle = useMemo(
+    () => menuItems.find((item) => item.id === activeSection)?.title || "Dashboard",
+    [activeSection]
+  )
 
   const renderContent = () => {
     switch (activeSection) {
@@ -110,62 +142,122 @@ export function AdminDashboard() {
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full">
-        <Sidebar className="border-r">
-          <SidebarContent>
-            <div className="p-6">
-              <h2 className="text-lg font-semibold">Admin Dashboard</h2>
-              <p className="text-sm text-muted-foreground">Mock Interview Platform</p>
+      <Sidebar variant="inset" collapsible="icon">
+        <SidebarHeader>
+          <div className="flex items-center gap-3 rounded-md px-2 py-1.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground font-semibold">
+              MI
             </div>
-            <Separator />
-            <SidebarGroup>
-              <SidebarGroupLabel>Platform Management</SidebarGroupLabel>
+            <div className="grid leading-tight group-data-[collapsible=icon]:hidden">
+              <span className="text-sm font-semibold">Admin Dashboard</span>
+              <span className="text-xs text-sidebar-foreground/60">Mock Interview Platform</span>
+            </div>
+          </div>
+        </SidebarHeader>
+
+        <SidebarContent>
+          {groupedMenu.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {menuItems.map((item) => (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton
-                        onClick={() => setActiveSection(item.id)}
-                        isActive={activeSection === item.id}
-                      >
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  {group.ids.map((id) => {
+                    const item = menuItems.find((m) => m.id === id)!
+                    return (
+                      <SidebarMenuItem key={item.id}>
+                        <SidebarMenuButton
+                          tooltip={item.title}
+                          onClick={() => setActiveSection(item.id)}
+                          isActive={activeSection === item.id}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </SidebarMenuButton>
+                        {item.id === "support" && (
+                          <SidebarMenuBadge className="bg-sidebar-primary/10 text-sidebar-foreground">
+                            {SUPPORT_BADGE_COUNT}
+                          </SidebarMenuBadge>
+                        )}
+                      </SidebarMenuItem>
+                    )
+                  })}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-          </SidebarContent>
-        </Sidebar>
-        
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <header className="border-b bg-background px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <SidebarTrigger />
-                <h1 className="text-2xl font-bold capitalize">
-                  {menuItems.find(item => item.id === activeSection)?.title || "Dashboard"}
-                </h1>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">
-                  <Shield className="h-4 w-4 mr-2" />
-                  Security
-                </Button>
-                <Button variant="outline" size="sm">
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  Admin Profile
-                </Button>
-              </div>
+          ))}
+        </SidebarContent>
+
+        <SidebarFooter>
+          <div className="flex items-center gap-2 rounded-md px-2 py-2">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src="" alt="Admin" />
+              <AvatarFallback>AD</AvatarFallback>
+            </Avatar>
+            <div className="grid flex-1 leading-tight group-data-[collapsible=icon]:hidden">
+              <span className="text-sm font-medium">Admin</span>
+              <span className="text-xs text-sidebar-foreground/60">Owner</span>
             </div>
-          </header>
-          
-          <main className="flex-1 overflow-auto p-6">
-            {renderContent()}
-          </main>
-        </div>
-      </div>
+            <Button size="icon" variant="ghost" className="group-data-[collapsible=icon]:hidden" onClick={() => setActiveSection("settings") }>
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
+        </SidebarFooter>
+
+        <SidebarRail />
+      </Sidebar>
+
+      <SidebarInset>
+        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4 md:px-6">
+          <SidebarTrigger />
+          <div className="hidden md:block">
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>Admin</BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{activeTitle}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
+              <Link href="/">
+                <Home className="h-4 w-4 mr-2" />
+                Back to website
+              </Link>
+            </Button>
+            <div className="relative hidden md:block">
+              <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input className="h-9 w-[240px] pl-8" placeholder="Search…" />
+            </div>
+
+            <Button variant="outline" size="sm" className="hidden sm:inline-flex">
+              <Shield className="h-4 w-4 mr-2" />
+              Security
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src="" alt="Admin" />
+                    <AvatarFallback>AD</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setActiveSection("settings")}>Settings</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveSection("support")}>Support</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-auto p-4 md:p-6">
+          {renderContent()}
+        </main>
+      </SidebarInset>
     </SidebarProvider>
   )
 }

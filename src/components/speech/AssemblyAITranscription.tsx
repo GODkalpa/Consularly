@@ -170,9 +170,9 @@ export function AssemblyAITranscription({
           <CardContent className="space-y-4">
             {/* Error Display */}
             {transcription.error && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md">
-                <AlertCircle className="h-4 w-4 text-red-500" />
-                <p className="text-sm text-red-700">{transcription.error}</p>
+              <div className="flex items-center gap-2 p-3 bg-[hsla(var(--destructive),0.1)] border border-[hsla(var(--destructive),0.3)] rounded-md">
+                <AlertCircle className="h-4 w-4 text-[hsl(var(--destructive))]" />
+                <p className="text-sm text-[hsl(var(--destructive))]">{transcription.error}</p>
               </div>
             )}
 
@@ -267,7 +267,7 @@ export function AssemblyAITranscription({
                     {transcription.finalTranscripts.length > 0 && <Separator className="my-2" />}
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
-                        <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+                        <div className="h-2 w-2 bg-[hsl(var(--destructive))] rounded-full animate-pulse" />
                         Live
                       </span>
                       {transcription.confidence > 0 && (

@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { Navbar } from '@/components/navbar'
 
 export default function SignInPage() {
   const [email, setEmail] = useState('')
@@ -51,8 +50,7 @@ export default function SignInPage() {
 
   return (
     <>
-      <Navbar />
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 pt-16">
+      <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8 pt-16">
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center">Sign in</CardTitle>
