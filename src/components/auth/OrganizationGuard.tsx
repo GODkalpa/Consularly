@@ -79,7 +79,7 @@ export function OrganizationGuard({ children, fallback }: OrganizationGuardProps
             <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-2" />
             <CardTitle>Access Denied</CardTitle>
             <CardDescription>
-              Your account doesn't have access to the organization dashboard.
+              Your account doesn&apos;t have access to the organization dashboard.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
