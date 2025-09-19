@@ -157,8 +157,8 @@ export function AdminDashboard() {
 
         <SidebarContent>
           {groupedMenu.map((group) => (
-            <SidebarGroup key={group.label}>
-              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroup key={group.label} className="group-data-[collapsible=icon]:p-1.5">
+              <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">{group.label}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {group.ids.map((id) => {

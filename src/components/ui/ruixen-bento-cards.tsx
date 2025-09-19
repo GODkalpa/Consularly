@@ -19,7 +19,7 @@ const PlusCard: FC<{
   return (
     <div
       className={cn(
-        "relative border border-dashed border-zinc-400 dark:border-zinc-700 rounded-lg p-6 bg-white dark:bg-zinc-950 min-h-[200px]",
+        "relative border border-dashed border-zinc-400 dark:border-zinc-700 rounded-lg p-6 bg-white dark:bg-zinc-950 min-h-[200px] overflow-hidden",
         "flex flex-col justify-between",
         className
       )}
@@ -65,7 +65,7 @@ const PlusIcon = ({ className }: { className?: string }) => (
 export default function RuixenBentoCards() {
   return (
     <section className="bg-white dark:bg-black dark:bg-transparent border border-gray-200 dark:border-gray-800">
-      <div className="mx-auto container border border-gray-200 dark:border-gray-800 py-12 border-t-0 px-4">
+      <div className="mx-auto container border border-gray-200 dark:border-gray-800 py-12 border-t-0 px-6">
         {/* Responsive Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 auto-rows-auto gap-4">
           {features.featureGrid.cards.map((card, idx) => {
@@ -90,7 +90,7 @@ export default function RuixenBentoCards() {
 
         {/* Section Footer Heading */}
         <div className="max-w-2xl ml-auto text-right px-4 mt-6 lg:-mt-20" data-animate="up" data-duration="0.6">
-          <h2 className="text-4xl md:text-6xl font-bold text-black dark:text-white mb-4 whitespace-pre-line">
+          <h2 className="text-3xl sm:text-4xl md:text-6xl font-bold text-black dark:text-white mb-4 whitespace-pre-line">
             {features.featureGrid.headline}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 text-lg">

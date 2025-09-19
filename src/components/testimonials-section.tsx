@@ -93,7 +93,7 @@ export function TestimonialsSection() {
 
   return (
     <section className="bg-background my-20 relative">
-      <div className="container z-10 mx-auto">
+      <div className="container z-10 mx-auto px-6">
         <div className="flex flex-col items-center justify-center max-w-[540px] mx-auto text-center">
           <div className="flex justify-center">
             <Badge variant="outline" className="border py-1 px-4 rounded-lg">Testimonials</Badge>

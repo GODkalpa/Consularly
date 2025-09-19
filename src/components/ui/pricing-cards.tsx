@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 function Pricing() {
   return (
     <div className="w-full py-20 lg:py-40">
-      <div className="container mx-auto">
+      <div className="container mx-auto px-6">
         <div className="flex text-center justify-center items-center gap-4 flex-col" data-animate="up" data-duration="0.6">
           <Badge>Pricing</Badge>
           <div className="flex gap-2 flex-col">

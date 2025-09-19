@@ -4,7 +4,7 @@ import './globals.css'
 import { ClientAuthProvider } from '@/components/ClientAuthProvider'
 import { Toaster } from '@/components/ui/sonner'
 import { HeroHeader } from '@/components/Header'
-import FooterSection from '@/components/ui/footer'
+import ConditionalFooter from '@/components/ConditionalFooter'
 import ScrollRevealProvider from '@/components/animations/ScrollRevealProvider'
 
 // ClientAuthProvider is a client component; importing it statically avoids first-load spinners
@@ -43,7 +43,7 @@ export default function RootLayout({
           <HeroHeader />
           {children}
         </ClientAuthProvider>
-        <FooterSection />
+        <ConditionalFooter />
         <Toaster richColors />
       </body>
     </html>

@@ -52,6 +52,8 @@ type Metric = { value: string; label: string; note?: string };
 type Testimonial = { title: string; quote: string; name: string; role: string };
 type Row = {
   layout: "imageLeft_metricsRight" | "metricsLeft_imageRight";
+  image?: string; // optional: path to image in /public
+  image_src?: string; // optional legacy alias
   image_card_title?: string;
   testimonial: Testimonial;
   metrics: Metric[];
@@ -146,6 +148,7 @@ export default function Casestudies() {
         <div className="mt-20 flex flex-col gap-20">
           {rows.map((row, idx) => {
             const reversed = row.layout === "metricsLeft_imageRight";
+            const imageSrc = row.image ?? row.image_src ?? "/about.jpg";
             return (
               <div
                 key={`${row.layout}-${idx}`}
@@ -163,7 +166,7 @@ export default function Casestudies() {
                   data-duration="0.7"
                 >
                   <Image
-                    src="/hero.png"
+                    src={imageSrc}
                     alt={`${row.image_card_title ?? row.testimonial?.title ?? "Case study"}`}
                     width={300}
                     height={400}
