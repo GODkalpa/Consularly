@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
     const interviewType = (body.interviewType || 'visa') as 'visa'|'job'|'academic'
     const duration = Number(body.duration || 30)
     const scheduledTimeIso = body.scheduledTime ? String(body.scheduledTime) : null
+    const route = body.route ? String(body.route) : undefined
 
     if (!studentId) {
       return NextResponse.json({ error: 'studentId is required' }, { status: 400 })
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
         overall: 0,
       },
       interviewType,
+      route,
       duration,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),

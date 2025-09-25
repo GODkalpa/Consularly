@@ -50,10 +50,9 @@ export class AudioRecorder {
         throw new Error('Browser does not support audio recording');
       }
 
-      // Request microphone access
+      // Request microphone access (do not force sampleRate; let device choose native rate)
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          sampleRate: this.config.sampleRate,
           channelCount: this.config.channels,
           echoCancellation: true,
           noiseSuppression: true,
@@ -61,10 +60,8 @@ export class AudioRecorder {
         }
       });
 
-      // Create audio context for real-time processing
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: this.config.sampleRate
-      });
+      // Create audio context for real-time processing (no explicit sampleRate to use device native)
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
 
       // Create audio source from media stream
       this.source = this.audioContext.createMediaStreamSource(this.mediaStream);
@@ -94,7 +91,11 @@ export class AudioRecorder {
 
       // Connect audio nodes
       this.source.connect(this.processor);
-      this.processor.connect(this.audioContext.destination);
+      // Do not play mic back to speakers. Route through a silent gain node
+      const silent = this.audioContext.createGain();
+      silent.gain.value = 0;
+      this.processor.connect(silent);
+      silent.connect(this.audioContext.destination);
 
       console.log('Audio recorder initialized successfully');
     } catch (error) {
@@ -190,6 +191,16 @@ export class AudioRecorder {
    */
   getConfig(): AudioRecorderConfig {
     return { ...this.config };
+  }
+
+  /**
+   * Return the actual microphone stream sample rate being used by the AudioContext.
+   * Browsers commonly run at 48000 Hz regardless of requested constraints.
+   * Use this to configure downstream STT services with the correct sample rate.
+   */
+  getActualSampleRate(): number {
+    // If AudioContext is not yet initialized, fall back to the requested config
+    return this.audioContext?.sampleRate || this.config.sampleRate || 48000;
   }
 
   /**

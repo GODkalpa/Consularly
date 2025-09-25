@@ -4,7 +4,7 @@ import { InterviewSimulationService, InterviewSession } from '@/lib/interview-si
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, userId, visaType, studentProfile, sessionId, answer } = body;
+    const { action, userId, visaType, studentProfile, sessionId, answer, route } = body;
 
     // Build absolute origin for server-side fetches
     const origin = request.nextUrl?.origin || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
         const { session, firstQuestion } = await simulationService.startInterview(
           userId,
           visaType,
-          studentProfile
+          studentProfile,
+          route
         );
 
         return NextResponse.json({

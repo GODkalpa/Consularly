@@ -1,9 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import * as tf from '@tensorflow/tfjs-core'
-import '@tensorflow/tfjs-backend-webgl'
-import '@tensorflow/tfjs-converter'
+// IMPORTANT: Avoid top-level TensorFlow imports to keep the interview route light.
+// We will lazy-load TFJS and the WebGL backend inside loadDetectors() when needed.
+// This prevents the heavy TFJS packages from being bundled into the initial page chunk.
 import type * as poseDetection from '@tensorflow-models/pose-detection'
 import type * as handPoseDetection from '@tensorflow-models/hand-pose-detection'
 import type * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection'
@@ -27,6 +27,8 @@ export interface TrackerState {
   running: boolean
   backend: string | null
   errors: string[]
+  /** True when only camera preview is active (no ML analysis) */
+  previewing?: boolean
 }
 
 export function useBodyLanguageTracker(config?: TrackerConfig) {
@@ -40,7 +42,8 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     deviceId: config?.deviceId ?? '',
   }), [config])
 
-  const [state, setState] = useState<TrackerState>({ running: false, backend: null, errors: [] })
+  const [state, setState] = useState<TrackerState>({ running: false, backend: null, errors: [], previewing: false })
+  const SMOOTH = 0.25 // exponential smoothing factor for scores to reduce jitter
 
   const rafRef = useRef<number | null>(null)
   const detectorsRef = useRef<{
@@ -68,6 +71,8 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
   const setupCamera = useCallback(async () => {
     if (!videoRef.current) return
     try {
+      // Stop any previously attached stream to avoid multiple camera captures
+      try { stopStream() } catch {}
       // Try with ideal constraints and front camera
       const constraints1: MediaStreamConstraints = selectedDeviceIdRef.current
         ? {
@@ -147,21 +152,32 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
           setCameras(vids)
         } catch {}
       }
-      setState((s) => ({ ...s, errors: [...s.errors, `${name}: ${e?.message || e}. ${hint}`] }))
+      setState((s) => {
+        const next = [...s.errors, `${name}: ${e?.message || e}. ${hint}`]
+        return { ...s, errors: next.length > 20 ? next.slice(next.length - 20) : next }
+      })
       // Don't rethrow; allow UI to present the error and user to retry or switch camera
     }
   }, [cfg.height, cfg.width, stopStream])
 
   const loadDetectors = useCallback(async () => {
     const errors: string[] = []
+    // Lazy-load TFJS core and WebGL backend only when we actually start analysis
+    let tfMod: any = null
     try {
-      await tf.setBackend('webgl')
-      await tf.ready()
+      tfMod = await import('@tensorflow/tfjs-core')
+      await import('@tensorflow/tfjs-backend-webgl')
+      await import('@tensorflow/tfjs-converter')
+      await tfMod.setBackend('webgl')
+      await tfMod.ready()
     } catch (e: any) {
       errors.push('Failed to initialize TensorFlow.js backend: ' + (e?.message || e))
     }
 
-    setState((s) => ({ ...s, backend: tf.getBackend() }))
+    try {
+      const backend = tfMod?.getBackend ? tfMod.getBackend() : null
+      setState((s) => ({ ...s, backend }))
+    } catch {}
 
     // Load models lazily in parallel
     try {
@@ -327,8 +343,24 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
 
       drawOverlay(pose, hands, face)
 
-      const score = evaluateBodyLanguage({ pose, hands, face })
-      setState((s) => ({ ...s, pose, hands, face, score }))
+      const raw = evaluateBodyLanguage({ pose, hands, face })
+      const blend = (prev: number | undefined, curr: number) => (typeof prev === 'number' ? (prev * (1 - SMOOTH) + curr * SMOOTH) : curr)
+      setState((s) => {
+        const prev = s.score
+        const smoothed = prev ? {
+          ...raw,
+          posture: { ...raw.posture, score: blend(prev.posture?.score, raw.posture.score) },
+          gestures: { ...raw.gestures, score: blend(prev.gestures?.score, raw.gestures.score) },
+          expressions: {
+            ...raw.expressions,
+            eyeContactScore: blend(prev.expressions?.eyeContactScore, raw.expressions.eyeContactScore),
+            smileScore: blend(prev.expressions?.smileScore, raw.expressions.smileScore),
+            score: blend(prev.expressions?.score, raw.expressions.score),
+          },
+          overallScore: blend(prev.overallScore, raw.overallScore),
+        } as typeof raw : raw
+        return { ...s, pose, hands, face, score: smoothed }
+      })
     } catch (e) {
       const msg = (e as any)?.message || String(e)
       const nowTs = performance.now()
@@ -336,7 +368,10 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
       if (msg !== lastErrorRef.current || nowTs - lastErrorAtRef.current > 2000) {
         lastErrorRef.current = msg
         lastErrorAtRef.current = nowTs
-        setState((s) => ({ ...s, errors: [...s.errors, msg] }))
+        setState((s) => {
+          const next = [...s.errors, msg]
+          return { ...s, errors: next.length > 20 ? next.slice(next.length - 20) : next }
+        })
       }
     }
 
@@ -348,10 +383,16 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     // Clear transient error spam from previous attempts
     lastErrorRef.current = ''
     lastErrorAtRef.current = 0
-    await setupCamera()
+    // If we're not already previewing (no stream), set up the camera.
+    if (!videoRef.current?.srcObject) {
+      await setupCamera()
+    }
     const v = videoRef.current
     if (!v?.srcObject || v.videoWidth === 0 || v.videoHeight === 0) {
-      setState((s) => ({ ...s, errors: [...s.errors, 'Camera not ready. Check permissions and camera selection, then click Start again.'] }))
+      setState((s) => {
+        const next = [...s.errors, 'Camera not ready. Check permissions and camera selection, then click Start again.']
+        return { ...s, errors: next.length > 20 ? next.slice(next.length - 20) : next }
+      })
       return
     }
     await loadDetectors()
@@ -361,24 +402,33 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
       const vids = devices.filter((d) => d.kind === 'videoinput')
       setCameras(vids)
     } catch {}
-    setState((s) => ({ ...s, running: true }))
+    setState((s) => ({ ...s, running: true, previewing: false }))
     rafRef.current = requestAnimationFrame(step)
   }, [loadDetectors, setupCamera, state.running, step])
+
+  const disposeDetectors = useCallback(() => {
+    try { detectorsRef.current.pose?.dispose?.() } catch {}
+    try { detectorsRef.current.hands?.dispose?.() } catch {}
+    try { detectorsRef.current.face?.dispose?.() } catch {}
+    detectorsRef.current = {}
+  }, [])
 
   const stop = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     rafRef.current = null
     // Stop camera
     stopStream()
-    setState((s) => ({ ...s, running: false }))
-  }, [stopStream])
+    try { disposeDetectors() } catch {}
+    setState((s) => ({ ...s, running: false, previewing: false }))
+  }, [stopStream, disposeDetectors])
 
   useEffect(() => {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       stopStream()
+      try { disposeDetectors() } catch {}
     }
-  }, [stopStream])
+  }, [stopStream, disposeDetectors])
 
   const refreshCameras = useCallback(async () => {
     try {
@@ -394,12 +444,18 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
           devices = await navigator.mediaDevices.enumerateDevices()
           vids = devices.filter((d) => d.kind === 'videoinput')
         } catch (permErr) {
-          setState((s) => ({ ...s, errors: [...s.errors, 'Camera permission is required to list devices. Click Start or Allow camera access, then Refresh Cameras.'] }))
+          setState((s) => {
+            const next = [...s.errors, 'Camera permission is required to list devices. Click Start or Allow camera access, then Refresh Cameras.']
+            return { ...s, errors: next.length > 20 ? next.slice(next.length - 20) : next }
+          })
         }
       }
       setCameras(vids)
     } catch (e) {
-      setState((s) => ({ ...s, errors: [...s.errors, 'Failed to enumerate cameras. Grant camera permission first.'] }))
+      setState((s) => {
+        const next = [...s.errors, 'Failed to enumerate cameras. Grant camera permission first.']
+        return { ...s, errors: next.length > 20 ? next.slice(next.length - 20) : next }
+      })
     }
   }, [])
 
@@ -423,5 +479,26 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     await setupCamera()
   }, [setupCamera, stopStream])
 
-  return { state, start, stop, videoRef, canvasRef, cameras, switchCamera, refreshCameras }
+  // Preview-only controls: show camera without starting ML analysis
+  const startPreview = useCallback(async () => {
+    if (state.previewing || state.running) return
+    try {
+      await setupCamera()
+      // Update camera list after permission was granted
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const vids = devices.filter((d) => d.kind === 'videoinput')
+        setCameras(vids)
+      } catch {}
+      setState((s) => ({ ...s, previewing: true }))
+    } catch {}
+  }, [setupCamera, state.previewing, state.running])
+
+  const stopPreview = useCallback(() => {
+    if (!state.previewing || state.running) return
+    stopStream()
+    setState((s) => ({ ...s, previewing: false }))
+  }, [state.previewing, state.running, stopStream])
+
+  return { state, start, stop, startPreview, stopPreview, videoRef, canvasRef, cameras, switchCamera, refreshCameras }
 }

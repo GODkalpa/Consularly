@@ -1,9 +1,12 @@
 import { QuestionGenerationRequest, QuestionGenerationResponse } from './llm-service';
+import type { InterviewRoute } from './interview-routes'
+import { UK_QUESTION_POOL, ukFallbackQuestionByIndex } from './uk-questions-data'
 
 export interface InterviewSession {
   id: string;
   userId: string;
   visaType: 'F1' | 'B1/B2' | 'H1B' | 'other';
+  route?: InterviewRoute; // usa_f1 | uk_student
   studentProfile: {
     name: string;
     country: string;
@@ -43,7 +46,8 @@ export class InterviewSimulationService {
   async startInterview(
     userId: string,
     visaType: 'F1' | 'B1/B2' | 'H1B' | 'other',
-    studentProfile: InterviewSession['studentProfile']
+    studentProfile: InterviewSession['studentProfile'],
+    route?: InterviewRoute,
   ): Promise<{ session: InterviewSession; firstQuestion: QuestionGenerationResponse }> {
     const sessionId = `interview_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -51,6 +55,7 @@ export class InterviewSimulationService {
       id: sessionId,
       userId,
       visaType,
+      route,
       studentProfile,
       conversationHistory: [],
       currentQuestionNumber: 1,
@@ -97,8 +102,9 @@ export class InterviewSimulationService {
       currentQuestionNumber: session.currentQuestionNumber + 1
     };
 
-    // Check if interview should end (after 8-10 questions typically)
-    const isComplete = updatedSession.currentQuestionNumber > 8;
+    // Check if interview should end (default 8, UK route requires 16 questions)
+    const targetQuestions = session.route === 'uk_student' ? 16 : 8;
+    const isComplete = updatedSession.currentQuestionNumber > targetQuestions;
 
     if (isComplete) {
       updatedSession.status = 'completed';
@@ -134,6 +140,8 @@ export class InterviewSimulationService {
       studentAnswer,
       interviewContext: {
         visaType: session.visaType,
+        // country-specific route for prompt selection
+        route: session.route,
         studentProfile: session.studentProfile,
         currentQuestionNumber: session.currentQuestionNumber,
         conversationHistory: session.conversationHistory.map(item => ({
@@ -167,23 +175,49 @@ export class InterviewSimulationService {
         .trim();
       const asked = new Set(session.conversationHistory.map(h => normalize(h.question)));
       const candidate = normalize(next.question);
+      // Enforce UK bank membership for UK route
+      if (session.route === 'uk_student') {
+        const bank = new Set(UK_QUESTION_POOL.map(q => normalize(q.question)));
+        if (!bank.has(candidate) || asked.has(candidate)) {
+          return this.getUniqueFallbackQuestion(session.currentQuestionNumber, asked, session.route);
+        }
+      }
       if (asked.has(candidate)) {
         // Fallback to a unique question
-        return this.getUniqueFallbackQuestion(session.currentQuestionNumber, asked);
+        return this.getUniqueFallbackQuestion(session.currentQuestionNumber, asked, session.route);
       }
 
       return next;
     } catch (error) {
       console.error('Error generating question:', error);
-      // Return fallback question if API fails
-      return this.getFallbackQuestion(session.currentQuestionNumber);
+      // If API fails, pick a unique question from the UK bank when on UK route
+      if (session.route === 'uk_student') {
+        const normalize = (s: string) => s
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const asked = new Set(session.conversationHistory.map(h => normalize(h.question)));
+        return this.getUniqueFallbackQuestion(session.currentQuestionNumber, asked, session.route);
+      }
+      // Otherwise, use generic fallback rotation
+      return this.getFallbackQuestion(session.currentQuestionNumber, session.route);
     }
   }
 
   /**
    * Get a fallback question if the API fails
    */
-  private getFallbackQuestion(questionNumber: number): QuestionGenerationResponse {
+  private getFallbackQuestion(questionNumber: number, route?: InterviewRoute): QuestionGenerationResponse {
+    if (route === 'uk_student') {
+      const uk = ukFallbackQuestionByIndex(questionNumber)
+      return {
+        question: uk.question,
+        questionType: uk.questionType,
+        difficulty: uk.difficulty || 'medium',
+        expectedAnswerLength: uk.expectedAnswerLength || 'medium',
+      }
+    }
     const fallbackQuestions = [
       {
         question: "Good morning. Please tell me about yourself and why you want to study in the United States.",
@@ -244,14 +278,22 @@ export class InterviewSimulationService {
    */
   private getUniqueFallbackQuestion(
     questionNumber: number,
-    askedNormalized: Set<string>
+    askedNormalized: Set<string>,
+    route?: InterviewRoute
   ): QuestionGenerationResponse {
     const normalized = (s: string) => s
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    const pool = [
+    const pool = route === 'uk_student' ?
+      UK_QUESTION_POOL.map(q => ({
+        question: q.question,
+        questionType: q.questionType as 'academic' | 'financial' | 'intent' | 'background' | 'follow-up',
+        difficulty: (q.difficulty || 'medium') as 'easy' | 'medium' | 'hard',
+        expectedAnswerLength: (q.expectedAnswerLength || 'medium') as 'short' | 'medium' | 'long',
+      }))
+      : [
       {
         question: "Why do you want to study in the US?",
         questionType: 'background' as const,
@@ -314,11 +356,19 @@ export class InterviewSimulationService {
       }
     ];
 
-    // Choose the first not yet asked; otherwise fallback to default rotation
-    for (const q of pool) {
-      if (!askedNormalized.has(normalized(q.question))) return q;
+    // Choose a random not-yet-asked question for UK; otherwise fallback to default rotation
+    if (route === 'uk_student') {
+      const remaining = pool.filter(q => !askedNormalized.has(normalized(q.question)));
+      if (remaining.length > 0) {
+        const idx = Math.floor(Math.random() * remaining.length);
+        return remaining[idx];
+      }
+    } else {
+      for (const q of pool) {
+        if (!askedNormalized.has(normalized(q.question))) return q;
+      }
     }
-    return this.getFallbackQuestion(questionNumber);
+    return this.getFallbackQuestion(questionNumber, route);
   }
 
   /**

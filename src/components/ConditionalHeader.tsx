@@ -1,20 +1,16 @@
 "use client"
 
-import FooterSection from '@/components/ui/footer'
 import { usePathname } from 'next/navigation'
+import { HeroHeader } from '@/components/Header'
 
 const HIDDEN_PATH_PREFIXES = ['/admin', '/org', '/interview']
 
-export default function ConditionalFooter() {
+export default function ConditionalHeader() {
   const pathname = usePathname()
-
   if (!pathname) return null
-
   const hide = HIDDEN_PATH_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
   )
-
   if (hide) return null
-
-  return <FooterSection />
+  return <HeroHeader />
 }

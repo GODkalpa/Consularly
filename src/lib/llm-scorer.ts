@@ -1,11 +1,13 @@
 import { BodyLanguageScore } from './body-language-scoring';
 import { InterviewSession } from './interview-simulation';
+import type { InterviewRoute } from './interview-routes'
 
 export interface AIScoringRequest {
   question: string;
   answer: string;
   interviewContext: {
     visaType: 'F1' | 'B1/B2' | 'H1B' | 'other';
+    route?: InterviewRoute; // usa_f1 | uk_student
     studentProfile: InterviewSession['studentProfile'];
     conversationHistory: Array<{ question: string; answer: string; timestamp: string }>;
   };
@@ -61,7 +63,7 @@ export class LLMScoringService {
       body: JSON.stringify({
         model: process.env.LLM_MODEL || 'openai/gpt-3.5-turbo',
         messages: [
-          { role: 'system', content: this.getSystemPrompt() },
+          { role: 'system', content: this.getSystemPrompt(req.interviewContext.route) },
           { role: 'user', content: prompt },
         ],
         temperature: 0.2,
@@ -80,7 +82,14 @@ export class LLMScoringService {
     return this.parseResponse(content);
   }
 
-  private getSystemPrompt(): string {
+  private getSystemPrompt(route?: InterviewRoute): string {
+    if (route === 'uk_student') {
+      return `You are an expert UK university credibility (pre-CAS) evaluator. Score the applicant's latest answer using a strict UK-focused rubric centered on: genuine student intent, course & university fit, financial requirement (including 28-day maintenance), accommodation/logistics readiness, compliance & credibility (agent involvement, refusals, gaps), plus general communication quality.
+- Be unbiased and rely only on evidence in the student's answer and the interview context.
+- Penalize vague, generic, or inconsistent answers.
+- Flag credibility risks and missing key details (e.g., lack of CAS clarity, funds proof, misunderstanding work rules).
+Return STRICT JSON only with the schema described in Response Format. No extra commentary.`
+    }
     return `You are an expert US Embassy Nepal F1 visa officer and evaluator. Your task is to fairly and consistently score the APPLICANT'S LATEST ANSWER using a strict rubric aligned to real F1 interview practice in Nepal.
 - Be unbiased and focus only on evidence in the student's answer and the interview context.
 - Penalize vague, generic, or inconsistent answers.
@@ -91,14 +100,14 @@ Return STRICT JSON only with the schema described in Response Format. No extra c
 
   private buildPrompt(req: AIScoringRequest): string {
     const { question, answer, interviewContext } = req;
-    const { visaType, studentProfile, conversationHistory } = interviewContext;
+    const { visaType, route, studentProfile, conversationHistory } = interviewContext;
 
     const history = conversationHistory
       .map((h, i) => `Q${i + 1}: ${h.question}\nA${i + 1}: ${h.answer}`)
       .join('\n');
 
     return `Interview Context:
-Visa Type: ${visaType}
+Visa Type: ${visaType}${route ? `\nRoute: ${route}` : ''}
 Student: ${studentProfile.name} (${studentProfile.country})
 University: ${studentProfile.intendedUniversity || 'Not specified'}
 Field of Study: ${studentProfile.fieldOfStudy || 'Not specified'}
@@ -118,17 +127,17 @@ Rubric Dimensions (0-100 each):
 - relevance: how directly it addresses the current question
 - specificity: concrete details, numbers, names, evidence
 - consistency: aligns with earlier answers, no contradictions
-- academicPreparedness: indicates credible academic fit, scores, background
-- financialCapability: funding clarity, source credibility, sufficiency
-- intentToReturn: credible ties to Nepal and plans after graduation
+- academicPreparedness: credible academic fit (or UK: course & university fit)
+- financialCapability: funding clarity, sufficiency (UK: maintenance and 28-day proof awareness)
+- intentToReturn: credible post-study plans and ties (UK: intention clarity, not immigration intent)
 
 Compute contentScore (0-100) as a weighted blend:
 - 30% communication
 - 20% relevance
 - 20% specificity
 - 10% consistency
-- 10% academicPreparedness
-- 10% financialCapability
+- 10% academicPreparedness (UK: course/university fit)
+- 10% financialCapability (UK: maintenance/funds clarity)
 - 0% intentToReturn (include in rubric but do not add to contentScore if question is non-intent; if the current question is about intent, cap its influence to 10% total)
 
 Response Format (STRICT JSON):

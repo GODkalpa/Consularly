@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -12,7 +13,7 @@ import { auth, firebaseEnabled } from '@/lib/firebase'
 import { AssemblyAITranscription } from '@/components/speech/AssemblyAITranscription'
 import { InterviewStage } from '@/components/interview/InterviewStage'
 import { TranscriptionResult } from '@/lib/assemblyai-service'
-import { mapQuestionTypeToF1Category } from '@/lib/f1-questions-data'
+import { mapQuestionTypeToCategory, defaultVisaTypeForRoute, type InterviewRoute, routeDisplayName } from '@/lib/interview-routes'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
 import { scorePerformance } from '@/lib/performance-scoring'
 // Using secure API routes instead of direct client Firestore writes
@@ -55,11 +56,13 @@ interface OrgInterviewSimulationProps {
 export function OrgInterviewSimulation({ initialStudentId, initialStudentName }: OrgInterviewSimulationProps) {
   const { userProfile } = useAuth()
   const orgId: string | undefined = (userProfile as any)?.orgId
+  const router = useRouter()
 
   // Student selection
   const [students, setStudents] = useState<Array<{ id: string; name: string }>>([])
   const [studentId, setStudentId] = useState<string>(initialStudentId || '')
   const [studentName, setStudentName] = useState<string>(initialStudentName || '')
+  const [route, setRoute] = useState<InterviewRoute>('usa_f1')
 
   // Interview session state
   const [session, setSession] = useState<UISession | null>(null)
@@ -78,6 +81,15 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
   const silenceTimerRef = useRef<number | null>(null)
   const lastActivityAtRef = useRef<number>(0)
   const processingRef = useRef<boolean>(false)
+
+  // UK-specific per-question phase timers (30s prep + 30s answer)
+  const [phase, setPhase] = useState<'prep' | 'answer' | null>(null)
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(0)
+  const phaseTimerRef = useRef<number | null>(null)
+  const countdownTimerRef = useRef<number | null>(null)
+
+  // Accumulate UK answer text across multiple final segments
+  const answerBufferRef = useRef<string>('')
 
   useEffect(() => {
     if (!firebaseEnabled || !orgId) return
@@ -106,7 +118,63 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
     if (silenceTimerRef.current) { window.clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
   }
 
+  const clearPhaseTimers = () => {
+    if (phaseTimerRef.current) { window.clearTimeout(phaseTimerRef.current); phaseTimerRef.current = null }
+    if (countdownTimerRef.current) { window.clearInterval(countdownTimerRef.current); countdownTimerRef.current = null }
+  }
+
+  const finalizeAnswer = () => {
+    if (processingRef.current) return
+    processingRef.current = true
+    clearPhaseTimers()
+    const text = currentTranscript.trim()
+    processAnswer(text.length >= 1 ? text : '[No response]')
+  }
+
+  const startPhase = (p: 'prep' | 'answer', durationSec: number) => {
+    clearPhaseTimers()
+    setPhase(p)
+    setSecondsRemaining(durationSec)
+    if (p === 'prep') {
+      setCurrentTranscript('')
+    }
+    if (p === 'answer') {
+      answerBufferRef.current = ''
+      setCurrentTranscript('')
+    }
+    countdownTimerRef.current = window.setInterval(() => {
+      setSecondsRemaining((s) => (s > 0 ? s - 1 : 0))
+    }, 1000)
+    phaseTimerRef.current = window.setTimeout(() => {
+      if (p === 'prep') {
+        // Switch to answer window
+        setPhase('answer')
+        setSecondsRemaining(30)
+        // reset transcription stream
+        setResetKey((k) => k + 1)
+        answerBufferRef.current = ''
+        setCurrentTranscript('')
+        startPhase('answer', 30)
+      } else {
+        finalizeAnswer()
+      }
+    }, durationSec * 1000)
+  }
+
+  // UK: allow early start of answer during prep
+  const startAnswerNow = () => {
+    if (route !== 'uk_student') return
+    clearPhaseTimers()
+    setPhase('answer')
+    setSecondsRemaining(30)
+    setResetKey((k) => k + 1)
+    answerBufferRef.current = ''
+    setCurrentTranscript('')
+    startPhase('answer', 30)
+  }
+
   const armTimers = () => {
+    if (route === 'uk_student') return // UK uses phase timers instead
     clearTimers()
     questionTimerRef.current = window.setTimeout(() => {
       if (processingRef.current) return
@@ -140,7 +208,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       const createRes = await fetch('/api/org/interviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ studentId, interviewType: 'visa', scheduledTime: new Date().toISOString(), duration: 30 })
+        body: JSON.stringify({ studentId, interviewType: 'visa', scheduledTime: new Date().toISOString(), duration: 30, route })
       })
       if (!createRes.ok) throw new Error(`Create interview failed: ${createRes.status}`)
       const created = await createRes.json()
@@ -153,7 +221,8 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
         body: JSON.stringify({
           action: 'start',
           userId: studentId,
-          visaType: 'F1',
+          visaType: defaultVisaTypeForRoute(route),
+          route,
           studentProfile: { name: studentName, country: 'Nepal' }
         })
       })
@@ -178,25 +247,26 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       setApiSession(seeded)
       setCurrentLLMQuestion(firstQ)
 
-      const uiFirst: InterviewQuestion = {
-        question: firstQ.question,
-        category: mapQuestionTypeToF1Category(firstQ.questionType),
+      // Redirect to dedicated interview page with init payload
+      try {
+        const key = `interview:init:${apiSess.id}`
+        const payload = JSON.stringify({
+          apiSession: seeded,
+          firstQuestion: firstQ,
+          route,
+          studentName: studentName.trim(),
+        })
+        try { sessionStorage.setItem(key, payload) } catch {}
+        try { localStorage.setItem(key, payload) } catch {}
+      } catch {}
+      // Open in a NEW TAB as requested
+      try {
+        const url = `/interview/${apiSess.id}`
+        window.open(url, '_blank', 'noopener,noreferrer')
+      } catch {
+        router.push(`/interview/${apiSess.id}`)
       }
-
-      setSession({
-        id: apiSess.id,
-        studentId,
-        studentName: studentName.trim(),
-        startTime: new Date(),
-        currentQuestionIndex: 0,
-        questions: [uiFirst],
-        responses: [],
-        status: 'preparing',
-      })
-      setCurrentTranscript('')
-      setBodyScore(null)
-      setResetKey((k) => k + 1)
-      setLastAnsweredIndex(-1)
+      return
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error(e)
@@ -216,7 +286,12 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
         })
       }
     } catch {}
-    setTimeout(() => armTimers(), 0)
+    if (route === 'uk_student') {
+      // Start with 30s preparation time (mic off), then 30s answer window
+      startPhase('prep', 30)
+    } else {
+      setTimeout(() => armTimers(), 0)
+    }
   }
 
   const processAnswer = async (transcriptText: string, confidence?: number) => {
@@ -246,10 +321,12 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       try {
         const ic = apiSession ? {
           visaType: apiSession.visaType,
+          route: (apiSession as any).route || route,
           studentProfile: apiSession.studentProfile,
           conversationHistory: apiSession.conversationHistory.map((h: any) => ({ question: h.question, answer: h.answer, timestamp: h.timestamp })),
         } : {
-          visaType: 'F1' as const,
+          visaType: defaultVisaTypeForRoute(route),
+          route,
           studentProfile: { name: session.studentName, country: 'Nepal' },
           conversationHistory: [] as Array<{ question: string; answer: string; timestamp: string }>,
         }
@@ -323,8 +400,11 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
           } else if (data.question) {
             const nextQ = data.question
             setCurrentLLMQuestion(nextQ)
-            const uiQ: InterviewQuestion = { question: nextQ.question, category: mapQuestionTypeToF1Category(nextQ.questionType) }
+            const uiQ: InterviewQuestion = { question: nextQ.question, category: mapQuestionTypeToCategory(route, nextQ.questionType) }
             setSession((prev) => (prev ? { ...prev, questions: [...prev.questions, uiQ], currentQuestionIndex: prev.currentQuestionIndex + 1 } : prev))
+            if (route === 'uk_student') {
+              startPhase('prep', 30)
+            }
           }
         }
       }
@@ -335,7 +415,9 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       setIsAnalyzing(false)
       setResetKey((k) => k + 1)
       processingRef.current = false
-      setTimeout(() => { if (session && session.status === 'active') armTimers() }, 0)
+      if (route !== 'uk_student') {
+        setTimeout(() => { if (session && session.status === 'active') armTimers() }, 0)
+      }
     }
   }
 
@@ -344,6 +426,13 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
     const transcriptText = transcript.text.trim()
     if (transcriptText.length < 1) return
     if (session.currentQuestionIndex === lastAnsweredIndex) return
+    if (route === 'uk_student') {
+      // Do not finalize early; accumulate only during the answer window
+      if (phase !== 'answer') return
+      answerBufferRef.current = answerBufferRef.current ? `${answerBufferRef.current} ${transcriptText}` : transcriptText
+      setCurrentTranscript(answerBufferRef.current)
+      return
+    }
     processingRef.current = true
     await processAnswer(transcriptText, transcript.confidence)
   }
@@ -360,7 +449,10 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
     setShowInsights(false)
     setResetKey((k) => k + 1)
     clearTimers()
+    clearPhaseTimers()
     processingRef.current = false
+    setPhase(null)
+    setSecondsRemaining(0)
     // keep selected student
   }
 
@@ -474,6 +566,18 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
                 </SelectContent>
               </Select>
             </div>
+            <div className='space-y-2'>
+              <Label>Country</Label>
+              <Select value={route} onValueChange={(v) => setRoute(v as InterviewRoute)}>
+                <SelectTrigger>
+                  <SelectValue placeholder='Select interview country/route' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='usa_f1'>{routeDisplayName.usa_f1}</SelectItem>
+                  <SelectItem value='uk_student'>{routeDisplayName.uk_student}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button onClick={startNewSession} disabled={!studentId} className='w-full'>
               <Play className='h-4 w-4 mr-2' /> New Interview Session
             </Button>
@@ -506,23 +610,36 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
               questionText={currentQuestion.question}
               currentTranscript={currentTranscript}
               onScore={setBodyScore}
-              onTogglePause={() => setSession((prev) => (prev ? { ...prev, status: prev.status === 'active' ? 'paused' : 'active' } : prev))}
-              onNext={session.status === 'active' ? () => {/* skip handled by timers */} : undefined}
+              onNext={session.status === 'active' && route !== 'uk_student' ? () => {/* skip handled by timers */} : undefined}
               startedAt={session.startTime}
               statusBadge={session.status === 'active' ? 'Live' : session.status === 'paused' ? 'Paused' : 'Completed'}
               candidateName={session.studentName}
               questionIndex={session.currentQuestionIndex}
-              questionTotal={session.questions.length}
+              questionTotal={route === 'uk_student' ? 16 : session.questions.length}
+              phase={phase ?? undefined}
+              secondsRemaining={phase ? secondsRemaining : undefined}
+              onStartAnswer={route === 'uk_student' ? startAnswerNow : undefined}
+              onStopAndNext={route === 'uk_student' ? finalizeAnswer : undefined}
             />
           )}
 
           <div className='hidden'>
             <AssemblyAITranscription
               onTranscriptComplete={handleTranscriptComplete}
-              onTranscriptUpdate={handleTranscriptUpdate}
+              onTranscriptUpdate={(t) => {
+                if (!session || session.status !== 'active') return
+                if (route === 'uk_student') {
+                  if (phase !== 'answer') return
+                  const combined = answerBufferRef.current ? `${answerBufferRef.current} ${t}` : t
+                  setCurrentTranscript(combined)
+                } else {
+                  setCurrentTranscript(t)
+                }
+                lastActivityAtRef.current = Date.now()
+              }}
               showControls={false}
               showTranscripts={false}
-              running={session.status === 'active'}
+              running={session.status === 'active' && (route !== 'uk_student' || phase === 'answer')}
               resetKey={resetKey}
             />
           </div>

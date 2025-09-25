@@ -4,10 +4,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useBodyLanguageTracker } from '@/hooks/use-body-language-tracker'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
-import { Play, Pause, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
+import { Play, Pause, ChevronRight, Maximize2, Minimize2, Square } from 'lucide-react'
 
 export interface InterviewStageProps {
   running: boolean
+  /** When true, show camera preview without running analysis */
+  preview?: boolean
   questionCategory: string
   questionText: string
   currentTranscript?: string
@@ -16,15 +18,26 @@ export interface InterviewStageProps {
   onScore?: (score: BodyLanguageScore) => void
   onTogglePause?: () => void
   onNext?: () => void
+  onStartAnswer?: () => void
+  onStopAndNext?: () => void
   statusBadge?: string
   startedAt?: Date
   candidateName?: string
   questionIndex?: number
   questionTotal?: number
+  phase?: 'prep' | 'answer'
+  secondsRemaining?: number
+  /** Hide the live captions overlay during the interview */
+  showCaptions?: boolean
+  /** Hide the inline question overlay (useful when rendering question in a side panel) */
+  showQuestionOverlay?: boolean
+  /** Hide the live body language score badge */
+  showBodyBadge?: boolean
 }
 
 export const InterviewStage: React.FC<InterviewStageProps> = ({
   running,
+  preview = false,
   questionCategory,
   questionText,
   currentTranscript,
@@ -33,13 +46,20 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   onScore,
   onTogglePause,
   onNext,
+  onStartAnswer,
+  onStopAndNext,
   statusBadge = 'Live',
   startedAt,
   candidateName,
   questionIndex,
   questionTotal
+  , phase,
+  secondsRemaining,
+  showCaptions = true,
+  showQuestionOverlay = true,
+  showBodyBadge = true
 }) => {
-  const { state, start, stop, videoRef, canvasRef } = useBodyLanguageTracker({
+  const { state, start, stop, startPreview, stopPreview, videoRef, canvasRef } = useBodyLanguageTracker({
     width,
     height,
     enableFace: true,
@@ -54,13 +74,21 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   useEffect(() => {
     const control = async () => {
       try {
-        if (running && !state.running) await start()
-        if (!running && state.running) await stop()
+        if (running && !state.running) {
+          await start()
+        } else if (!running && preview) {
+          // Preview only
+          if (!state.previewing) await startPreview()
+        } else {
+          // Neither running nor previewing
+          if (state.running) await stop()
+          if (state.previewing) await stopPreview()
+        }
       } catch {}
     }
     control()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, state.running])
+  }, [running, preview, state.running, state.previewing])
 
   useEffect(() => {
     if (state.score && onScore) onScore(state.score)
@@ -126,12 +154,24 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
       {/* Top bar */}
       <div className="absolute top-3 left-4 right-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Badge variant="secondary">{questionCategory}</Badge>
+          {questionCategory ? (
+            <Badge variant="secondary">{questionCategory}</Badge>
+          ) : null}
           <Badge variant={running ? 'default' : 'secondary'} className="flex items-center gap-1">
             <span className="inline-block h-2 w-2 rounded-full bg-[hsl(var(--destructive))] animate-pulse" />
             {statusBadge}
           </Badge>
-          <Badge variant="outline">Body {Math.round(body)}/100</Badge>
+          {showBodyBadge && (
+            <Badge variant="outline">Body {Math.round(body)}/100</Badge>
+          )}
+          {phase && typeof secondsRemaining === 'number' && (
+            <Badge variant={phase === 'prep' ? 'secondary' : 'default'}>
+              {phase === 'prep' ? 'Prep' : 'Answer'}: {Math.max(0, secondsRemaining)}s
+            </Badge>
+          )}
+          {running && state.errors.length > 0 && (
+            <Badge variant="destructive">Camera Issue</Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {candidateName && (
@@ -153,31 +193,60 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
       )}
 
       {/* Question text */}
-      <div className="absolute top-16 left-6 right-6">
-        <div className="inline-block rounded-lg bg-background/60 text-foreground px-4 py-2 backdrop-blur-sm">
-          <div className="text-sm opacity-80">Current Question</div>
-          <div className="text-base md:text-lg font-medium leading-snug">{questionText}</div>
+      {showQuestionOverlay && (
+        <div className="absolute top-16 left-6 right-6">
+          <div className="inline-block rounded-lg bg-background/60 text-foreground px-4 py-2 backdrop-blur-sm">
+            <div className="text-sm opacity-80">Current Question</div>
+            <div className="text-base md:text-lg font-medium leading-snug">{questionText}</div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Live captions */}
-      <div className="absolute bottom-16 left-6 right-6 flex justify-center">
-        {currentTranscript ? (
-          <div className="max-w-3xl w-full text-center text-foreground text-base md:text-lg bg-background/60 px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm">
-            {currentTranscript}
+      {showCaptions && (
+        <div className="absolute bottom-16 left-6 right-6 flex justify-center">
+          {currentTranscript ? (
+            <div className="max-w-3xl w-full text-center text-foreground text-base md:text-lg bg-background/60 px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm">
+              {currentTranscript}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* Pre-start placeholder overlay (only when not previewing) */}
+      {!running && !state.previewing && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="text-center text-muted-foreground">
+            <div className="mx-auto mb-3 h-10 w-10 rounded-full bg-foreground/10 flex items-center justify-center">
+              <span className="text-xs">🎥</span>
+            </div>
+            <div className="text-sm">Camera will start after you click <span className="font-medium">Start Interview</span>.</div>
+            <div className="text-xs opacity-80">If prompted, allow camera permission in your browser.</div>
           </div>
-        ) : null}
-      </div>
+        </div>
+      )}
 
       {/* Bottom controls */}
       <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center">
         <div className="flex items-center gap-2 bg-background/60 backdrop-blur-md px-3 py-2 rounded-full shadow-lg">
-          {onTogglePause && (
+          {onTogglePause && !phase && (
             <Button size="sm" variant={running ? 'secondary' : 'default'} onClick={onTogglePause} className="rounded-full px-3">
               {running ? <><Pause className="h-4 w-4 mr-1" /> Pause</> : <><Play className="h-4 w-4 mr-1" /> Resume</>}
             </Button>
           )}
-          {onNext && (
+          {/* UK-specific controls: show Start during prep, Stop & Next during answer */}
+          {phase === 'prep' && onStartAnswer && (
+            <Button size="sm" onClick={onStartAnswer} className="rounded-full px-3">
+              <Play className="h-4 w-4 mr-1" /> Start Answer
+            </Button>
+          )}
+          {phase === 'answer' && onStopAndNext && (
+            <Button size="sm" onClick={onStopAndNext} className="rounded-full px-3">
+              <Square className="h-4 w-4 mr-1" /> Stop & Next <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          )}
+          {/* Default Next for non-UK or when no phase control provided */}
+          {(!phase || phase !== 'prep') && !onStopAndNext && onNext && (
             <Button size="sm" onClick={onNext} className="rounded-full px-3">
               Next <ChevronRight className="h-4 w-4 ml-1" />
             </Button>

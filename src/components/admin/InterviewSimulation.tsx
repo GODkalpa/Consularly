@@ -6,10 +6,12 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,7 +27,7 @@ import {
 import { AssemblyAITranscription } from '@/components/speech/AssemblyAITranscription';
 import { InterviewStage } from '@/components/interview/InterviewStage';
 import { TranscriptionResult } from '@/lib/assemblyai-service';
-import { mapQuestionTypeToF1Category } from '@/lib/f1-questions-data';
+import { mapQuestionTypeToCategory, defaultVisaTypeForRoute, type InterviewRoute, routeDisplayName } from '@/lib/interview-routes';
 import type { BodyLanguageScore } from '@/lib/body-language-scoring';
 import { useAuth } from '@/contexts/AuthContext';
 import type { InterviewSession as ApiInterviewSession, QuestionGenerationResponse } from '@/lib/interview-simulation';
@@ -54,6 +56,7 @@ interface UISession {
         overall: number;
         categories: { content: number; bodyLanguage: number; speech: number };
       };
+
     };
     timestamp: Date;
   }>;
@@ -62,23 +65,34 @@ interface UISession {
 
 export function InterviewSimulation() {
   const { user } = useAuth();
+  const router = useRouter();
   const [session, setSession] = useState<UISession | null>(null);
   const [currentTranscript, setCurrentTranscript] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [studentName, setStudentName] = useState('');
+  const [route, setRoute] = useState<InterviewRoute>('usa_f1');
   const [resetKey, setResetKey] = useState(0);
   const [bodyScore, setBodyScore] = useState<BodyLanguageScore | null>(null);
   const [lastAnsweredIndex, setLastAnsweredIndex] = useState<number>(-1);
   const [showInsights, setShowInsights] = useState(false);
   const [apiSession, setApiSession] = useState<ApiInterviewSession | null>(null);
   const [currentLLMQuestion, setCurrentLLMQuestion] = useState<QuestionGenerationResponse | null>(null);
-  const TARGET_QUESTIONS = 8;
+  const TARGET_QUESTIONS = 8; // default; UK completion handled server-side at 16
 
   // Timers and activity tracking
   const questionTimerRef = useRef<number | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const lastActivityAtRef = useRef<number>(0);
   const processingRef = useRef<boolean>(false);
+
+  // UK-specific per-question phase timers
+  const [phase, setPhase] = useState<'prep' | 'answer' | null>(null);
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
+  const phaseTimerRef = useRef<number | null>(null);
+  const countdownTimerRef = useRef<number | null>(null);
+
+  // Accumulates UK answer text across multiple final segments
+  const answerBufferRef = useRef<string>('');
 
   const clearTimers = () => {
     if (questionTimerRef.current) {
@@ -91,7 +105,61 @@ export function InterviewSimulation() {
     }
   };
 
+  const clearPhaseTimers = () => {
+    if (phaseTimerRef.current) { window.clearTimeout(phaseTimerRef.current); phaseTimerRef.current = null }
+    if (countdownTimerRef.current) { window.clearInterval(countdownTimerRef.current); countdownTimerRef.current = null }
+  };
+
+  const finalizeAnswer = () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    clearPhaseTimers();
+    const text = currentTranscript.trim();
+    processAnswer(text.length >= 1 ? text : '[No response]');
+  };
+
+  const startPhase = (p: 'prep' | 'answer', durationSec: number) => {
+    clearPhaseTimers();
+    setPhase(p);
+    setSecondsRemaining(durationSec);
+    if (p === 'prep') {
+      setCurrentTranscript('');
+    }
+    if (p === 'answer') {
+      answerBufferRef.current = '';
+      setCurrentTranscript('');
+    }
+    countdownTimerRef.current = window.setInterval(() => {
+      setSecondsRemaining((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    phaseTimerRef.current = window.setTimeout(() => {
+      if (p === 'prep') {
+        setPhase('answer');
+        setSecondsRemaining(30);
+        setResetKey((k) => k + 1);
+        answerBufferRef.current = '';
+        setCurrentTranscript('');
+        startPhase('answer', 30);
+      } else {
+        finalizeAnswer();
+      }
+    }, durationSec * 1000);
+  };
+
+  // UK: allow user to start the answer window early by clicking Start during prep
+  const startAnswerNow = () => {
+    if (route !== 'uk_student') return;
+    clearPhaseTimers();
+    setPhase('answer');
+    setSecondsRemaining(30);
+    setResetKey((k) => k + 1);
+    answerBufferRef.current = '';
+    setCurrentTranscript('');
+    startPhase('answer', 30);
+  };
+
   const armTimers = () => {
+    if (route === 'uk_student') return; // UK uses phase timers
     clearTimers();
     // Max 15s per question
     questionTimerRef.current = window.setTimeout(() => {
@@ -130,7 +198,8 @@ export function InterviewSimulation() {
         body: JSON.stringify({
           action: 'start',
           userId: user?.uid || 'guest',
-          visaType: 'F1',
+          visaType: defaultVisaTypeForRoute(route),
+          route,
           studentProfile: {
             name: studentName.trim(),
             country: 'Nepal'
@@ -163,9 +232,32 @@ export function InterviewSimulation() {
       setApiSession(seededApiSession);
       setCurrentLLMQuestion(firstQ);
 
+      // Redirect to dedicated interview page with init payload
+      try {
+        const key = `interview:init:${apiSess.id}`;
+        const payload = JSON.stringify({
+          apiSession: seededApiSession,
+          firstQuestion: firstQ,
+          route,
+          studentName: studentName.trim(),
+        });
+        // Store in both sessionStorage (same-tab) and localStorage (cross-tab)
+        try { sessionStorage.setItem(key, payload) } catch {}
+        try { localStorage.setItem(key, payload) } catch {}
+      } catch {}
+      // Open interview in a NEW TAB as requested
+      try {
+        const url = `/interview/${apiSess.id}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch {
+        // Fallback to same-tab navigation if popups are blocked
+        router.push(`/interview/${apiSess.id}`);
+      }
+      return;
+
       const uiFirst: InterviewQuestion = {
         question: firstQ.question,
-        category: mapQuestionTypeToF1Category(firstQ.questionType)
+        category: mapQuestionTypeToCategory(route, firstQ.questionType)
       };
 
       const newSession: UISession = {
@@ -221,6 +313,7 @@ export function InterviewSimulation() {
       try {
         const ic = apiSession ? {
           visaType: apiSession.visaType,
+          route: (apiSession as any).route || route,
           studentProfile: apiSession.studentProfile,
           conversationHistory: apiSession.conversationHistory.map(h => ({
             question: h.question,
@@ -228,7 +321,8 @@ export function InterviewSimulation() {
             timestamp: h.timestamp,
           }))
         } : {
-          visaType: 'F1' as const,
+          visaType: defaultVisaTypeForRoute(route),
+          route,
           studentProfile: { name: session.studentName, country: 'Nepal' },
           conversationHistory: [] as Array<{ question: string; answer: string; timestamp: string }>
         };
@@ -308,13 +402,16 @@ export function InterviewSimulation() {
             setCurrentLLMQuestion(nextQ);
             const uiQ: InterviewQuestion = {
               question: nextQ.question,
-              category: mapQuestionTypeToF1Category(nextQ.questionType)
+              category: mapQuestionTypeToCategory(route, nextQ.questionType)
             };
             setSession(prev => prev ? {
               ...prev,
               questions: [...prev.questions, uiQ],
               currentQuestionIndex: prev.currentQuestionIndex + 1
             } : prev);
+            if (route === 'uk_student') {
+              startPhase('prep', 30);
+            }
           }
         } else {
           console.error('Failed to process answer:', res.status);
@@ -326,10 +423,12 @@ export function InterviewSimulation() {
       setIsAnalyzing(false);
       setResetKey((k) => k + 1);
       processingRef.current = false;
-      // Arm timers for the next question (if any)
-      setTimeout(() => {
-        if (session && session.status === 'active') armTimers();
-      }, 0);
+      // Arm timers for the next question (if any) unless UK uses phase timers
+      if (route !== 'uk_student') {
+        setTimeout(() => {
+          if (session && session.status === 'active') armTimers();
+        }, 0);
+      }
     }
   };
 
@@ -339,6 +438,13 @@ export function InterviewSimulation() {
     const transcriptText = transcript.text.trim();
     if (transcriptText.length < 1) return;
     if (session.currentQuestionIndex === lastAnsweredIndex) return;
+    if (route === 'uk_student') {
+      // Do not finalize early; accumulate during answer window only.
+      if (phase !== 'answer') return;
+      answerBufferRef.current = answerBufferRef.current ? `${answerBufferRef.current} ${transcriptText}` : transcriptText;
+      setCurrentTranscript(answerBufferRef.current);
+      return;
+    }
     processingRef.current = true;
     await processAnswer(transcriptText, transcript.confidence);
   };
@@ -375,7 +481,7 @@ export function InterviewSimulation() {
           setCurrentLLMQuestion(nextQ);
           const uiQ: InterviewQuestion = {
             question: nextQ.question,
-            category: mapQuestionTypeToF1Category(nextQ.questionType)
+            category: mapQuestionTypeToCategory(route, nextQ.questionType)
           };
           setSession(prev => prev ? {
             ...prev,
@@ -396,20 +502,14 @@ export function InterviewSimulation() {
     if (!session) return;
     setSession(prev => prev ? { ...prev, status: 'active', startTime: new Date() } : prev);
     // Arm timers for the first question after state update
-    setTimeout(() => {
-      armTimers();
-    }, 0);
+    if (route === 'uk_student') {
+      startPhase('prep', 30);
+    } else {
+      setTimeout(() => { armTimers(); }, 0);
+    }
   };
 
-  // Pause/Resume interview
-  const togglePause = () => {
-    if (!session) return;
-
-    setSession(prev => prev ? {
-      ...prev,
-      status: prev.status === 'active' ? 'paused' : 'active'
-    } : null);
-  };
+  // Pause/Resume removed for UK and general flows; no toggle to avoid accidental pauses
 
   // Reset interview
   const resetInterview = () => {
@@ -418,6 +518,9 @@ export function InterviewSimulation() {
     setStudentName('');
     clearTimers();
     processingRef.current = false;
+    clearPhaseTimers();
+    setPhase(null);
+    setSecondsRemaining(0);
   };
 
   // Save interview session
@@ -521,6 +624,18 @@ export function InterviewSimulation() {
                 }}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Country</Label>
+              <Select value={route} onValueChange={(v) => setRoute(v as InterviewRoute)}>
+                <SelectTrigger>
+                  <SelectValue placeholder='Select interview country/route' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='usa_f1'>{routeDisplayName.usa_f1}</SelectItem>
+                  <SelectItem value='uk_student'>{routeDisplayName.uk_student}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button 
               onClick={startNewSession}
               disabled={!studentName.trim()}
@@ -563,13 +678,16 @@ export function InterviewSimulation() {
               questionText={currentQuestion.question}
               currentTranscript={currentTranscript}
               onScore={setBodyScore}
-              onTogglePause={togglePause}
-              onNext={session.status === 'active' ? nextQuestion : undefined}
+              onNext={session.status === 'active' && route !== 'uk_student' ? nextQuestion : undefined}
               startedAt={session.startTime}
               statusBadge={session.status === 'active' ? 'Live' : session.status === 'paused' ? 'Paused' : 'Completed'}
               candidateName={session.studentName}
               questionIndex={session.currentQuestionIndex}
-              questionTotal={session.questions.length}
+              questionTotal={route === 'uk_student' ? 16 : session.questions.length}
+              phase={phase ?? undefined}
+              secondsRemaining={phase ? secondsRemaining : undefined}
+              onStartAnswer={route === 'uk_student' ? startAnswerNow : undefined}
+              onStopAndNext={route === 'uk_student' ? finalizeAnswer : undefined}
             />
           )}
 
@@ -628,13 +746,21 @@ export function InterviewSimulation() {
           {/* Hidden transcription runner (feeds live captions + triggers completion) */}
           <div className="hidden">
             <AssemblyAITranscription
-              onTranscriptComplete={handleTranscriptComplete}
-              onTranscriptUpdate={handleTranscriptUpdate}
-              showControls={false}
-              showTranscripts={false}
-              running={session.status === 'active'}
-              resetKey={resetKey}
-            />
+            onTranscriptComplete={handleTranscriptComplete}
+            onTranscriptUpdate={(t) => {
+                if (route === 'uk_student') {
+                  if (phase !== 'answer') return;
+                  const combined = answerBufferRef.current ? `${answerBufferRef.current} ${t}` : t;
+                  handleTranscriptUpdate(combined);
+                } else {
+                  handleTranscriptUpdate(t);
+                }
+              }}
+            showControls={false}
+            showTranscripts={false}
+            running={session.status === 'active' && (route !== 'uk_student' || phase === 'answer')}
+            resetKey={resetKey}
+          />
           </div>
 
           {/* Analysis */}

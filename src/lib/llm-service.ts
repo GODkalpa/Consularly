@@ -1,10 +1,13 @@
-import { F1_VISA_QUESTIONS, getQuestionsByCategory, mapQuestionTypeToF1Category } from './f1-questions-data';
+// F1 fallbacks are inlined below; UK pool is imported
+import type { InterviewRoute } from './interview-routes'
+import { UK_QUESTION_POOL } from './uk-questions-data'
 
 interface QuestionGenerationRequest {
   previousQuestion?: string;
   studentAnswer?: string;
   interviewContext: {
     visaType: 'F1' | 'B1/B2' | 'H1B' | 'other';
+    route?: InterviewRoute; // usa_f1 | uk_student
     studentProfile: {
       name: string;
       country: string;
@@ -57,7 +60,7 @@ export class LLMQuestionService {
           messages: [
             {
               role: 'system',
-              content: this.getSystemPrompt()
+              content: this.getSystemPrompt(request.interviewContext.route)
             },
             {
               role: 'user',
@@ -88,7 +91,32 @@ export class LLMQuestionService {
     }
   }
 
-  private getSystemPrompt(): string {
+  private getSystemPrompt(route?: InterviewRoute): string {
+    if (route === 'uk_student') {
+      return `You are an expert UK university credibility (pre-CAS) interviewer. Conduct realistic pre-CAS style interviews to assess genuine student intent, course and university fit, financial requirements (28-day funds and maintenance), accommodation planning, compliance history, and post-study intentions.
+
+Key Guidelines (UK pre-CAS):
+1. Ask concise, officer-like questions specific to UK study route
+2. Probe details from the student's previous answers; avoid repetition
+3. Cover: Genuine student intent → Course & University fit → Financial requirement → Accommodation/logistics → Compliance & credibility → Post-study intent
+4. If the previous answer is vague, demand specifics (numbers, names, timelines)
+5. Challenge inconsistencies (e.g., agent selection, gaps, visa refusals)
+6. Keep one question at a time (no multi-part unless clarifying)
+
+STRICT BANK SELECTION RULE:
+- You MUST pick EXACTLY ONE question from the fixed UK question bank that the user message will provide.
+- Do NOT invent or rephrase questions; return the chosen bank question text verbatim.
+- Do NOT repeat any previously asked bank question.
+
+Response Format:
+{
+  "question": string,
+  "questionType": "academic|financial|intent|background|follow-up",
+  "difficulty": "easy|medium|hard",
+  "expectedAnswerLength": "short|medium|long",
+  "tips": string (optional)
+}`
+    }
     return `You are an expert F1 visa interview officer simulator for the US Embassy. Your role is to conduct realistic mock visa interviews based on actual F1 visa questions asked to Nepali students.
 
 Key Guidelines:
@@ -134,9 +162,11 @@ Make questions direct, challenging, and authentic to real F1 visa interviews.`;
 
   private buildPrompt(request: QuestionGenerationRequest): string {
     const { interviewContext, previousQuestion, studentAnswer } = request;
-    const { visaType, studentProfile, currentQuestionNumber, conversationHistory } = interviewContext;
+    const { visaType, route, studentProfile, currentQuestionNumber, conversationHistory } = interviewContext;
 
-    let prompt = `Generate the next visa interview question for a ${visaType} visa applicant.
+    const isUK = route === 'uk_student'
+
+    const headerUK = `Generate the next UK student (pre-CAS/credibility) interview question.
 
 Student Profile:
 - Name: ${studentProfile.name}
@@ -145,7 +175,27 @@ Student Profile:
 - Field of Study: ${studentProfile.fieldOfStudy || 'Not specified'}
 - Previous Education: ${studentProfile.previousEducation || 'Not specified'}
 
-Interview Progress: Question ${currentQuestionNumber}`;
+Interview Progress: Question ${currentQuestionNumber}`
+
+    const headerUS = `Generate the next visa interview question for a ${visaType} visa applicant.
+
+Student Profile:
+- Name: ${studentProfile.name}
+- Country: ${studentProfile.country}
+- University: ${studentProfile.intendedUniversity || 'Not specified'}
+- Field of Study: ${studentProfile.fieldOfStudy || 'Not specified'}
+- Previous Education: ${studentProfile.previousEducation || 'Not specified'}
+
+Interview Progress: Question ${currentQuestionNumber}`
+
+    let prompt = isUK ? headerUK : headerUS;
+
+    if (isUK) {
+      // Provide a fixed bank for strict selection
+      const bankLines = UK_QUESTION_POOL.map((q, i) => `- [${i + 1}] (${q.questionType}/${q.difficulty || 'medium'}) ${q.question}`).join('\n');
+      prompt += `\n\nFixed UK Question Bank (choose one verbatim from below):\n${bankLines}`;
+      prompt += `\n\nInstructions:\n- Choose a question that fits the current flow and the student's previous answers.\n- Return the selected question EXACTLY as it appears in the bank (no changes).\n- Do not repeat any previously asked bank question.`
+    }
 
     if (conversationHistory.length > 0) {
       prompt += `\n\nConversation History:`;
@@ -182,9 +232,13 @@ Interview Progress: Question ${currentQuestionNumber}`;
 
       // Suggest question categories based on conversation history
       const coveredTopics = conversationHistory.map(h => h.question.toLowerCase());
-      const needsFinancial = !coveredTopics.some(q => q.includes('sponsor') || q.includes('pay') || q.includes('cost'));
+      const needsFinancial = isUK
+        ? !coveredTopics.some(q => q.includes('fund') || q.includes('financial') || q.includes('maintenance'))
+        : !coveredTopics.some(q => q.includes('sponsor') || q.includes('pay') || q.includes('cost'));
       const needsIntent = !coveredTopics.some(q => q.includes('return') || q.includes('plan') || q.includes('after'));
-      const needsAcademic = !coveredTopics.some(q => q.includes('score') || q.includes('gpa') || q.includes('grade'));
+      const needsAcademic = isUK
+        ? !coveredTopics.some(q => q.includes('course') || q.includes('module') || q.includes('university'))
+        : !coveredTopics.some(q => q.includes('score') || q.includes('gpa') || q.includes('grade'));
       
       if (needsFinancial && currentQuestionNumber > 2) {
         prompt += `\n- Consider asking about financial capability if not covered yet`;
@@ -193,24 +247,40 @@ Interview Progress: Question ${currentQuestionNumber}`;
         prompt += `\n- Consider asking about post-graduation plans and return intent`;
       }
       if (needsAcademic && currentQuestionNumber > 1) {
-        prompt += `\n- Consider asking about academic qualifications if not covered`;
+        prompt += isUK
+          ? `\n- Consider asking about course & university fit if not covered`
+          : `\n- Consider asking about academic qualifications if not covered`;
       }
-      prompt += `\n- Keep the overall pattern in mind (Study Plans → University → Academic → Financial → Intent)`;
+      prompt += isUK
+        ? `\n- Keep the UK flow in mind (Genuine Student → Course & University → Financial Requirement → Accommodation/Logistics → Compliance → Post-study Intent)\n- Select the next question ONLY from the provided bank and return it verbatim.`
+        : `\n- Keep the overall pattern in mind (Study Plans → University → Academic → Financial → Intent)`;
     } else {
-      // First question or starting new topic - follow real F1 interview flow
-      const questionFlow = [
-        'Study plans: Why US? Why this major?',
-        'University choice: Why this university? Application process?',
-        'Academic capability: Test scores, GPA, academic background?',
-        'Financial status: Sponsorship, income, expenses?',
-        'Post-graduation plans: Return intent, career goals?',
-        'Additional probing: Ties to US, family obligations?'
-      ];
-      
+      // First question or starting new topic - follow country-specific flow
+      const questionFlow = isUK
+        ? [
+            'Genuine student intent and background',
+            'Course and University fit (why this course/university; alternatives)',
+            'Financial requirement (funds, sources, 28-day requirement, maintenance)',
+            'Accommodation and logistics (living plans, costs, city specifics)',
+            'Compliance & credibility (agent involvement, refusals, gaps)',
+            'Post-study intentions and ties'
+          ]
+        : [
+            'Study plans: Why US? Why this major?',
+            'University choice: Why this university? Application process?',
+            'Academic capability: Test scores, GPA, academic background?',
+            'Financial status: Sponsorship, income, expenses?',
+            'Post-graduation plans: Return intent, career goals?',
+            'Additional probing: Ties to US, family obligations?'
+          ];
+
       const focusIndex = Math.min(currentQuestionNumber - 1, questionFlow.length - 1);
       prompt += `\n\nGenerate a question focusing on: ${questionFlow[focusIndex]}`;
       prompt += `\nQuestion ${currentQuestionNumber} - Make it direct and challenging like a real visa officer.`;
       prompt += `\nDo NOT repeat any previously asked question. Keep the flow coherent.`;
+      if (isUK) {
+        prompt += `\nSelect the question ONLY from the provided bank and return it verbatim.`;
+      }
     }
 
     return prompt;
@@ -239,8 +309,19 @@ Interview Progress: Question ${currentQuestionNumber}`;
   }
 
   private getFallbackQuestion(request: QuestionGenerationRequest): QuestionGenerationResponse {
-    const { currentQuestionNumber, conversationHistory } = request.interviewContext;
+    const { currentQuestionNumber, route } = request.interviewContext;
     
+    if (route === 'uk_student') {
+      const idx = (currentQuestionNumber - 1) % UK_QUESTION_POOL.length
+      const uk = UK_QUESTION_POOL[idx]
+      return {
+        question: uk.question,
+        questionType: uk.questionType,
+        difficulty: uk.difficulty || 'medium',
+        expectedAnswerLength: uk.expectedAnswerLength || 'medium',
+      }
+    }
+
     // Use real F1 visa questions from the database
     const realF1Questions = [
       // Study Plans

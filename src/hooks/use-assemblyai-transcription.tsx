@@ -46,15 +46,40 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
     if (isInitializedRef.current) return;
 
     try {
-      // Initialize AssemblyAI service (token is obtained server-side; no API key needed in browser)
-      assemblyAIRef.current = new AssemblyAIService({
-        sampleRate: options.sampleRate || 16000
-      });
-
-      // Initialize audio recorder
+      // 1) Initialize audio recorder FIRST to detect the true device sample rate
       audioRecorderRef.current = new AudioRecorder({
         sampleRate: options.sampleRate || 16000,
         channels: 1
+      });
+
+      // Set up audio recorder event handlers early; the callbacks will run only when recording
+      audioRecorderRef.current.onAudioChunk((chunk: AudioChunk) => {
+        if (assemblyAIRef.current?.isActive()) {
+          assemblyAIRef.current.sendAudioData(chunk.data);
+        }
+      });
+
+      audioRecorderRef.current.onStart(() => {
+        setState(prev => ({ ...prev, isRecording: true, error: null }));
+      });
+
+      audioRecorderRef.current.onStop(() => {
+        setState(prev => ({ ...prev, isRecording: false }));
+      });
+
+      audioRecorderRef.current.onError((error: string) => {
+        setState(prev => ({ ...prev, error, isRecording: false }));
+      });
+
+      // Initialize microphone and AudioContext
+      await audioRecorderRef.current.initialize();
+
+      // 2) Discover the actual AudioContext sample rate and align the STT socket to it
+      const actualSampleRate = audioRecorderRef.current.getActualSampleRate();
+
+      // Initialize AssemblyAI service (token is obtained server-side; no API key needed in browser)
+      assemblyAIRef.current = new AssemblyAIService({
+        sampleRate: actualSampleRate
       });
 
       // Set up AssemblyAI event handlers
@@ -88,28 +113,6 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
         setState(prev => ({ ...prev, error: error.error, isRecording: false }));
         options.onError?.(error);
       });
-
-      // Set up audio recorder event handlers
-      audioRecorderRef.current.onAudioChunk((chunk: AudioChunk) => {
-        if (assemblyAIRef.current?.isActive()) {
-          assemblyAIRef.current.sendAudioData(chunk.data);
-        }
-      });
-
-      audioRecorderRef.current.onStart(() => {
-        setState(prev => ({ ...prev, isRecording: true, error: null }));
-      });
-
-      audioRecorderRef.current.onStop(() => {
-        setState(prev => ({ ...prev, isRecording: false }));
-      });
-
-      audioRecorderRef.current.onError((error: string) => {
-        setState(prev => ({ ...prev, error, isRecording: false }));
-      });
-
-      // Initialize audio recorder
-      await audioRecorderRef.current.initialize();
 
       isInitializedRef.current = true;
 
