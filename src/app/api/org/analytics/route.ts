@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb } from '@/lib/firebase-admin'
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 // GET /api/org/analytics
 // Returns aggregated interview analytics for the caller's organization
 export async function GET(req: NextRequest) {

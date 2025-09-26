@@ -15,7 +15,7 @@ export function useMicLevel() {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef<number | null>(null)
-  const dataArrayRef = useRef<Uint8Array | null>(null)
+  const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null)
 
   const stop = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -63,7 +63,10 @@ export function useMicLevel() {
       const source = ctx.createMediaStreamSource(stream)
       sourceRef.current = source
       source.connect(analyser)
-      dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount)
+      // Use an explicit ArrayBuffer to satisfy TS signature expecting Uint8Array<ArrayBuffer>
+      // For time-domain data, the array length should be analyser.fftSize
+      const buf = new ArrayBuffer(analyser.fftSize)
+      dataArrayRef.current = new Uint8Array(buf)
       setState((s) => ({ ...s, running: true, error: undefined }))
       rafRef.current = requestAnimationFrame(tick)
     } catch (e: any) {

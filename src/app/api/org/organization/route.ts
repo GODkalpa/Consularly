@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb } from '@/lib/firebase-admin'
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 // GET /api/org/organization
 // Returns the caller's organization document (sanitized) based on their user profile orgId
 export async function GET(req: NextRequest) {

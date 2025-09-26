@@ -147,7 +147,7 @@ export default function InterviewRunner() {
   useEffect(() => {
     if (!session || session.status !== 'preparing' || permissionsReady) return
     requestPermissions()
-  }, [session, requestPermissions])
+  }, [session, permissionsReady, requestPermissions])
 
   // If the tab wasn’t focused when opened, retry once when it becomes visible
   useEffect(() => {

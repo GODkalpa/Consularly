@@ -73,18 +73,22 @@ Return STRICT JSON only.`
     .map((h, i) => `Q${i + 1}: ${h.question}\nA${i + 1}: ${h.answer}`)
     .join('\n')
 
+  const dimensionsSchema = route === 'uk_student'
+    ? `"courseAndUniversityFit": number,
+"financialRequirement": number,
+"accommodationLogistics": number,
+"complianceCredibility": number,
+"postStudyIntent": number,`
+    : `"content": number,
+"financials": number,
+"intent": number,`
+
   const user = `Student: ${studentProfile.name} (${studentProfile.country})\nUniversity: ${studentProfile.intendedUniversity || 'Not specified'}\nField: ${studentProfile.fieldOfStudy || 'Not specified'}\nPrev Edu: ${studentProfile.previousEducation || 'Not specified'}\n\nFull Conversation (order):\n${history}\n\nResponse Format (STRICT JSON):\n{
   "decision": "accepted|rejected|borderline",
   "overall": number, // 0-100
   "dimensions": { // pick appropriate keys per system
     "communication": number,
-    ${(route === 'uk_student') ? '"courseAndUniversityFit": number,
-    "financialRequirement": number,
-    "accommodationLogistics": number,
-    "complianceCredibility": number,
-    "postStudyIntent": number,' : '"content": number,
-    "financials": number,
-    "intent": number,'}
+    ${dimensionsSchema}
   },
   "summary": string,
   "recommendations": string[]
