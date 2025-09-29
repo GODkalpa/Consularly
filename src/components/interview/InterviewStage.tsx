@@ -144,9 +144,20 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   return (
     <div ref={containerRef} className="relative w-full bg-background rounded-xl overflow-hidden shadow-lg aspect-video">
       {/* Video layer */}
-      <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted autoPlay />
+      <video
+        ref={videoRef}
+        className="absolute inset-0 w-full h-full object-cover"
+        style={{ transform: 'scaleX(-1)' }}
+        playsInline
+        muted
+        autoPlay
+      />
       {/* Canvas overlay */}
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        style={{ transform: 'scaleX(-1)' }}
+      />
 
       {/* Gradient for readability */}
       <div className="absolute inset-0 bg-gradient-to-b from-[hsl(var(--background)/0.3)] via-transparent to-[hsl(var(--background)/0.6)]" />
