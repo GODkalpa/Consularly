@@ -1,6 +1,7 @@
 import { QuestionGenerationRequest, QuestionGenerationResponse } from './llm-service';
 import type { InterviewRoute } from './interview-routes'
 import { UK_QUESTION_POOL, ukFallbackQuestionByIndex } from './uk-questions-data'
+import { F1SessionMemory, updateMemory } from './f1-mvp-session-memory'
 
 export interface InterviewSession {
   id: string;
@@ -31,6 +32,10 @@ export interface InterviewSession {
     knowledge: number;
     confidence: number;
   };
+  // F1 session memory for self-consistency tracking
+  sessionMemory?: F1SessionMemory;
+  // Track if using adaptive LLM flow (USA F1)
+  useMVPFlow?: boolean;
 }
 
 export class InterviewSimulationService {
@@ -51,6 +56,9 @@ export class InterviewSimulationService {
   ): Promise<{ session: InterviewSession; firstQuestion: QuestionGenerationResponse }> {
     const sessionId = `interview_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
+    // Enable session memory tracking for usa_f1 (for LLM self-consistency)
+    const useMVPFlow = route === 'usa_f1';
+    
     const session: InterviewSession = {
       id: sessionId,
       userId,
@@ -60,10 +68,12 @@ export class InterviewSimulationService {
       conversationHistory: [],
       currentQuestionNumber: 1,
       status: 'active',
-      startTime: new Date().toISOString()
+      startTime: new Date().toISOString(),
+      sessionMemory: useMVPFlow ? {} : undefined, // Track facts for consistency
+      useMVPFlow, // Using adaptive LLM with question bank
     };
 
-    // Generate the first question
+    // Generate the first question (LLM with question bank for usa_f1)
     const firstQuestion = await this.generateNextQuestion(session);
 
     return { session, firstQuestion };
@@ -84,6 +94,10 @@ export class InterviewSimulationService {
     const currentQuestion = session.conversationHistory.length > 0 
       ? session.conversationHistory[session.conversationHistory.length - 1].question
       : "Welcome to your visa interview. Let's begin.";
+    
+    const currentQuestionType = session.conversationHistory.length > 0
+      ? session.conversationHistory[session.conversationHistory.length - 1].questionType
+      : 'background';
 
     // Add the answer to conversation history
     const updatedHistory = [...session.conversationHistory];
@@ -101,6 +115,11 @@ export class InterviewSimulationService {
       conversationHistory: updatedHistory,
       currentQuestionNumber: session.currentQuestionNumber + 1
     };
+
+    // Update session memory for MVP flow
+    if (session.useMVPFlow && session.sessionMemory) {
+      updatedSession.sessionMemory = updateMemory(session.sessionMemory, answer, currentQuestionType);
+    }
 
     // Check if interview should end (default 8, UK route requires 16 questions)
     const targetQuestions = session.route === 'uk_student' ? 16 : 8;
@@ -129,12 +148,15 @@ export class InterviewSimulationService {
 
   /**
    * Generate the next question using the LLM API
+   * USA F1 uses adaptive LLM with question bank selection from f1-questions-data.ts
+   * UK uses strict bank selection from uk-questions-data.ts
    */
   private async generateNextQuestion(
     session: InterviewSession,
     previousQuestion?: string,
     studentAnswer?: string
   ): Promise<QuestionGenerationResponse> {
+    
     const request: QuestionGenerationRequest = {
       previousQuestion,
       studentAnswer,
@@ -370,6 +392,7 @@ export class InterviewSimulationService {
     }
     return this.getFallbackQuestion(questionNumber, route);
   }
+
 
   /**
    * Calculate interview score based on responses

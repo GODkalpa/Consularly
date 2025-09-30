@@ -13,6 +13,7 @@ import { useMicLevel } from '@/hooks/use-mic-level'
 import type { TranscriptionResult } from '@/lib/assemblyai-service'
 import { mapQuestionTypeToCategory, type InterviewRoute } from '@/lib/interview-routes'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
+import { motion, AnimatePresence } from 'motion/react'
 
 // Dynamically import the heavy InterviewStage (TensorFlow/MediaPipe) client-only to reduce initial bundle size
 const InterviewStage = dynamic(() => import('@/components/interview/InterviewStage'), { ssr: false })
@@ -212,7 +213,20 @@ export default function InterviewRunner() {
       if (!ok) return
     }
     setSession((prev) => (prev ? { ...prev, status: 'active', startTime: new Date() } : prev))
-    if (session.route === 'uk_student') startPhase('prep', 30)
+    if (session.route === 'uk_student') {
+      startPhase('prep', 30)
+    } else if (session.route === 'usa_f1') {
+      // USA F1: 40s soft cap per question with 30s warning
+      startUSF1QuestionTimer()
+    }
+  }
+
+  const startUSF1QuestionTimer = () => {
+    if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
+    setSecondsRemaining(40) // 40s soft cap per MVP config
+    countdownTimerRef.current = window.setInterval(() => {
+      setSecondsRemaining((s) => (s > 0 ? s - 1 : 0))
+    }, 1000)
   }
 
   const startAnswerNow = () => {
@@ -239,6 +253,9 @@ export default function InterviewRunner() {
   const processAnswer = async (transcriptText: string) => {
     if (!session || session.status !== 'active' || !apiSession) return
     try {
+      // Stop timers
+      if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
+      
       // Kick off combined scoring (content + speech + body) in parallel
       const currentQText = session.questions[session.currentQuestionIndex]?.question || ''
       const scoringPromise = (async () => {
@@ -288,6 +305,7 @@ export default function InterviewRunner() {
         responses: [...prev.responses, { question: prev.questions[prev.currentQuestionIndex].question, transcription: transcriptText, timestamp: new Date() }],
       } : prev)
       setCurrentTranscript('')
+      answerBufferRef.current = ''
 
       if (data.isComplete) {
         // compute final report
@@ -306,7 +324,12 @@ export default function InterviewRunner() {
         currentQuestionIndex: prev.currentQuestionIndex + 1,
       } : prev)
       // UK flow: new question => 30s prep again
-      if (session.route === 'uk_student') startPhase('prep', 30)
+      if (session.route === 'uk_student') {
+        startPhase('prep', 30)
+      } else if (session.route === 'usa_f1') {
+        // USA F1: restart 40s timer for next question
+        startUSF1QuestionTimer()
+      }
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error(e)
@@ -334,7 +357,16 @@ export default function InterviewRunner() {
       }
       return
     }
-    // Non-UK: finalize immediately on a completed segment (existing behavior)
+    // USA F1: Accumulate transcript but don't auto-finalize (wait for manual Next or timer)
+    if (session.route === 'usa_f1') {
+      const text = t.text.trim()
+      if (text) {
+        answerBufferRef.current = answerBufferRef.current ? `${answerBufferRef.current} ${text}` : text
+        setCurrentTranscript(answerBufferRef.current)
+      }
+      return
+    }
+    // Other routes: finalize immediately on a completed segment (legacy behavior)
     processingRef.current = true
     await processAnswer(t.text.trim())
   }
@@ -382,6 +414,7 @@ export default function InterviewRunner() {
   }, [session])
   const bodyScoreValue = Math.round((bodyScore?.overallScore ?? 0))
   const phaseLabel = phase ? (phase === 'prep' ? 'Prep' : 'Answer') : null
+  const showBodyBadge = session?.status === 'active' && bodyScoreValue > 0
 
   // Aggregate combined performance across answers (shown on completion)
   const combinedAggregate = useMemo(() => {
@@ -484,141 +517,229 @@ export default function InterviewRunner() {
   }
 
   return (
-    <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-      {/* Permission overlay to ensure browser prompt appears first */}
+    <div className="w-full min-h-screen flex flex-col">
+      {/* Permission overlay - Modern centered modal */}
       {!permissionsReady && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
-          <Card className="max-w-sm w-full mx-4">
-            <CardHeader>
-              <CardTitle>Allow Camera & Microphone</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">Please click <span className="font-medium">Allow</span> in the browser prompt. If you don’t see it, click the button below to trigger it.</p>
-              {permError && <div className="text-xs text-destructive/80">{permError}</div>}
-              <Button className="w-full" onClick={requestPermissions}><Play className="h-4 w-4 mr-2" /> Allow Camera & Mic</Button>
-            </CardContent>
-          </Card>
-        </div>
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-50 bg-background/90 backdrop-blur-lg flex items-center justify-center p-4"
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 200, damping: 20 }}
+          >
+            <Card className="max-w-md w-full border-2 shadow-2xl">
+              <CardHeader className="text-center pb-3">
+                <div className="mx-auto mb-3 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-3xl">🎥</span>
+                </div>
+                <CardTitle className="text-2xl">Camera & Microphone Access</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-center text-muted-foreground">We need access to your camera and microphone to conduct the interview. Please click <span className="font-semibold text-foreground">Allow</span> in the browser prompt.</p>
+                {permError && (
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                    <p className="text-xs text-destructive font-medium">{permError}</p>
+                  </div>
+                )}
+                <Button size="lg" className="w-full" onClick={requestPermissions}>
+                  <Play className="h-5 w-5 mr-2" /> Grant Permissions
+                </Button>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </motion.div>
       )}
-      {/* Header & Session Stats */}
-      <div className="rounded-xl border bg-gradient-to-r from-primary/10 via-background to-background p-4 md:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{session.route === 'uk_student' ? 'UK Pre-CAS' : 'Interview'}</Badge>
-            <Badge variant="outline">{session.studentName}</Badge>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">Progress {progressPct}%</Badge>
-            {phaseLabel && (
-              <Badge variant={phase === 'prep' ? 'secondary' : 'default'}>
-                {phaseLabel}: {secondsRemaining}s
-              </Badge>
+
+      {/* Split Screen Layout */}
+      <div className="flex-1 flex flex-col lg:flex-row">
+        {/* Left Panel - Question/Statement Section (30%) */}
+        <div className="lg:w-[30%] bg-white dark:bg-gray-50 flex items-center justify-center p-8 lg:p-12">
+          <div className="max-w-2xl w-full space-y-6">
+            {session.status !== 'preparing' ? (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={session.currentQuestionIndex}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.4 }}
+                  className="space-y-4"
+                >
+                  <div className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider font-medium mb-2">
+                    {session.route === 'uk_student' ? 'UK Pre-CAS Interview' : 'USA F1 Interview'} • Question {session.currentQuestionIndex + 1}{session.route === 'uk_student' ? ' of 16' : ''}
+                  </div>
+                  <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-900 leading-snug">
+                    {currentQuestion?.question}
+                  </h1>
+                  {session.route === 'uk_student' && phase && (
+                    <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-100 rounded-lg border border-gray-200">
+                      <div className="text-sm text-gray-700 dark:text-gray-800 leading-relaxed flex items-start gap-2">
+                        {phase === 'prep' ? (
+                          <>
+                            <span className="text-lg flex-shrink-0">⏱️</span>
+                            <div>
+                              <span className="font-semibold block text-gray-900 mb-1">Preparation Time</span>
+                              <span className="text-gray-600">You have <span className="font-bold text-blue-600">{secondsRemaining} seconds</span> to review the question silently.</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-lg flex-shrink-0">🎙️</span>
+                            <div>
+                              <span className="font-semibold block text-gray-900 mb-1">Recording Your Answer</span>
+                              <span className="text-gray-600">Speak clearly. <span className="font-bold text-blue-600">{secondsRemaining} seconds</span> remaining.</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {session.route === 'usa_f1' && session.status === 'active' && typeof secondsRemaining === 'number' && (
+                    <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-100 rounded-lg border border-gray-200">
+                      <div className="text-sm text-gray-700 dark:text-gray-800 leading-relaxed flex items-start gap-2">
+                        <span className="text-lg flex-shrink-0">⏱️</span>
+                        <div>
+                          <span className="font-semibold block text-gray-900 mb-1">Time Remaining</span>
+                          <span className="text-gray-600">You have <span className="font-bold text-blue-600">{Math.max(0, secondsRemaining)} seconds</span>. Click <span className="font-semibold">Next Question</span> when ready.</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            ) : (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                <div className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider font-medium mb-2">
+                  {session.route === 'uk_student' ? 'UK Pre-CAS Interview' : 'USA F1 Interview'}
+                </div>
+                <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-900 leading-snug">
+                  Welcome, {session.studentName}
+                </h1>
+                <p className="text-base text-gray-600 dark:text-gray-700 leading-relaxed">
+                  Please ensure your camera and microphone are working correctly. Click <span className="font-semibold text-gray-900">Start Interview</span> when you're ready to begin.
+                </p>
+                {permissionsReady && micRunning && (
+                  <div className="mt-6 p-4 bg-green-50 dark:bg-green-100 rounded-lg border border-green-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-sm text-green-900 flex items-center gap-2">
+                        <span>🎤</span>
+                        <span>Microphone Level</span>
+                      </div>
+                      <div className="text-sm font-bold text-green-900">{Math.round((micLevel || 0) * 100)}%</div>
+                    </div>
+                    <div className="h-3 w-full bg-green-200 rounded-full overflow-hidden">
+                      <motion.div 
+                        className="h-3 bg-green-600 rounded-full" 
+                        animate={{ width: `${Math.min(100, Math.round((micLevel || 0) * 100))}%` }}
+                        transition={{ duration: 0.1 }}
+                      />
+                    </div>
+                    <p className="text-xs text-green-700">Speak to test your microphone (not recorded)</p>
+                  </div>
+                )}
+              </motion.div>
             )}
-            <Badge variant="outline">Body {bodyScoreValue}/100</Badge>
+          </div>
+        </div>
+
+        {/* Right Panel - Video Section with Blue Gradient (70%) */}
+        <div className="lg:w-[70%] bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 relative overflow-hidden flex items-center justify-center p-8">
+          {/* Decorative Elements */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-400/20 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
+          <div className="absolute bottom-0 right-8 w-32 h-32 grid grid-cols-8 gap-1 opacity-30">
+            {Array.from({ length: 64 }).map((_, i) => (
+              <div key={i} className="w-1 h-1 bg-white rounded-full"></div>
+            ))}
+          </div>
+          
+          <div className="relative z-10 w-full max-w-3xl aspect-video">
+            <InterviewStage
+              running={session.status === 'active'}
+              preview={permissionsReady && session.status === 'preparing'}
+              questionCategory={session.status === 'preparing' ? '' : (currentQuestion?.category || '')}
+              questionText={''}
+              currentTranscript={currentTranscript}
+              onScore={setBodyScore}
+              startedAt={session.startTime}
+              statusBadge={session.status === 'active' ? 'Live' : 'Preparing'}
+              candidateName={session.studentName}
+              questionIndex={session.currentQuestionIndex}
+              questionTotal={session.route === 'uk_student' ? 16 : session.questions.length}
+              phase={phase ?? undefined}
+              secondsRemaining={session.route === 'usa_f1' || phase ? secondsRemaining : undefined}
+              onStartAnswer={session.route === 'uk_student' ? startAnswerNow : undefined}
+              onStopAndNext={session.route === 'uk_student' ? finalizeAnswer : undefined}
+              onNext={session.route === 'usa_f1' && session.status === 'active' ? (() => {
+                const text = currentTranscript.trim()
+                processAnswer(text.length >= 1 ? text : '[No response]')
+              }) : undefined}
+              showCaptions={true}
+              showQuestionOverlay={false}
+              showBodyBadge={false}
+            />
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-8 2xl:col-span-8">
-          <InterviewStage
-            running={session.status === 'active'}
-            preview={permissionsReady && session.status === 'preparing'}
-            questionCategory={session.status === 'preparing' ? '' : (currentQuestion?.category || '')}
-            questionText={currentQuestion?.question || ''}
-            currentTranscript={currentTranscript}
-            onScore={setBodyScore}
-            startedAt={session.startTime}
-            statusBadge={session.status === 'active' ? 'Live' : 'Preparing'}
-            candidateName={session.studentName}
-            questionIndex={session.currentQuestionIndex}
-            questionTotal={session.route === 'uk_student' ? 16 : session.questions.length}
-            phase={phase ?? undefined}
-            secondsRemaining={phase ? secondsRemaining : undefined}
-            onStartAnswer={session.route === 'uk_student' ? startAnswerNow : undefined}
-            onStopAndNext={session.route === 'uk_student' ? finalizeAnswer : undefined}
-            showCaptions={false}
-            showQuestionOverlay={false}
-            showBodyBadge={false}
-          />
-        </div>
-        <div className="lg:col-span-4 2xl:col-span-4 flex flex-col gap-4 lg:sticky lg:top-20 self-start">
-          <Card>
-            <CardHeader>
-              <CardTitle>Current Question</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {session.status !== 'preparing' ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{currentQuestion?.category}</Badge>
-                    <Badge variant="outline">Q{session.currentQuestionIndex + 1}{session.route === 'uk_student' ? '/16' : ''}</Badge>
-                  </div>
-                  <div className="text-xl lg:text-2xl font-medium leading-snug">{currentQuestion?.question}</div>
-                </>
-              ) : (
-                <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                  The first question will appear after you click <span className="font-medium">Start Interview</span>.
-                </div>
-              )}
-              {session.route === 'uk_student' && (
-                <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                  {phase === 'prep' && (
-                    <div>Prep time active. Microphone is off. You have <span className="font-medium">{secondsRemaining}s</span> to prepare.</div>
-                  )}
-                  {phase === 'answer' && (
-                    <div>Answer time active. Transcription is running. You have <span className="font-medium">{secondsRemaining}s</span> remaining.</div>
-                  )}
-                  {session.status === 'preparing' && (
-                    <div>Camera preview and mic check are enabled so you can verify they work. Nothing is recorded until you click <span className="font-medium">Start Interview</span>.</div>
-                  )}
-                </div>
-              )}
-              <Separator className="my-2" />
-              {session.status === 'preparing' ? (
-                <div className="space-y-2">
-                  {!permissionsReady && (
-                    <div className="space-y-2">
-                      <Button variant="secondary" className="w-full" onClick={requestPermissions}>Allow Camera & Mic</Button>
-                      {permError ? (
-                        <div className="text-xs text-destructive/80">{permError}</div>
-                      ) : (
-                        <div className="text-xs text-muted-foreground">Click to allow browser permissions before starting.</div>
-                      )}
-                    </div>
-                  )}
-                  {permissionsReady && (
-                    <div className="rounded-md border p-3 space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="font-medium">Mic Check</div>
-                        <div className="text-muted-foreground">{Math.round((micLevel || 0) * 100)}%</div>
-                      </div>
-                      <div className="h-2 w-full bg-muted rounded">
-                        <div className="h-2 bg-green-500 rounded" style={{ width: `${Math.min(100, Math.round((micLevel || 0) * 100))}%` }} />
-                      </div>
-                      {micError && <div className="text-xs text-destructive/80">{micError}</div>}
-                      <div className="text-[10px] text-muted-foreground">Speak to see the bar move. This is only a preview and isn’t recorded.</div>
-                    </div>
-                  )}
-                  <Button className="w-full" onClick={beginInterview}><Play className="h-4 w-4 mr-2" /> Start Interview</Button>
-                </div>
-              ) : session.route === 'uk_student' && phase === 'prep' ? (
-                <Button className="w-full" onClick={startAnswerNow}><Play className="h-4 w-4 mr-2" /> Start Answer</Button>
-              ) : session.route === 'uk_student' && phase === 'answer' ? (
-                <Button className="w-full" onClick={finalizeAnswer}><Square className="h-4 w-4 mr-2" /> Stop & Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Guidance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm md:text-base text-muted-foreground">Maintain eye contact, speak clearly, and keep answers concise. For UK pre-CAS, you get 30s to prepare and 30s to answer each question.</p>
-            </CardContent>
-          </Card>
-        </div>
+      {/* Floating Action Button (Bottom Center) */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-gray-900 rounded-full shadow-2xl border border-gray-200 dark:border-gray-700 px-6 py-3">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800">
+              <div className="text-xs text-gray-600 dark:text-gray-400">Progress</div>
+              <div className="text-sm font-semibold">{progressPct}%</div>
+            </div>
+            {showBodyBadge && (
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800">
+                <div className="text-xs text-gray-600 dark:text-gray-400">Body Language</div>
+                <div className="text-sm font-semibold">{bodyScoreValue}/100</div>
+              </div>
+            )}
+            {session.status === 'preparing' && !permissionsReady && (
+              <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={requestPermissions}>
+                <Play className="h-5 w-5 mr-2" /> Allow Camera & Microphone
+              </Button>
+            )}
+            {session.status === 'preparing' && permissionsReady && (
+              <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={beginInterview}>
+                <Play className="h-5 w-5 mr-2" /> Start Interview
+              </Button>
+            )}
+            {session.route === 'uk_student' && phase === 'prep' && (
+              <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={startAnswerNow}>
+                <Play className="h-5 w-5 mr-2" /> Start Answer
+              </Button>
+            )}
+            {session.route === 'uk_student' && phase === 'answer' && (
+              <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={finalizeAnswer}>
+                <Square className="h-4 w-4 mr-2" /> Stop & Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            )}
+            {session.route === 'usa_f1' && session.status === 'active' && (
+              <Button 
+                size="lg" 
+                className="px-8 h-12 text-base font-semibold" 
+                onClick={() => {
+                  const text = currentTranscript.trim()
+                  processAnswer(text.length >= 1 ? text : '[No response]')
+                }} 
+                disabled={processingRef.current}
+              >
+                {processingRef.current ? (
+                  <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing...</>
+                ) : (
+                  <>Next Question <ChevronRight className="h-4 w-4 ml-1" /></>
+                )}
+              </Button>
+            )}
+          </div>
+        </motion.div>
       </div>
 
       <div className="hidden">
@@ -636,7 +757,7 @@ export default function InterviewRunner() {
           }}
           showControls={false}
           showTranscripts={false}
-          running={session.status === 'active' && (session.route !== 'uk_student' || phase === 'answer')}
+          running={session.status === 'active' && (session.route === 'usa_f1' || (session.route === 'uk_student' && phase === 'answer'))}
           resetKey={resetKey}
         />
       </div>

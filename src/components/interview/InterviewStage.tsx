@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useBodyLanguageTracker } from '@/hooks/use-body-language-tracker'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
 import { Play, Pause, ChevronRight, Maximize2, Minimize2, Square } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 
 export interface InterviewStageProps {
   running: boolean
@@ -75,16 +76,22 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
     const control = async () => {
       try {
         if (running && !state.running) {
+          console.log('🎥 Starting interview recording')
           await start()
         } else if (!running && preview) {
           // Preview only
-          if (!state.previewing) await startPreview()
+          if (!state.previewing) {
+            console.log('👁️ Starting camera preview')
+            await startPreview()
+          }
         } else {
           // Neither running nor previewing
           if (state.running) await stop()
           if (state.previewing) await stopPreview()
         }
-      } catch {}
+      } catch (err) {
+        console.error('❌ Camera control error:', err)
+      }
     }
     control()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,6 +100,13 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   useEffect(() => {
     if (state.score && onScore) onScore(state.score)
   }, [state.score, onScore])
+
+  // Debug: Log video stream status
+  useEffect(() => {
+    if (videoRef.current?.srcObject) {
+      console.log('✅ Video stream attached', { previewing: state.previewing, running: state.running })
+    }
+  }, [state.previewing, state.running])
 
   const elapsed = useMemo(() => {
     if (!startedAt) return '0m'
@@ -142,11 +156,11 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   }, [])
 
   return (
-    <div ref={containerRef} className="relative w-full bg-background rounded-xl overflow-hidden shadow-lg aspect-video">
+    <div ref={containerRef} className="relative w-full h-full bg-black rounded-2xl overflow-hidden shadow-2xl">
       {/* Video layer */}
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover"
+        className="absolute inset-0 w-full h-full object-cover z-0"
         style={{ transform: 'scaleX(-1)' }}
         playsInline
         muted
@@ -155,118 +169,138 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
       {/* Canvas overlay */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full pointer-events-none"
+        className="absolute inset-0 w-full h-full pointer-events-none z-10"
         style={{ transform: 'scaleX(-1)' }}
       />
 
-      {/* Gradient for readability */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[hsl(var(--background)/0.3)] via-transparent to-[hsl(var(--background)/0.6)]" />
+      {/* Subtle gradient vignette for depth */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/30 pointer-events-none z-20" />
 
-      {/* Top bar */}
-      <div className="absolute top-3 left-4 right-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {questionCategory ? (
-            <Badge variant="secondary">{questionCategory}</Badge>
-          ) : null}
-          <Badge variant={running ? 'default' : 'secondary'} className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-full bg-[hsl(var(--destructive))] animate-pulse" />
-            {statusBadge}
-          </Badge>
-          {showBodyBadge && (
-            <Badge variant="outline">Body {Math.round(body)}/100</Badge>
-          )}
+      {/* Top bar - Minimal status badge */}
+      <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-30">
+        <div className="flex items-center gap-2 flex-wrap">
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-2 bg-red-500 backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg"
+          >
+            <span className="inline-block h-2 w-2 rounded-full bg-white animate-pulse" />
+            <span className="text-sm font-medium text-white">{statusBadge}</span>
+          </motion.div>
           {phase && typeof secondsRemaining === 'number' && (
-            <Badge variant={phase === 'prep' ? 'secondary' : 'default'}>
-              {phase === 'prep' ? 'Prep' : 'Answer'}: {Math.max(0, secondsRemaining)}s
-            </Badge>
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 200 }}
+            >
+              <Badge 
+                variant={
+                  secondsRemaining <= 10 ? 'destructive' : 
+                  phase === 'prep' ? 'secondary' : 'default'
+                }
+                className="px-3 py-1.5 text-sm font-semibold backdrop-blur-md bg-opacity-90"
+              >
+                {phase === 'prep' ? '🎯 Prep' : '🎤 Answer'}: {Math.max(0, secondsRemaining)}s
+              </Badge>
+            </motion.div>
           )}
-          {running && state.errors.length > 0 && (
-            <Badge variant="destructive">Camera Issue</Badge>
+          {!phase && typeof secondsRemaining === 'number' && secondsRemaining <= 40 && (
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className={secondsRemaining <= 30 ? 'animate-pulse' : ''}
+            >
+              <Badge 
+                variant={
+                  secondsRemaining <= 10 ? 'destructive' : 
+                  secondsRemaining <= 30 ? 'default' : 'outline'
+                }
+                className="px-3 py-1.5 text-sm font-semibold backdrop-blur-md"
+              >
+                ⏱️ {Math.max(0, secondsRemaining)}s
+              </Badge>
+            </motion.div>
           )}
         </div>
         <div className="flex items-center gap-2">
           {candidateName && (
-            <Badge variant="outline">{candidateName}</Badge>
-          )}
-          {startedAt && (
-            <Badge variant="outline">{elapsed}</Badge>
+            <div className="bg-background/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-border/50 shadow-lg text-sm font-medium">
+              {candidateName}
+            </div>
           )}
         </div>
       </div>
 
-      {/* Progress bar */}
-      {questionTotal && (
-        <div className="absolute top-12 left-0 right-0">
-          <div className="h-1 w-full bg-foreground/20">
-            <div className="h-1 bg-primary" style={{ width: `${progressPct}%` }} />
-          </div>
-        </div>
-      )}
+      {/* Progress bar removed - shown in floating button instead */}
 
       {/* Question text */}
-      {showQuestionOverlay && (
+      {showQuestionOverlay && questionText && (
         <div className="absolute top-16 left-6 right-6">
-          <div className="inline-block rounded-lg bg-background/60 text-foreground px-4 py-2 backdrop-blur-sm">
-            <div className="text-sm opacity-80">Current Question</div>
-            <div className="text-base md:text-lg font-medium leading-snug">{questionText}</div>
-          </div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={questionText}
+              initial={{ opacity: 0, y: -10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="inline-block rounded-lg bg-background/60 text-foreground px-4 py-2 backdrop-blur-sm"
+            >
+              <div className="text-sm opacity-80">Current Question</div>
+              <div className="text-base md:text-lg font-medium leading-snug">{questionText}</div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       )}
 
-      {/* Live captions */}
+      {/* Live captions - Enhanced glassmorphism */}
       {showCaptions && (
-        <div className="absolute bottom-16 left-6 right-6 flex justify-center">
-          {currentTranscript ? (
-            <div className="max-w-3xl w-full text-center text-foreground text-base md:text-lg bg-background/60 px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm">
-              {currentTranscript}
-            </div>
-          ) : null}
+        <div className="absolute bottom-20 left-6 right-6 flex justify-center z-30">
+          <AnimatePresence mode="wait">
+            {currentTranscript ? (
+              <motion.div
+                key={currentTranscript}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                transition={{ duration: 0.3 }}
+                className="max-w-3xl w-full text-center text-foreground text-base md:text-lg bg-background/90 backdrop-blur-xl px-6 py-4 rounded-2xl shadow-2xl border border-border/50"
+              >
+                {currentTranscript}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
       )}
 
-      {/* Pre-start placeholder overlay (only when not previewing) */}
-      {!running && !state.previewing && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center text-muted-foreground">
-            <div className="mx-auto mb-3 h-10 w-10 rounded-full bg-foreground/10 flex items-center justify-center">
-              <span className="text-xs">🎥</span>
+      {/* Camera not started - show placeholder (only when camera/preview hasn't been initialized) */}
+      {!running && !preview && !state.previewing && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="absolute inset-0 flex items-center justify-center pointer-events-none bg-gradient-to-br from-background/40 to-background/20 backdrop-blur-sm z-40"
+        >
+          <div className="text-center text-foreground bg-background/90 backdrop-blur-xl px-8 py-6 rounded-2xl border border-border/50 shadow-2xl max-w-md">
+            <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <span className="text-3xl">🎥</span>
             </div>
-            <div className="text-sm">Camera will start after you click <span className="font-medium">Start Interview</span>.</div>
-            <div className="text-xs opacity-80">If prompted, allow camera permission in your browser.</div>
+            <div className="text-base font-medium mb-2">Camera Ready</div>
+            <div className="text-sm text-muted-foreground">Grant camera permissions to see preview.</div>
           </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* Bottom controls */}
-      <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center">
-        <div className="flex items-center gap-2 bg-background/60 backdrop-blur-md px-3 py-2 rounded-full shadow-lg">
-          {onTogglePause && !phase && (
-            <Button size="sm" variant={running ? 'secondary' : 'default'} onClick={onTogglePause} className="rounded-full px-3">
-              {running ? <><Pause className="h-4 w-4 mr-1" /> Pause</> : <><Play className="h-4 w-4 mr-1" /> Resume</>}
-            </Button>
-          )}
-          {/* UK-specific controls: show Start during prep, Stop & Next during answer */}
-          {phase === 'prep' && onStartAnswer && (
-            <Button size="sm" onClick={onStartAnswer} className="rounded-full px-3">
-              <Play className="h-4 w-4 mr-1" /> Start Answer
-            </Button>
-          )}
-          {phase === 'answer' && onStopAndNext && (
-            <Button size="sm" onClick={onStopAndNext} className="rounded-full px-3">
-              <Square className="h-4 w-4 mr-1" /> Stop & Next <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          )}
-          {/* Default Next for non-UK or when no phase control provided */}
-          {(!phase || phase !== 'prep') && !onStopAndNext && onNext && (
-            <Button size="sm" onClick={onNext} className="rounded-full px-3">
-              Next <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          )}
-          <Button size="icon" variant="ghost" onClick={toggleFullscreen} className="text-foreground hover:bg-foreground/10 rounded-full">
-            {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-          </Button>
-        </div>
+      {/* Bottom controls - Only fullscreen button */}
+      <div className="absolute bottom-4 right-4 z-30">
+        <Button 
+          size="icon" 
+          variant="secondary"
+          onClick={toggleFullscreen} 
+          className="rounded-full h-10 w-10 bg-white/90 hover:bg-white shadow-lg"
+        >
+          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </Button>
       </div>
+
     </div>
   )
 }

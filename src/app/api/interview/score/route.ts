@@ -57,8 +57,8 @@ export async function POST(request: NextRequest) {
     const speechScore = perf.categories.speech
     const bodyScore = perf.categories.bodyLanguage
 
-    // Transparent, tunable weights (could be made env-configurable later)
-    const weights = { content: 0.5, speech: 0.25, bodyLanguage: 0.25 }
+    // MVP weights: 0.7 content, 0.2 speech, 0.1 body (per F1 MVP doc section 5)
+    const weights = { content: 0.7, speech: 0.2, bodyLanguage: 0.1 }
     const overall = Math.round(
       weights.content * contentScore +
       weights.speech * speechScore +
