@@ -136,7 +136,18 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
       if (canvasRef.current) {
         canvasRef.current.width = cfg.width
         canvasRef.current.height = cfg.height
-        drawCtxRef.current = canvasRef.current.getContext('2d')
+        // Use willReadFrequently option to optimize for frequent drawing operations
+        // and avoid conflicts with WebCodec/other canvas consumers
+        try {
+          drawCtxRef.current = canvasRef.current.getContext('2d', { 
+            willReadFrequently: false,
+            desynchronized: true // Allow canvas to be desynchronized for better performance
+          })
+        } catch (ctxErr) {
+          console.warn('Failed to get 2d context:', ctxErr)
+          // Fallback to default context options
+          drawCtxRef.current = canvasRef.current.getContext('2d')
+        }
       }
     } catch (e: any) {
       const name = e?.name || 'Error'
@@ -243,8 +254,17 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
 
   const drawOverlay = useCallback((pose: any, hands: any[], face: any) => {
     const ctx = drawCtxRef.current
-    if (!ctx || !canvasRef.current) return
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+    const canvas = canvasRef.current
+    // Guard: skip drawing if context or canvas is not available
+    if (!ctx || !canvas || canvas.width === 0 || canvas.height === 0) return
+    
+    try {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    } catch (clearErr) {
+      // Silently handle canvas context errors (e.g., context lost)
+      console.warn('Canvas clear failed:', clearErr)
+      return
+    }
 
     // Pose keypoints and lines
     if (pose?.keypoints?.length) {

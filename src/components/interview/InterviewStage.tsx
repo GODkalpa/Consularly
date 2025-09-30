@@ -170,10 +170,10 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
         muted
         autoPlay
       />
-      {/* Canvas overlay */}
+      {/* Canvas overlay - Hidden but still used for body language analysis */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full pointer-events-none z-10"
+        className="absolute inset-0 w-full h-full pointer-events-none z-10 hidden"
         style={{ transform: 'scaleX(-1)' }}
       />
 

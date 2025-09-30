@@ -676,7 +676,7 @@ export default function InterviewRunner() {
                 const text = currentTranscript.trim()
                 processAnswer(text.length >= 1 ? text : '[No response]')
               }) : undefined}
-              showCaptions={true}
+              showCaptions={false}
               showQuestionOverlay={false}
               showBodyBadge={false}
             />
