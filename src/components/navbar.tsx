@@ -184,6 +184,14 @@ export function Navbar() {
                 </Button>
               </Link>
             )}
+            {!isAdmin && user && userProfile && !(userProfile as any).orgId && (
+              <Link href="/dashboard">
+                <Button variant="outline" className="gap-2">
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </Button>
+              </Link>
+            )}
             {user ? (
               <div className="relative" ref={userMenuRef}>
                 <button
@@ -276,6 +284,18 @@ export function Navbar() {
                   <Button variant="outline" className="w-full justify-start gap-2">
                     <LayoutDashboard className="w-4 h-4" />
                     Org Dashboard
+                  </Button>
+                </Link>
+              )}
+              {!isAdmin && user && userProfile && !(userProfile as any).orgId && (
+                <Link
+                  href="/dashboard"
+                  className="block"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Button variant="outline" className="w-full justify-start gap-2">
+                    <LayoutDashboard className="w-4 h-4" />
+                    Dashboard
                   </Button>
                 </Link>
               )}

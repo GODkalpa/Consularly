@@ -197,7 +197,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else if ((userProfile as any).orgId) {
       router.push('/org');
     } else {
-      router.push('/');
+      // Regular users go to their dashboard
+      router.push('/dashboard');
     }
   };
 
