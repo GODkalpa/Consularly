@@ -48,6 +48,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden: student not in your organization' }, { status: 403 })
     }
 
+    // Check organization quota
+    const orgSnap = await adminDb().collection('organizations').doc(callerOrgId).get()
+    if (!orgSnap.exists) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    }
+    const org = orgSnap.data() as { quotaLimit?: number; quotaUsed?: number } | undefined
+    const quotaLimit = org?.quotaLimit ?? 0
+    const quotaUsed = org?.quotaUsed ?? 0
+
+    if (quotaLimit > 0 && quotaUsed >= quotaLimit) {
+      return NextResponse.json({ 
+        error: 'Quota exceeded', 
+        message: `Your organization has reached its monthly quota limit of ${quotaLimit} interviews. Please contact your administrator to increase your quota.`,
+        quotaLimit,
+        quotaUsed
+      }, { status: 403 })
+    }
+
     // Create interview document (server timestamps)
     const interviewDoc = await adminDb().collection('interviews').add({
       userId: studentId,
@@ -67,6 +85,12 @@ export async function POST(req: NextRequest) {
       duration,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+    })
+
+    // Increment organization quota usage
+    await adminDb().collection('organizations').doc(callerOrgId).update({
+      quotaUsed: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp()
     })
 
     return NextResponse.json({ id: interviewDoc.id }, { status: 201 })

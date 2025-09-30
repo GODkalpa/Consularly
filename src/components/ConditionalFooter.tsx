@@ -3,7 +3,7 @@
 import FooterSection from '@/components/ui/footer'
 import { usePathname } from 'next/navigation'
 
-const HIDDEN_PATH_PREFIXES = ['/admin', '/org', '/interview']
+const HIDDEN_PATH_PREFIXES = ['/admin', '/org', '/dashboard', '/interview']
 
 export default function ConditionalFooter() {
   const pathname = usePathname()

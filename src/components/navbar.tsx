@@ -77,6 +77,14 @@ export function Navbar() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const { user, logout, isAdmin, userProfile } = useAuth()
 
+  // Log on every render
+  console.log('🔄 NAVBAR RENDER:', { 
+    user: user?.email, 
+    isAdmin, 
+    userProfile: userProfile?.role,
+    hasOrgId: !!(userProfile as any)?.orgId
+  })
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -184,14 +192,25 @@ export function Navbar() {
                 </Button>
               </Link>
             )}
-            {!isAdmin && user && userProfile && !(userProfile as any).orgId && (
-              <Link href="/dashboard">
-                <Button variant="outline" className="gap-2">
-                  <LayoutDashboard className="w-4 h-4" />
-                  Dashboard
-                </Button>
-              </Link>
-            )}
+            {(() => {
+              const shouldShow = !isAdmin && !!user && !!userProfile && !(userProfile as any).orgId;
+              console.log('🎯 Dashboard button check:', { 
+                isAdmin, 
+                hasUser: !!user, 
+                hasUserProfile: !!userProfile,
+                userProfileRole: userProfile?.role,
+                hasOrgId: !!(userProfile as any)?.orgId,
+                shouldShow 
+              });
+              return shouldShow && (
+                <Link href="/dashboard">
+                  <Button variant="outline" className="gap-2">
+                    <LayoutDashboard className="w-4 h-4" />
+                    Dashboard
+                  </Button>
+                </Link>
+              );
+            })()}
             {user ? (
               <div className="relative" ref={userMenuRef}>
                 <button

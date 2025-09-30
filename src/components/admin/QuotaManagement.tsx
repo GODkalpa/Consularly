@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { auth, firebaseEnabled } from "@/lib/firebase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,56 +22,30 @@ import {
   Calendar,
   RefreshCw,
   Settings,
-  TestTube
+  TestTube,
+  Loader2
 } from "lucide-react"
+import { toast } from "sonner"
+import type { OrganizationWithId } from "@/types/firestore"
 
 interface QuotaData {
   organizationId: string
   organizationName: string
   currentQuota: number
   usedQuota: number
-  resetDate: string
   plan: string
   status: 'healthy' | 'warning' | 'critical'
-  lastUsage: string
-  monthlyTrend: number[]
 }
 
-const mockQuotaData: QuotaData[] = [
-  {
-    organizationId: "1",
-    organizationName: "Global Visa Services",
-    currentQuota: 500,
-    usedQuota: 425,
-    resetDate: "2024-02-01",
-    plan: "Premium",
-    status: "warning",
-    lastUsage: "2024-01-20",
-    monthlyTrend: [320, 380, 410, 425]
-  },
-  {
-    organizationId: "2",
-    organizationName: "ABC Immigration",
-    currentQuota: 100,
-    usedQuota: 95,
-    resetDate: "2024-02-01",
-    plan: "Basic",
-    status: "critical",
-    lastUsage: "2024-01-19",
-    monthlyTrend: [65, 78, 89, 95]
-  },
-  {
-    organizationId: "3",
-    organizationName: "Education Plus",
-    currentQuota: 1000,
-    usedQuota: 234,
-    resetDate: "2024-02-01",
-    plan: "Enterprise",
-    status: "healthy",
-    lastUsage: "2024-01-18",
-    monthlyTrend: [180, 200, 220, 234]
-  }
-]
+interface UserQuotaData {
+  userId: string
+  userName: string
+  email: string
+  currentQuota: number
+  usedQuota: number
+  role: string
+  status: 'healthy' | 'warning' | 'critical'
+}
 
 const usageTrendData = [
   { month: "Sep", usage: 12500 },
@@ -87,11 +62,249 @@ const quotaDistributionData = [
 ]
 
 export function QuotaManagement() {
-  const [quotaData, setQuotaData] = useState<QuotaData[]>(mockQuotaData)
+  const [quotaData, setQuotaData] = useState<QuotaData[]>([])
+  const [userQuotaData, setUserQuotaData] = useState<UserQuotaData[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [isQuotaDialogOpen, setIsQuotaDialogOpen] = useState(false)
   const [selectedOrg, setSelectedOrg] = useState<string>("")
+  const [selectedUser, setSelectedUser] = useState<string>("")
+  const [newQuota, setNewQuota] = useState<string>("")
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [isUserQuotaDialog, setIsUserQuotaDialog] = useState(false)
+
+  // Load organizations and users with quota data via API
+  useEffect(() => {
+    if (!firebaseEnabled) { setLoading(false); return }
+    let intervalId: NodeJS.Timeout | undefined
+
+    async function loadData() {
+      try {
+        const token = await auth.currentUser?.getIdToken()
+        if (!token) throw new Error('Not authenticated')
+
+        // Fetch organizations via API
+        const orgsRes = await fetch('/api/admin/organizations/list', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        
+        if (orgsRes.ok) {
+          const orgsJson = await orgsRes.json()
+          const orgs: QuotaData[] = (orgsJson.organizations || []).map((org: any) => {
+            const quotaLimit = org.quotaLimit || 0
+            const quotaUsed = org.quotaUsed || 0
+            const percentage = quotaLimit > 0 ? (quotaUsed / quotaLimit) * 100 : 0
+            
+            let status: 'healthy' | 'warning' | 'critical' = 'healthy'
+            if (percentage >= 95) status = 'critical'
+            else if (percentage >= 85) status = 'warning'
+
+            return {
+              organizationId: org.id,
+              organizationName: org.name || 'Unknown',
+              currentQuota: quotaLimit,
+              usedQuota: quotaUsed,
+              plan: org.plan || 'basic',
+              status
+            }
+          })
+          setQuotaData(orgs)
+        } else {
+          const error = await orgsRes.json()
+          console.error('Failed to load organizations', error)
+          toast.error('Failed to load organizations: ' + (error.error || 'Unknown error'))
+        }
+
+        // Fetch signup users via API
+        const usersRes = await fetch('/api/admin/users/list?type=signup', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        
+        if (usersRes.ok) {
+          const usersJson = await usersRes.json()
+          const users: UserQuotaData[] = (usersJson.users || []).map((user: any) => {
+            const quotaLimit = user.quotaLimit || 0
+            const quotaUsed = user.quotaUsed || 0
+            const percentage = quotaLimit > 0 ? (quotaUsed / quotaLimit) * 100 : 0
+            
+            let status: 'healthy' | 'warning' | 'critical' = 'healthy'
+            if (percentage >= 95) status = 'critical'
+            else if (percentage >= 85) status = 'warning'
+
+            return {
+              userId: user.id,
+              userName: user.displayName || 'Unknown',
+              email: user.email || '',
+              currentQuota: quotaLimit,
+              usedQuota: quotaUsed,
+              role: user.role || 'user',
+              status
+            }
+          })
+          setUserQuotaData(users)
+        } else {
+          const error = await usersRes.json()
+          console.error('Failed to load users', error)
+          toast.error('Failed to load users: ' + (error.error || 'Unknown error'))
+        }
+
+        setLoading(false)
+      } catch (e) {
+        console.error('Failed to load data', e)
+        toast.error('Failed to load quota data')
+        setLoading(false)
+      }
+    }
+
+    // Initial load
+    loadData()
+
+    // Refresh data every 30 seconds for near-realtime updates
+    intervalId = setInterval(loadData, 30000)
+
+    return () => { 
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [])
+
+  const handleUpdateQuota = async () => {
+    if (!selectedOrg || !newQuota) {
+      toast.error('Please select an organization and enter a quota')
+      return
+    }
+
+    const quotaValue = parseInt(newQuota, 10)
+    if (isNaN(quotaValue) || quotaValue < 0) {
+      toast.error('Please enter a valid quota number')
+      return
+    }
+
+    setIsUpdating(true)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch(`/api/admin/organizations/${selectedOrg}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ quotaLimit: quotaValue })
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to update quota')
+      }
+
+      toast.success('Quota updated successfully')
+      setIsQuotaDialogOpen(false)
+      setSelectedOrg('')
+      setNewQuota('')
+    } catch (e: any) {
+      console.error('Failed to update quota', e)
+      toast.error(e.message || 'Failed to update quota')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleResetQuota = async (orgId: string) => {
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch(`/api/admin/organizations/${orgId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ quotaUsed: 0 })
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to reset quota')
+      }
+
+      toast.success('Quota usage reset successfully')
+    } catch (e: any) {
+      console.error('Failed to reset quota', e)
+      toast.error(e.message || 'Failed to reset quota')
+    }
+  }
+
+  const handleUpdateUserQuota = async () => {
+    if (!selectedUser || !newQuota) {
+      toast.error('Please select a user and enter a quota')
+      return
+    }
+
+    const quotaValue = parseInt(newQuota, 10)
+    if (isNaN(quotaValue) || quotaValue < 0) {
+      toast.error('Please enter a valid quota number')
+      return
+    }
+
+    setIsUpdating(true)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch(`/api/admin/users/${selectedUser}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ quotaLimit: quotaValue })
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to update user quota')
+      }
+
+      toast.success('User quota updated successfully')
+      setIsUserQuotaDialog(false)
+      setSelectedUser('')
+      setNewQuota('')
+    } catch (e: any) {
+      console.error('Failed to update user quota', e)
+      toast.error(e.message || 'Failed to update user quota')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleResetUserQuota = async (userId: string) => {
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ quotaUsed: 0 })
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to reset user quota')
+      }
+
+      toast.success('User quota usage reset successfully')
+    } catch (e: any) {
+      console.error('Failed to reset user quota', e)
+      toast.error(e.message || 'Failed to reset user quota')
+    }
+  }
 
   const filteredData = quotaData.filter(item => {
     const matchesSearch = item.organizationName.toLowerCase().includes(searchTerm.toLowerCase())
@@ -129,12 +342,24 @@ export function QuotaManagement() {
     warningOrgs: quotaData.filter(item => item.status === 'warning').length
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span className="text-muted-foreground">Loading quota data...</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="organizations">Organizations</TabsTrigger>
+          <TabsTrigger value="users">Signup Users</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
@@ -224,7 +449,15 @@ export function QuotaManagement() {
                           </div>
                         </div>
                       </div>
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedOrg(item.organizationId)
+                          setNewQuota(item.currentQuota.toString())
+                          setIsQuotaDialogOpen(true)
+                        }}
+                      >
                         Increase Quota
                       </Button>
                     </div>
@@ -279,17 +512,20 @@ export function QuotaManagement() {
                         </div>
                         <div className="space-y-2">
                           <label className="text-sm font-medium">New Monthly Quota</label>
-                          <Input type="number" placeholder="Enter new quota" />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Effective Date</label>
-                          <Input type="date" />
+                          <Input 
+                            type="number" 
+                            placeholder="Enter new quota" 
+                            value={newQuota}
+                            onChange={(e) => setNewQuota(e.target.value)}
+                            min="0"
+                          />
                         </div>
                         <div className="flex justify-end gap-2">
-                          <Button variant="outline" onClick={() => setIsQuotaDialogOpen(false)}>
+                          <Button variant="outline" onClick={() => setIsQuotaDialogOpen(false)} disabled={isUpdating}>
                             Cancel
                           </Button>
-                          <Button onClick={() => setIsQuotaDialogOpen(false)}>
+                          <Button onClick={handleUpdateQuota} disabled={isUpdating || !selectedOrg || !newQuota}>
+                            {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                             Update Quota
                           </Button>
                         </div>
@@ -333,7 +569,6 @@ export function QuotaManagement() {
                       <TableHead>Plan</TableHead>
                       <TableHead>Quota Usage</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Reset Date</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -362,24 +597,172 @@ export function QuotaManagement() {
                             {getStatusBadge(item.status, percentage)}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Calendar className="h-4 w-4 text-muted-foreground" />
-                              {new Date(item.resetDate).toLocaleDateString()}
-                            </div>
-                          </TableCell>
-                          <TableCell>
                             <div className="flex items-center gap-2">
-                              <Button variant="ghost" size="sm">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedOrg(item.organizationId)
+                                  setNewQuota(item.currentQuota.toString())
+                                  setIsQuotaDialogOpen(true)
+                                }}
+                                title="Edit quota"
+                              >
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button variant="ghost" size="sm">
-                                <TestTube className="h-4 w-4" />
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleResetQuota(item.organizationId)}
+                                title="Reset usage to 0"
+                              >
+                                <RefreshCw className="h-4 w-4" />
                               </Button>
                             </div>
                           </TableCell>
                         </TableRow>
                       )
                     })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="users" className="space-y-6">
+          {/* Signup Users Quota Management */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Signup User Quotas</CardTitle>
+                  <CardDescription>Manage test quotas for individual signup users</CardDescription>
+                </div>
+                <Dialog open={isUserQuotaDialog} onOpenChange={setIsUserQuotaDialog}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Adjust User Quota
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Adjust User Quota</DialogTitle>
+                      <DialogDescription>Modify the monthly test quota for a signup user</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">User</label>
+                        <Select value={selectedUser} onValueChange={setSelectedUser}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select user" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {userQuotaData.map((user) => (
+                              <SelectItem key={user.userId} value={user.userId}>
+                                {user.userName} ({user.email})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">New Monthly Quota</label>
+                        <Input 
+                          type="number" 
+                          placeholder="Enter new quota" 
+                          value={newQuota}
+                          onChange={(e) => setNewQuota(e.target.value)}
+                          min="0"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setIsUserQuotaDialog(false)} disabled={isUpdating}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleUpdateUserQuota} disabled={isUpdating || !selectedUser || !newQuota}>
+                          {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Update Quota
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* User Quota Table */}
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Quota Usage</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {userQuotaData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          No signup users with quotas found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      userQuotaData.map((item) => {
+                        const percentage = item.currentQuota > 0 ? (item.usedQuota / item.currentQuota) * 100 : 0
+                        
+                        return (
+                          <TableRow key={item.userId}>
+                            <TableCell>
+                              <div className="font-medium">{item.userName}</div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm text-muted-foreground">{item.email}</div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-sm">
+                                  <span>{item.usedQuota} / {item.currentQuota}</span>
+                                  <span className="text-muted-foreground">{percentage.toFixed(0)}%</span>
+                                </div>
+                                <Progress value={percentage} className="h-2" />
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {getStatusBadge(item.status, percentage)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedUser(item.userId)
+                                    setNewQuota(item.currentQuota.toString())
+                                    setIsUserQuotaDialog(true)
+                                  }}
+                                  title="Edit quota"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => handleResetUserQuota(item.userId)}
+                                  title="Reset usage to 0"
+                                >
+                                  <RefreshCw className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
                   </TableBody>
                 </Table>
               </div>

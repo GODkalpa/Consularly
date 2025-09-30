@@ -167,7 +167,7 @@ export function OrganizationDashboard() {
             <CardDescription>Monthly quota utilization for your plan</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium" style={{ color: brandColor }}>
                   {quotaUsed} / {quotaLimit}
@@ -175,8 +175,40 @@ export function OrganizationDashboard() {
                 <span className="text-muted-foreground">{quotaPct.toFixed(0)}%</span>
               </div>
               <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                <div className="h-full" style={{ width: `${quotaPct}%`, background: brandColor }} />
+                <div 
+                  className="h-full transition-all" 
+                  style={{ 
+                    width: `${Math.min(100, quotaPct)}%`, 
+                    background: quotaPct >= 95 ? '#ef4444' : quotaPct >= 85 ? '#f59e0b' : brandColor 
+                  }} 
+                />
               </div>
+              {quotaPct >= 95 && (
+                <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                  <svg className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-destructive">Quota Limit Reached</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      You have used {quotaPct.toFixed(0)}% of your monthly quota. Please contact your administrator to increase your limit.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {quotaPct >= 85 && quotaPct < 95 && (
+                <div className="flex items-start gap-2 p-3 rounded-md bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/50">
+                  <svg className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-orange-900 dark:text-orange-200">Approaching Quota Limit</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      You have used {quotaPct.toFixed(0)}% of your monthly quota. Consider requesting an increase soon.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

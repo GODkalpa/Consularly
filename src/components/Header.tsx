@@ -98,20 +98,18 @@ export const HeroHeader = () => {
                             <div className="flex w-full flex-col space-y-3 sm:flex-row sm:gap-3 sm:space-y-0 md:w-fit">
                                 {user ? (
                                     <>
-                                        {(isAdmin || userProfile?.orgId) && (
-                                            <Button
-                                                asChild
-                                                variant="outline"
-                                                size="sm"
-                                            >
-                                                <Link href={isAdmin ? '/admin' : '/org'}>
-                                                    <span className="flex items-center gap-2">
-                                                        <LayoutDashboard className="size-4" />
-                                                        Dashboard
-                                                    </span>
-                                                </Link>
-                                            </Button>
-                                        )}
+                                        <Button
+                                            asChild
+                                            variant="outline"
+                                            size="sm"
+                                        >
+                                            <Link href={isAdmin ? '/admin' : (userProfile?.orgId ? '/org' : '/dashboard')}>
+                                                <span className="flex items-center gap-2">
+                                                    <LayoutDashboard className="size-4" />
+                                                    Dashboard
+                                                </span>
+                                            </Link>
+                                        </Button>
                                         <Button
                                             size="sm"
                                             variant="ghost"

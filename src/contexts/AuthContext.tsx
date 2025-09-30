@@ -52,7 +52,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    let unsubProfile: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      // Clean up previous profile subscription
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       setUser(user);
 
       if (user) {
@@ -65,18 +73,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUserProfile(profile);
           setIsAdmin(adminStatus);
 
+          console.log('✅ User profile loaded:', profile);
+
           // Live subscribe to user profile to reflect role/org changes immediately
-          const unsubProfile = onSnapshot(doc(db, 'users', user.uid), (snap) => {
-            const latest = (snap.data() as UserProfile | undefined) || null;
-            setUserProfile(latest);
-            setIsAdmin(latest?.role === 'admin' || latest?.role === 'super_admin');
-
-            // Auto-redirect after successful authentication is disabled to keep users on the homepage.
-            // Users can navigate to their dashboard via the navbar button.
-          });
-
-          // Cleanup the profile subscription when auth changes
-          return () => unsubProfile();
+          unsubProfile = onSnapshot(
+            doc(db, 'users', user.uid), 
+            (snap) => {
+              const latest = (snap.data() as UserProfile | undefined) || null;
+              console.log('📡 Profile snapshot update:', latest);
+              setUserProfile(latest);
+              setIsAdmin(latest?.role === 'admin' || latest?.role === 'super_admin');
+            },
+            (error) => {
+              console.error('❌ Profile snapshot error:', error);
+            }
+          );
         } catch (error) {
           console.error('Error loading user profile:', error);
           setUserProfile(null);
@@ -88,7 +99,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (unsubProfile) {
+        unsubProfile();
+      }
+    };
   }, [router]);
 
   const signIn = async (email: string, password: string) => {

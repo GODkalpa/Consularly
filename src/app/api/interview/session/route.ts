@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { InterviewSimulationService, InterviewSession } from '@/lib/interview-simulation';
+import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +18,81 @@ export async function POST(request: NextRequest) {
             { error: 'Missing required fields: userId, visaType, studentProfile' },
             { status: 400 }
           );
+        }
+
+        // Check quota for signup users (not org members)
+        try {
+          await ensureFirebaseAdmin();
+          const authHeader = request.headers.get('authorization') || '';
+          const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+          
+          if (token) {
+            // Validate the token and check quota
+            const decoded = await adminAuth().verifyIdToken(token);
+            const callerUid = decoded.uid;
+            
+            // Load caller profile
+            const callerSnap = await adminDb().collection('users').doc(callerUid).get();
+            if (callerSnap.exists) {
+              const caller = callerSnap.data() as { role?: string; orgId?: string; quotaLimit?: number; quotaUsed?: number } | undefined;
+              
+              // Only check quota for signup users (those without orgId)
+              // Org members' quota is checked in /api/org/interviews before reaching here
+              if (!caller?.orgId) {
+                const quotaLimit = caller?.quotaLimit ?? 0;
+                const quotaUsed = caller?.quotaUsed ?? 0;
+                
+                // Reject if quota is 0 (no quota assigned) or if quota exceeded
+                if (quotaLimit === 0 || quotaUsed >= quotaLimit) {
+                  return NextResponse.json({ 
+                    error: 'Quota exceeded', 
+                    message: quotaLimit === 0 
+                      ? 'No interview quota assigned. Contact support for more interviews.'
+                      : `You have reached your interview quota limit of ${quotaLimit} interviews. Contact support for more interviews.`,
+                    quotaLimit,
+                    quotaUsed
+                  }, { status: 403 });
+                }
+
+                // Create interview record and increment quota for signup users
+                await adminDb().collection('interviews').add({
+                  userId: callerUid,
+                  orgId: '',
+                  startTime: FieldValue.serverTimestamp(),
+                  endTime: null,
+                  status: 'scheduled',
+                  score: 0,
+                  scoreDetails: {
+                    communication: 0,
+                    technical: 0,
+                    confidence: 0,
+                    overall: 0,
+                  },
+                  interviewType: 'visa',
+                  route,
+                  duration: 30,
+                  createdAt: FieldValue.serverTimestamp(),
+                  updatedAt: FieldValue.serverTimestamp(),
+                });
+
+                // Increment user quota usage
+                await adminDb().collection('users').doc(callerUid).update({
+                  quotaUsed: FieldValue.increment(1),
+                  updatedAt: FieldValue.serverTimestamp()
+                });
+              }
+            }
+          }
+        } catch (quotaError: any) {
+          // If it's a quota error, return it to the client
+          if (quotaError?.message?.includes('Quota exceeded') || quotaError?.status === 403) {
+            return NextResponse.json({ 
+              error: 'Quota exceeded',
+              message: quotaError.message || 'Contact support for more interviews.'
+            }, { status: 403 });
+          }
+          // Log other errors but continue (backward compatibility for non-Firebase setups)
+          console.warn('[quota check]', quotaError);
         }
 
         const { session, firstQuestion } = await simulationService.startInterview(

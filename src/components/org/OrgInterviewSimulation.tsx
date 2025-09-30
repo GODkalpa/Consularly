@@ -7,9 +7,18 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
-import { Play, RotateCcw, Save, Users } from 'lucide-react'
+import { Play, RotateCcw, Save, Users, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { auth, firebaseEnabled } from '@/lib/firebase'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { AssemblyAITranscription } from '@/components/speech/AssemblyAITranscription'
 import { InterviewStage } from '@/components/interview/InterviewStage'
 import { TranscriptionResult } from '@/lib/assemblyai-service'
@@ -75,6 +84,8 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
   const [apiSession, setApiSession] = useState<any | null>(null)
   const [currentLLMQuestion, setCurrentLLMQuestion] = useState<any | null>(null)
   const [firestoreInterviewId, setFirestoreInterviewId] = useState<string | null>(null)
+  const [showQuotaDialog, setShowQuotaDialog] = useState(false)
+  const [quotaMessage, setQuotaMessage] = useState('')
 
   // Timers
   const questionTimerRef = useRef<number | null>(null)
@@ -210,7 +221,15 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ studentId, interviewType: 'visa', scheduledTime: new Date().toISOString(), duration: 30, route })
       })
-      if (!createRes.ok) throw new Error(`Create interview failed: ${createRes.status}`)
+      if (!createRes.ok) {
+        const error = await createRes.json()
+        if (error.error === 'Quota exceeded') {
+          setQuotaMessage(error.message || 'Your organization has reached its monthly interview quota. Please contact your administrator.')
+          setShowQuotaDialog(true)
+          return
+        }
+        throw new Error(error.error || `Create interview failed: ${createRes.status}`)
+      }
       const created = await createRes.json()
       setFirestoreInterviewId(created.id as string)
 
@@ -702,6 +721,23 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog open={showQuotaDialog} onOpenChange={setShowQuotaDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className='flex items-center gap-2'>
+              <AlertCircle className='h-6 w-6 text-destructive' />
+              <AlertDialogTitle>Quota Limit Reached</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className='text-base pt-2'>
+              {quotaMessage}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

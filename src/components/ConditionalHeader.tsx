@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { HeroHeader } from '@/components/Header'
 
-const HIDDEN_PATH_PREFIXES = ['/admin', '/org', '/interview']
+const HIDDEN_PATH_PREFIXES = ['/admin', '/org', '/dashboard', '/interview']
 
 export default function ConditionalHeader() {
   const pathname = usePathname()

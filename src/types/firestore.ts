@@ -24,6 +24,8 @@ export interface UserProfile {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   isActive: boolean;
+  quotaLimit?: number; // Individual user quota limit (for signup users)
+  quotaUsed?: number; // Individual user quota used (for signup users)
 }
 
 // Score Details Interface

@@ -21,9 +21,8 @@ import {
   GraduationCap,
   Shield
 } from "lucide-react"
-import { collection, onSnapshot, orderBy, query, where, getDocs, doc, getDoc } from "firebase/firestore"
 import { sendPasswordResetEmail } from "firebase/auth"
-import { auth, db, firebaseEnabled } from "@/lib/firebase"
+import { auth, firebaseEnabled } from "@/lib/firebase"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
 
@@ -56,85 +55,122 @@ export function UserManagement() {
   const [orgNames, setOrgNames] = useState<Record<string, string>>({})
   const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string }>>([])
 
-  // Real-time subscription to users
+  // Load users via API (avoids Firestore permission issues)
   useEffect(() => {
     if (!firebaseEnabled) return
     if (!userProfile) return
-    // Determine scope: super_admin can see all, admins see their org
-    const baseRef = collection(db, 'users')
-    const isSuper = userProfile?.role === 'super_admin'
-    const orgId = (userProfile as any)?.orgId as string | undefined
 
-    // If admin without orgId, don't query (will violate rules); show empty.
-    if (!isSuper && !orgId) {
-      setUsers([])
-      return
+    let intervalId: NodeJS.Timeout | undefined
+
+    async function loadUsers() {
+      try {
+        const token = await auth.currentUser?.getIdToken()
+        if (!token) return
+
+        // Fetch users via API
+        const usersRes = await fetch('/api/admin/users/list?type=all', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+
+        if (!usersRes.ok) {
+          const error = await usersRes.json()
+          throw new Error(error.error || 'Failed to load users')
+        }
+
+        const usersJson = await usersRes.json()
+        const usersData = usersJson.users || []
+
+        // Load organization names for dropdown and display
+        let orgMap: Record<string, string> = {}
+        const opts: Array<{ id: string; name: string }> = []
+
+        try {
+          const orgsRes = await fetch('/api/admin/organizations/list', {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+
+          if (orgsRes.ok) {
+            const orgsJson = await orgsRes.json()
+            const orgs = orgsJson.organizations || []
+            orgs.forEach((org: any) => {
+              const name = org.name || org.id
+              orgMap[org.id] = name
+              opts.push({ id: org.id, name })
+            })
+          }
+        } catch (e) {
+          console.warn('Failed to load organizations for dropdown', e)
+        }
+
+        setOrgNames(orgMap)
+        setOrgOptions(opts)
+
+        // Map API response to UserRow format
+        const rows: UserRow[] = usersData.map((data: any) => {
+          // Safe timestamp parsing
+          let createdAt = new Date()
+          try {
+            if (data?.createdAt?.seconds) {
+              createdAt = new Date(data.createdAt.seconds * 1000)
+            } else if (data?.createdAt) {
+              const parsed = new Date(data.createdAt)
+              if (!isNaN(parsed.getTime())) createdAt = parsed
+            }
+          } catch (e) {
+            console.warn('Failed to parse createdAt', e)
+          }
+
+          let lastActive = new Date()
+          try {
+            if (data?.lastLoginAt) {
+              const parsed = new Date(data.lastLoginAt)
+              if (!isNaN(parsed.getTime())) lastActive = parsed
+            } else if (data?.updatedAt?.seconds) {
+              lastActive = new Date(data.updatedAt.seconds * 1000)
+            } else if (data?.updatedAt) {
+              const parsed = new Date(data.updatedAt)
+              if (!isNaN(parsed.getTime())) lastActive = parsed
+            }
+          } catch (e) {
+            console.warn('Failed to parse lastActive', e)
+          }
+
+          const derivedRole: UserRow['role'] = data?.role === 'admin' || data?.role === 'super_admin'
+            ? 'admin'
+            : (data?.orgId ? 'organization' : 'student')
+
+          const status: UserRow['status'] = data?.isActive === false ? 'inactive' : 'active'
+
+          return {
+            id: data.id,
+            name: data?.displayName || data?.name || 'Unknown',
+            email: data?.email || '',
+            role: derivedRole,
+            status,
+            organization: data?.orgId ? (orgMap[data.orgId] || data.orgId) : undefined,
+            joinDate: createdAt.toISOString(),
+            lastActive: lastActive.toISOString(),
+            testsCompleted: 0,
+          }
+        })
+
+        setUsers(rows)
+      } catch (err: any) {
+        console.error('[UserManagement] Load error', err)
+        setUsers([])
+        toast.error('Unable to load users', { description: err?.message || 'Failed to fetch user data' })
+      }
     }
 
-    const q = isSuper
-      ? baseRef
-      : query(baseRef, where('orgId', '==', orgId!))
+    // Initial load
+    loadUsers()
 
-    const unsub = onSnapshot(q, async (snap) => {
-      // Optionally pre-load organization names for display and dropdown
-      let orgMap: Record<string, string> = {}
-      try {
-        if (isSuper) {
-          const orgSnap = await getDocs(collection(db, 'organizations'))
-          const opts: Array<{ id: string; name: string }> = []
-          orgSnap.forEach(d => {
-            const data = d.data() as any
-            const name = data?.name || d.id
-            orgMap[d.id] = name
-            opts.push({ id: d.id, name })
-          })
-          setOrgOptions(opts)
-        } else if (orgId) {
-          const orgDoc = await getDoc(doc(db, 'organizations', orgId))
-          if (orgDoc.exists()) {
-            const data = orgDoc.data() as any
-            const name = data?.name || orgDoc.id
-            orgMap[orgDoc.id] = name
-            setOrgOptions([{ id: orgDoc.id, name }])
-          }
-        }
-      } catch {
-        // ignore
-      }
-      setOrgNames(orgMap)
+    // Refresh every 30 seconds for near real-time updates
+    intervalId = setInterval(loadUsers, 30000)
 
-      const rows: UserRow[] = snap.docs.map(d => {
-        const data = d.data() as any
-        const createdAt = (data?.createdAt?.toDate?.() as Date | undefined) || (data?.createdAt ? new Date(data.createdAt) : undefined)
-        const lastActive = (data?.lastLoginAt ? new Date(data.lastLoginAt) : (data?.updatedAt?.toDate?.() as Date | undefined)) || new Date()
-
-        const derivedRole: UserRow['role'] = data?.role === 'admin' || data?.role === 'super_admin'
-          ? 'admin'
-          : (data?.orgId ? 'organization' : 'student')
-
-        const status: UserRow['status'] = data?.isActive === false ? 'inactive' : 'active'
-
-        return {
-          id: d.id,
-          name: data?.displayName || data?.name || 'Unknown',
-          email: data?.email || '',
-          role: derivedRole,
-          status,
-          organization: data?.orgId ? (orgMap[data.orgId] || data.orgId) : undefined,
-          joinDate: createdAt ? createdAt.toISOString() : new Date().toISOString(),
-          lastActive: lastActive.toISOString(),
-          testsCompleted: 0,
-        }
-      })
-      setUsers(rows)
-    }, (err) => {
-      // Gracefully handle permission errors and others
-      console.error('[UserManagement] onSnapshot error', err)
-      setUsers([])
-      toast.error('Unable to load users', { description: err?.message || 'Permission denied or configuration issue.' })
-    })
-
-    return () => unsub()
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
   }, [userProfile])
 
   const filteredUsers = users.filter(user => {
