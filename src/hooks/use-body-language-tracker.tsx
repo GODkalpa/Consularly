@@ -71,6 +71,17 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
   const setupCamera = useCallback(async () => {
     if (!videoRef.current) return
     try {
+      // Only stop existing stream if we're setting up a new one
+      // Check if there's already an active stream to avoid cutting off running cameras
+      const existingStream = videoRef.current.srcObject as MediaStream | null
+      const hasActiveStream = existingStream && existingStream.getTracks().some(t => t.readyState === 'live')
+      
+      // If we already have an active stream, don't restart unless explicitly switching cameras
+      if (hasActiveStream) {
+        console.log('📹 Camera already active, skipping setup')
+        return
+      }
+      
       // Stop any previously attached stream to avoid multiple camera captures
       try { stopStream() } catch {}
       // Try with ideal constraints and front camera
@@ -380,13 +391,21 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
 
   const start = useCallback(async () => {
     if (state.running) return
+    console.log('🎬 Starting body language analysis...')
     // Clear transient error spam from previous attempts
     lastErrorRef.current = ''
     lastErrorAtRef.current = 0
     // If we're not already previewing (no stream), set up the camera.
-    if (!videoRef.current?.srcObject) {
+    const existingStream = videoRef.current?.srcObject as MediaStream | null
+    const hasActiveStream = existingStream && existingStream.getTracks().some(t => t.readyState === 'live')
+    
+    if (!hasActiveStream) {
+      console.log('📹 No active stream, setting up camera...')
       await setupCamera()
+    } else {
+      console.log('📹 Using existing camera stream')
     }
+    
     const v = videoRef.current
     if (!v?.srcObject || v.videoWidth === 0 || v.videoHeight === 0) {
       setState((s) => {
@@ -474,16 +493,28 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
   }, [refreshCameras])
 
   const switchCamera = useCallback(async (deviceId: string) => {
+    console.log('🔄 Switching camera to:', deviceId)
     selectedDeviceIdRef.current = deviceId
+    // Force stop the current stream before switching
     stopStream()
+    // Force setupCamera to run by temporarily clearing srcObject
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
     await setupCamera()
   }, [setupCamera, stopStream])
 
   // Preview-only controls: show camera without starting ML analysis
   const startPreview = useCallback(async () => {
     if (state.previewing || state.running) return
+    console.log('👁️ Starting camera preview...')
     try {
-      await setupCamera()
+      const existingStream = videoRef.current?.srcObject as MediaStream | null
+      const hasActiveStream = existingStream && existingStream.getTracks().some(t => t.readyState === 'live')
+      
+      if (!hasActiveStream) {
+        await setupCamera()
+      }
       // Update camera list after permission was granted
       try {
         const devices = await navigator.mediaDevices.enumerateDevices()

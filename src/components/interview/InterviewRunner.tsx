@@ -619,7 +619,7 @@ export default function InterviewRunner() {
                   Welcome, {session.studentName}
                 </h1>
                 <p className="text-base text-gray-600 dark:text-gray-700 leading-relaxed">
-                  Please ensure your camera and microphone are working correctly. Click <span className="font-semibold text-gray-900">Start Interview</span> when you're ready to begin.
+                  Please ensure your camera and microphone are working correctly. Click <span className="font-semibold text-gray-900">Start Interview</span> when you&apos;re ready to begin.
                 </p>
                 {permissionsReady && micRunning && (
                   <div className="mt-6 p-4 bg-green-50 dark:bg-green-100 rounded-lg border border-green-200 space-y-3">

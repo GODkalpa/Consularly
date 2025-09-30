@@ -78,24 +78,28 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
         if (running && !state.running) {
           console.log('🎥 Starting interview recording')
           await start()
-        } else if (!running && preview) {
-          // Preview only
-          if (!state.previewing) {
-            console.log('👁️ Starting camera preview')
-            await startPreview()
+        } else if (!running && preview && !state.previewing && !state.running) {
+          // Preview only - only start if not already in any active state
+          console.log('👁️ Starting camera preview')
+          await startPreview()
+        } else if (!running && !preview) {
+          // Neither running nor previewing - cleanup
+          if (state.running) {
+            console.log('🛑 Stopping interview recording')
+            await stop()
+          } else if (state.previewing) {
+            console.log('🛑 Stopping camera preview')
+            await stopPreview()
           }
-        } else {
-          // Neither running nor previewing
-          if (state.running) await stop()
-          if (state.previewing) await stopPreview()
         }
       } catch (err) {
         console.error('❌ Camera control error:', err)
       }
     }
     control()
+    // Only depend on parent props (running, preview), not internal state to avoid loops
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, preview, state.running, state.previewing])
+  }, [running, preview])
 
   useEffect(() => {
     if (state.score && onScore) onScore(state.score)
@@ -106,7 +110,7 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
     if (videoRef.current?.srcObject) {
       console.log('✅ Video stream attached', { previewing: state.previewing, running: state.running })
     }
-  }, [state.previewing, state.running])
+  }, [state.previewing, state.running, videoRef])
 
   const elapsed = useMemo(() => {
     if (!startedAt) return '0m'
