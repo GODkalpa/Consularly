@@ -65,59 +65,80 @@ export default function InterviewRunner() {
   const [permError, setPermError] = useState<string | null>(null)
   const { running: micRunning, level: micLevel, error: micError, start: startMic, stop: stopMic } = useMicLevel()
 
-  // load initial payload from sessionStorage seeded by the starter page
+  // load initial payload from localStorage seeded by the starter page
   useEffect(() => {
-    try {
-      if (!id) return
-      const key = `interview:init:${id}`
-      // Prefer sessionStorage (same-tab), but support cross-tab via localStorage fallback
-      let raw = sessionStorage.getItem(key)
-      if (!raw) {
-        const fromLocal = localStorage.getItem(key)
-        if (fromLocal) {
-          try { sessionStorage.setItem(key, fromLocal) } catch {}
-          try { localStorage.removeItem(key) } catch {}
-          raw = fromLocal
+    let retryCount = 0
+    const maxRetries = 5
+    
+    const loadSession = () => {
+      try {
+        if (!id) {
+          console.error('[InterviewRunner] No ID provided')
+          return
         }
+        const key = `interview:init:${id}`
+        console.log(`[InterviewRunner] Attempt ${retryCount + 1}/${maxRetries} - Looking for key:`, key)
+        
+        // Try localStorage first (cross-tab storage)
+        const raw = localStorage.getItem(key)
+        
+        if (!raw) {
+          // Retry if data not found yet (storage might be writing)
+          retryCount++
+          console.warn(`[InterviewRunner] Data not found, retry ${retryCount}/${maxRetries}`)
+          if (retryCount < maxRetries) {
+            setTimeout(loadSession, 200 * retryCount) // exponential backoff
+            return
+          }
+          // Max retries reached, data not found
+          console.error('[InterviewRunner] Interview session data not found in localStorage after retries')
+          setLoading(false)
+          return
+        }
+        
+        console.log('[InterviewRunner] Session data found, parsing...')
+        
+        const init = JSON.parse(raw)
+        // expected: { apiSession, firstQuestion, route, studentName }
+        const firstQ = init.firstQuestion
+        const route: InterviewRoute = init.route
+        const uiFirst: UIQuestion = { question: firstQ.question, category: mapQuestionTypeToCategory(route, firstQ.questionType) }
+        const s: UISession = {
+          id: init.apiSession.id,
+          studentName: init.studentName,
+          route,
+          startTime: new Date(),
+          currentQuestionIndex: 0,
+          questions: [uiFirst],
+          responses: [],
+          status: 'preparing',
+        }
+        // seed apiSession with first question in history
+        const seeded = {
+          ...init.apiSession,
+          conversationHistory: [
+            ...init.apiSession.conversationHistory,
+            {
+              question: firstQ.question,
+              answer: '',
+              timestamp: new Date().toISOString(),
+              questionType: firstQ.questionType,
+              difficulty: firstQ.difficulty,
+            },
+          ],
+        }
+        setApiSession(seeded)
+        setSession(s)
+        console.log('[InterviewRunner] Session loaded successfully:', s.id)
+        setLoading(false)
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[InterviewRunner] Error loading interview session:', e)
+        setLoading(false)
       }
-      if (!raw) { setLoading(false); return }
-      const init = JSON.parse(raw)
-      // expected: { apiSession, firstQuestion, route, studentName }
-      const firstQ = init.firstQuestion
-      const route: InterviewRoute = init.route
-      const uiFirst: UIQuestion = { question: firstQ.question, category: mapQuestionTypeToCategory(route, firstQ.questionType) }
-      const s: UISession = {
-        id: init.apiSession.id,
-        studentName: init.studentName,
-        route,
-        startTime: new Date(),
-        currentQuestionIndex: 0,
-        questions: [uiFirst],
-        responses: [],
-        status: 'preparing',
-      }
-      // seed apiSession with first question in history
-      const seeded = {
-        ...init.apiSession,
-        conversationHistory: [
-          ...init.apiSession.conversationHistory,
-          {
-            question: firstQ.question,
-            answer: '',
-            timestamp: new Date().toISOString(),
-            questionType: firstQ.questionType,
-            difficulty: firstQ.difficulty,
-          },
-        ],
-      }
-      setApiSession(seeded)
-      setSession(s)
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error(e)
-    } finally {
-      setLoading(false)
     }
+    
+    loadSession()
   }, [id])
 
   // Helper to explicitly request permissions (can be called automatically and via button)

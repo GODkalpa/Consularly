@@ -602,7 +602,11 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
   // Capture current score on-demand (for accurate moment-of-answer capture)
   const captureScore = useCallback((): BodyLanguageScore | null => {
     if (!state.running || !state.score) {
-      console.warn('⚠️ Body language tracker not running or no score available')
+      console.warn('⚠️ Body language tracker not running or no score available', {
+        running: state.running,
+        hasScore: !!state.score,
+        previewing: state.previewing
+      })
       return null
     }
     

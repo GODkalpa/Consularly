@@ -85,9 +85,13 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   useEffect(() => {
     const control = async () => {
       try {
+        console.log('📹 Camera control check:', { running, preview, stateRunning: state.running, statePreviewing: state.previewing })
+        
         if (running && !state.running) {
           console.log('🎥 Starting interview recording')
           await start()
+        } else if (running && state.running) {
+          console.log('✅ Already running, skipping start')
         } else if (!running && preview && !state.previewing && !state.running) {
           // Preview only - only start if not already in any active state
           console.log('👁️ Starting camera preview')
