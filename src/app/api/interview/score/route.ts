@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { LLMScoringService, type AIScoringRequest } from '@/lib/llm-scorer'
 import { scorePerformance } from '@/lib/performance-scoring'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
+import type { F1SessionMemory } from '@/lib/f1-mvp-session-memory'
+import { F1_MVP_SCORING_CONFIG } from '@/lib/f1-mvp-config'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,34 +14,69 @@ export async function POST(request: NextRequest) {
       bodyLanguage,
       assemblyConfidence,
       interviewContext,
+      sessionMemory,
     }: {
       question: string
       answer: string
       bodyLanguage?: BodyLanguageScore
       assemblyConfidence?: number
       interviewContext: AIScoringRequest['interviewContext']
+      sessionMemory?: F1SessionMemory
     } = body
 
     if (!question || typeof answer !== 'string' || !interviewContext) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Heuristic baseline using local analyzer (speech + body + content heuristics)
-    const defaultBody: BodyLanguageScore = bodyLanguage || {
-      posture: { torsoAngleDeg: 0, headTiltDeg: 0, slouchDetected: false, score: 60 },
-      gestures: { left: 'unknown', right: 'unknown', confidence: 0, score: 60 },
-      expressions: { eyeContactScore: 55, smileScore: 55, confidence: 0.5, score: 55 },
-      overallScore: 58,
-      feedback: [],
+    // CRITICAL FIX: If body language is missing, use penalty score instead of generous baseline
+    // This ensures students cannot get points for data that wasn't captured
+    let defaultBody: BodyLanguageScore | null = bodyLanguage || null
+    let bodyLanguageMissing = false
+    
+    if (!bodyLanguage) {
+      bodyLanguageMissing = true
+      console.warn('⚠️ Body language data missing - using penalty score')
+      // Use a LOW penalty score (not generous 58) to incentivize proper setup
+      defaultBody = {
+        posture: { torsoAngleDeg: 0, headTiltDeg: 0, slouchDetected: false, score: 25 },
+        gestures: { left: 'unknown', right: 'unknown', confidence: 0, score: 25 },
+        expressions: { eyeContactScore: 25, smileScore: 25, confidence: 0, score: 25 },
+        overallScore: 25,
+        feedback: ['Body language analysis unavailable - ensure camera is working'],
+      }
     }
 
     const perf = scorePerformance({
       transcript: answer,
-      body: defaultBody,
+      body: defaultBody!,
       assemblyConfidence,
     })
+    
+    // Define weights early for validation response
+    const weights = F1_MVP_SCORING_CONFIG.weights
+    
+    // Validate transcript is not empty or placeholder
+    if (!answer || answer.trim() === '' || answer === '[No response]') {
+      return NextResponse.json({
+        error: 'No answer provided',
+        rubric: { communication: 0, relevance: 0, specificity: 0, consistency: 0, academicPreparedness: 0, financialCapability: 0, intentToReturn: 0 },
+        summary: 'No answer was recorded. Please check your microphone and speak clearly.',
+        recommendations: [
+          'Ensure microphone is unmuted and working',
+          'Speak loud enough for the system to hear',
+          'Check browser permissions for microphone access',
+        ],
+        redFlags: ['No response provided'],
+        contentScore: 0,
+        speechScore: 0,
+        bodyScore: bodyLanguageMissing ? 0 : Math.round(defaultBody!.overallScore),
+        overall: 0,
+        categories: { content: 0, speech: 0, bodyLanguage: 0 },
+        weights,
+      }, { status: 400 })
+    }
 
-    // Try AI scoring for content
+    // Try AI scoring for content (with session memory for consistency checking)
     let aiRes: Awaited<ReturnType<LLMScoringService['scoreAnswer']>> | null = null
     try {
       const service = new LLMScoringService()
@@ -47,8 +84,10 @@ export async function POST(request: NextRequest) {
         question,
         answer,
         interviewContext,
+        sessionMemory, // Pass session memory for contradiction detection
       })
     } catch (e) {
+      console.error('LLM scoring failed, using heuristics:', e)
       // If LLM is not configured or fails, we will fallback to heuristics-only
       aiRes = null
     }
@@ -56,14 +95,28 @@ export async function POST(request: NextRequest) {
     const contentScore = aiRes?.contentScore ?? perf.categories.content
     const speechScore = perf.categories.speech
     const bodyScore = perf.categories.bodyLanguage
-
-    // MVP weights: 0.7 content, 0.2 speech, 0.1 body (per F1 MVP doc section 5)
-    const weights = { content: 0.7, speech: 0.2, bodyLanguage: 0.1 }
+    
+    // CRITICAL FIX: If body language is missing, reduce its weight to 0 and redistribute
+    // This prevents students from getting free points for missing data
+    const adjustedWeights = bodyLanguageMissing
+      ? { content: 0.75, speech: 0.25, body: 0 }  // Redistribute body weight to content/speech
+      : weights
+    
     const overall = Math.round(
-      weights.content * contentScore +
-      weights.speech * speechScore +
-      weights.bodyLanguage * bodyScore
+      adjustedWeights.content * contentScore +
+      adjustedWeights.speech * speechScore +
+      adjustedWeights.body * bodyScore
     )
+    
+    console.log('📊 Scoring complete:', {
+      content: contentScore,
+      speech: speechScore,
+      body: bodyScore,
+      bodyMissing: bodyLanguageMissing,
+      weights: adjustedWeights,
+      overall,
+      usedLLM: !!aiRes,
+    })
 
     return NextResponse.json({
       rubric: aiRes?.rubric ?? {
@@ -94,11 +147,13 @@ export async function POST(request: NextRequest) {
         speech: speechScore,
         bodyLanguage: bodyScore,
       },
-      weights,
+      weights: adjustedWeights,
       // Also return some diagnostics for transparency
       diagnostics: {
         heuristic: perf,
         usedLLM: !!aiRes,
+        bodyLanguageMissing,
+        asrConfidenceProvided: typeof assemblyConfidence === 'number',
       },
     })
   } catch (error) {

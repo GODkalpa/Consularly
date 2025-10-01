@@ -1,9 +1,11 @@
 // Performance scoring utility
 // Combines speech-to-text metrics (AssemblyAI) and body-language metrics (TensorFlow.js)
 // to produce category scores: Content, Body Language, Speech, and an Overall score.
+// Uses unified MVP weights: 0.7 content, 0.2 speech, 0.1 body
 
 import { BodyLanguageScore } from '@/lib/body-language-scoring'
 import { TranscriptionResult } from '@/lib/assemblyai-service'
+import { F1_MVP_SCORING_CONFIG } from '@/lib/f1-mvp-config'
 
 export interface TranscriptMetrics {
   words: number
@@ -282,8 +284,13 @@ export function scorePerformance(inputs: ScoreInputs): PerformanceScoreResult {
   const bodyScore = Math.round(body?.overallScore ?? 50)
   const speechScore = Math.round(0.5 * speech.fluencyScore + 0.3 * speech.clarityScore + 0.2 * speech.toneScore)
 
-  // Overall weights: Content 40%, Body 30%, Speech 30%
-  const overall = Math.round(0.4 * contentScore + 0.3 * bodyScore + 0.3 * speechScore)
+  // Use unified MVP weights: 0.7 content, 0.2 speech, 0.1 body
+  const weights = F1_MVP_SCORING_CONFIG.weights
+  const overall = Math.round(
+    weights.content * contentScore +
+    weights.speech * speechScore +
+    weights.body * bodyScore
+  )
 
   return {
     categories: {

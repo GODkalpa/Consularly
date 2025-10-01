@@ -1,0 +1,1971 @@
+{
+  "questions": [
+    {
+      "id": "USA_001",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why do you want to study in the US?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": [
+        "dream",
+        "best",
+        "world-class",
+        "pursue"
+      ]
+    },
+    {
+      "id": "USA_002",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What will you specialize in for your degree?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_003",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What will be your major?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_004",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Where did you go to school before now?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_005",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Who is your current employer? What do you do?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_006",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why are you planning to continue your education in the United States?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_007",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Can you not continue your education in your home country?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_008",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How will this study program relate to your past work or studies?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_009",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What are you planning to study?",
+      "keywords": [
+        "study",
+        "major",
+        "degree",
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_010",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why can't you continue your education in your home country?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_011",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Have you been to the United States before?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_012",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What is your purpose for studying in the U.S.?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_013",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why have you chosen not to continue your education in Nepal?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_014",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why do you want to study this major?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": [
+        "dream",
+        "best",
+        "world-class",
+        "pursue"
+      ]
+    },
+    {
+      "id": "USA_015",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What is your motivation for studying abroad?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_016",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why did you choose to study in America over other countries?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": [
+        "dream",
+        "best",
+        "world-class",
+        "pursue"
+      ]
+    },
+    {
+      "id": "USA_017",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What are your goals for the future?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_018",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "You already have a Master's degree; why again study MBA or MS in the US?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": [
+        "dream",
+        "best",
+        "world-class",
+        "pursue"
+      ]
+    },
+    {
+      "id": "USA_019",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How many colleges did you apply to?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_020",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How many schools did you get admitted to?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_021",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How many schools rejected you?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_022",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why did you choose this university?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": [
+        "ranked",
+        "best",
+        "reputation"
+      ]
+    },
+    {
+      "id": "USA_023",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Do you know your professors at that university? What are their names?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_024",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What city is your school located in? What do you know about the local area?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_025",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How long are you planning to stay in the United States?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_026",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why did you apply for a summer semester and not for the fall semester?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_027",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "The major you are taking is also available at other universities—why did you decide to go to this university and not one of the others?",
+      "keywords": [
+        "university",
+        "school",
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_028",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "As you chose this specific university, do you happen to know anyone who studies there?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_029",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "In what year did you get your Bachelor's degree and from which university?",
+      "keywords": [
+        "university",
+        "school",
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_030",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why did you choose XYZ University?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": [
+        "ranked",
+        "best",
+        "reputation"
+      ]
+    },
+    {
+      "id": "USA_031",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why did you choose the XYZ program?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_032",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What universities did you apply to?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_033",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How many admits did you receive from schools? What are those?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_034",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What schools rejected you? Can you list those schools?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_035",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What is unique about the university you plan to attend?",
+      "keywords": [
+        "university",
+        "school",
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_036",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Do you know any professors at the university? Did you reach out to them?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_037",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Where is your school located?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_038",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What is your undergraduate degree?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_039",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "easy",
+      "question": "What are your test scores (GRE, GMAT, SAT, TOEFL, IELTS)?",
+      "keywords": [
+        "test",
+        "scores",
+        "gpa"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_040",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "easy",
+      "question": "What was your previous GPA?",
+      "keywords": [
+        "test",
+        "scores",
+        "gpa"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_041",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How will you manage the cultural and educational differences in the US?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_042",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How good is your English?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_043",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why do you want to pursue a degree in the US?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_044",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why not study in Canada, Australia or the UK?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": [
+        "dream",
+        "best",
+        "world-class",
+        "pursue"
+      ]
+    },
+    {
+      "id": "USA_045",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What do you know about US schools?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_046",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Can I see your high school/college diploma or transcripts?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_047",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "We can see you got a scholarship—why do you think they gave it to you?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_048",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What is your GRE score? What is your TOEFL score?",
+      "keywords": [
+        "test",
+        "scores",
+        "gpa"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_049",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Did you take the IELTS or GMAT? What are your scores?",
+      "keywords": [
+        "test",
+        "scores",
+        "gpa"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_050",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "If you did not take the GRE, why did you not take the GRE?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_051",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "easy",
+      "question": "What is your percentage or GPA in your undergraduate?",
+      "keywords": [
+        "test",
+        "scores",
+        "gpa"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_052",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Can I see your marksheet?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_053",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Did you fail any classes during your undergraduate?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_054",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Do you have any pending subjects or backlogs?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_055",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Why did you fail in some subjects?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_056",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What are your interests in extracurricular activities?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_057",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Did you publish any papers during your undergraduate?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_058",
+      "route": "usa_f1",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Did you attend or present at any conferences?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_059",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "What is your monthly income?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_060",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "What is your sponsor's annual income?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_061",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How do you plan to fund the entire duration of your education?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_062",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How much does your school cost?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding",
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_063",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How will you meet these expenses?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_064",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Who is going to sponsor your education?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_065",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "What is your sponsor's occupation?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_066",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How else will you cover the rest of your costs?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_067",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Do you have a copy of your bank statements?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_068",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Did you get offered a scholarship at your school?",
+      "keywords": [
+        "university",
+        "school"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_069",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Can I see your tax returns?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": [
+        "maybe",
+        "thinking",
+        "probably"
+      ]
+    },
+    {
+      "id": "USA_070",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "On your bank statement we can see large deposits—please explain.",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_071",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How are you planning to finance your education?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding",
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_072",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Who is sponsoring you?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_073",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "What is the profession of your sponsor?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_074",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Do you plan on working while you are studying in the US?",
+      "keywords": [
+        "study",
+        "major",
+        "degree",
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_075",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How will you pay for your education?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_076",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How much is your tuition fee?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_077",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How will you pay for your living expenses?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_078",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Do you have any scholarships?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_079",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Did you get any TA, GA or RA?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_080",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Did you reach out to any professors for funding? What did they say?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_081",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "What does your father or mother do?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_082",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How much is your father's or mother's annual income?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_083",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "If the sponsor is not your parent, what does your sponsor do?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_084",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "If the sponsor is not your parent, how much is your sponsor's annual income?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_085",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Does your family have any businesses?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_086",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Can you share tax returns of your sponsor?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding",
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_087",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Do you have any relatives in the US who can sponsor you?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_088",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Are you taking an education loan? Is it approved?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_089",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How much is the loan approval for? Will it pay for your fees and living expenses?",
+      "keywords": [
+        "finance",
+        "sponsor",
+        "funding"
+      ],
+      "followUpTriggers": [
+        "parents will pay",
+        "sufficient",
+        "covered"
+      ]
+    },
+    {
+      "id": "USA_090",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Do you have any on-campus job already offered?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_091",
+      "route": "usa_f1",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "Did you work? What was your compensation during the job?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_092",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Do you have relatives or friends currently in the US?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_093",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "What are your plans after graduation?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": [
+        "maybe",
+        "thinking",
+        "probably"
+      ]
+    },
+    {
+      "id": "USA_094",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Do you have a job or career in mind after you graduate?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_095",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Do you plan on returning to your home country?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": [
+        "maybe",
+        "thinking",
+        "probably"
+      ]
+    },
+    {
+      "id": "USA_096",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "hard",
+      "question": "Are you sure you won't stay in the US?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_097",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Will you continue to work for your current employer after you graduate?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_098",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Do you plan to return to your home country after completing your studies?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": [
+        "maybe",
+        "thinking",
+        "probably"
+      ]
+    },
+    {
+      "id": "USA_099",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Do you have family, relatives, or friends in the US?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_100",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Do you have a job or career in mind post-graduation?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_101",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Do you plan to work in the US?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_102",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Do you want to stay back in the US after your studies?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_103",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Do you plan to settle down in America?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_104",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "Do you plan to do a PhD after your master's?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_105",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "What are your long-term goals after your master's or bachelor's in the US?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_106",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "What do you plan to do in your home country after studying in the US?",
+      "keywords": [
+        "study",
+        "major",
+        "degree",
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_107",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "hard",
+      "question": "What is the guarantee that you will come back to Nepal?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_108",
+      "route": "usa_f1",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "What are your future career goals? How will studying in the US help you achieve them in Nepal?",
+      "keywords": [
+        "study",
+        "major",
+        "degree"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_109",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "Why should I approve your F1 student visa?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_110",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "What were your roles and responsibilities in your previous job?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_111",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "What is your final year project? What is the use of the project?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_112",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "What year did you graduate? Explain about your undergraduate projects?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_113",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "What have you been doing since your graduation?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_114",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "What will you do if your visa is denied?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_115",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "What did you mention in your DS-160 form?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_116",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "Have you ever posted anything politically sensitive or controversial on social media?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_117",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "What will make you return to Nepal after your studies?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": [
+        "maybe",
+        "thinking",
+        "probably"
+      ]
+    },
+    {
+      "id": "USA_118",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "Do you plan to marry during your time in the US?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "USA_119",
+      "route": "usa_f1",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "Do you have any family obligations in Nepal that require your return?",
+      "keywords": [
+        "return",
+        "plans",
+        "future"
+      ],
+      "followUpTriggers": [
+        "maybe",
+        "thinking",
+        "probably"
+      ]
+    },
+    {
+      "id": "UK_001",
+      "route": "uk_student",
+      "category": "intent",
+      "difficulty": "easy",
+      "question": "Which visa Application Centre are you going to use to apply for your student visa to the UK? Tell us which city and center name.",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_002",
+      "route": "uk_student",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How much did the cost of studying influence your decision?",
+      "keywords": [
+        "cost",
+        "living",
+        "expenses"
+      ],
+      "followUpTriggers": [
+        "sufficient",
+        "enough",
+        "covered"
+      ]
+    },
+    {
+      "id": "UK_003",
+      "route": "uk_student",
+      "category": "intent",
+      "difficulty": "hard",
+      "question": "Have you ever received a visa refusal?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_004",
+      "route": "uk_student",
+      "category": "intent",
+      "difficulty": "medium",
+      "question": "Do you know what the rules are for students from other countries working in the UK?",
+      "keywords": [
+        "work",
+        "rules"
+      ],
+      "followUpTriggers": [
+        "yes",
+        "allowed"
+      ]
+    },
+    {
+      "id": "UK_005",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How will you use the contacts you make at university to help you after you finish your studies?",
+      "keywords": [
+        "university",
+        "course"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_006",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How will/what you learn in your course help you in future job?",
+      "keywords": [
+        "university",
+        "course"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_007",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What unique opportunities or resources are available in the UK that you believe will benefit your education?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_008",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What special skills or knowledge do you want to learn at university to help with your future job?",
+      "keywords": [
+        "university",
+        "course"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_009",
+      "route": "uk_student",
+      "category": "personal",
+      "difficulty": "medium",
+      "question": "Can you describe any personal or professional mentors who have inspired or guided you in your academic journey?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_010",
+      "route": "uk_student",
+      "category": "personal",
+      "difficulty": "medium",
+      "question": "What did you research and compare about different universities before deciding on this one?",
+      "keywords": [
+        "research",
+        "compare"
+      ],
+      "followUpTriggers": [
+        "agent",
+        "consultant"
+      ]
+    },
+    {
+      "id": "UK_011",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "hard",
+      "question": "What were the benefits and drawbacks of each university you considered before making your final decision?",
+      "keywords": [
+        "university",
+        "course"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_012",
+      "route": "uk_student",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "What amenities or features were you looking for in your accommodation, such as private or shared facilities?",
+      "keywords": [
+        "cost",
+        "living",
+        "expenses"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_013",
+      "route": "uk_student",
+      "category": "personal",
+      "difficulty": "easy",
+      "question": "What is the best piece of advice you've ever been given?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_014",
+      "route": "uk_student",
+      "category": "personal",
+      "difficulty": "medium",
+      "question": "Tell us of any experiences you have with collaborative or group projects in your academic history.",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_015",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "hard",
+      "question": "Who is your agent, and did they choose this university for you?",
+      "keywords": [
+        "university",
+        "course",
+        "agent",
+        "consultant"
+      ],
+      "followUpTriggers": [
+        "yes",
+        "helped",
+        "suggested"
+      ]
+    },
+    {
+      "id": "UK_016",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Could you highlight the features of the UK's higher education system that you found interesting?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_017",
+      "route": "uk_student",
+      "category": "intent",
+      "difficulty": "medium",
+      "question": "Do you have intention of working while studying in the UK?",
+      "keywords": [
+        "work",
+        "rules"
+      ],
+      "followUpTriggers": [
+        "yes",
+        "allowed"
+      ]
+    },
+    {
+      "id": "UK_018",
+      "route": "uk_student",
+      "category": "personal",
+      "difficulty": "medium",
+      "question": "Why is the UK's mix of cultures important in your choice in studying there?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_019",
+      "route": "uk_student",
+      "category": "post_study",
+      "difficulty": "medium",
+      "question": "What are the professional and personal challenges you might face after graduation?",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_020",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Do you know how will your course or program be assessed?",
+      "keywords": [
+        "university",
+        "course"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_021",
+      "route": "uk_student",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "How much do you expect to spend on living expenses per week?",
+      "keywords": [
+        "cost",
+        "living",
+        "expenses"
+      ],
+      "followUpTriggers": [
+        "sufficient",
+        "enough",
+        "covered"
+      ]
+    },
+    {
+      "id": "UK_022",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Comparisons between Nepal's education and UK's Education system",
+      "keywords": [
+        "general"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_023",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What other UK universities did you research for the course you have applied for? What made those options less attractive than studying at Coventry University?",
+      "keywords": [
+        "university",
+        "course",
+        "research",
+        "compare"
+      ],
+      "followUpTriggers": [
+        "agent",
+        "consultant"
+      ]
+    },
+    {
+      "id": "UK_024",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Is the course you are applying to at Coventry University linked to your career 5-year plan?",
+      "keywords": [
+        "university",
+        "course"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_025",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What is the last course you have completed? Is it in line with your current application and future career plans?",
+      "keywords": [
+        "university",
+        "course"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_026",
+      "route": "uk_student",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "What Plans do you have in terms of accommodation while studying?",
+      "keywords": [
+        "cost",
+        "living",
+        "expenses"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_027",
+      "route": "uk_student",
+      "category": "financial",
+      "difficulty": "medium",
+      "question": "What Research have you done on the cost of living in the UK?",
+      "keywords": [
+        "cost",
+        "living",
+        "expenses",
+        "research",
+        "compare"
+      ],
+      "followUpTriggers": [
+        "agent",
+        "consultant"
+      ]
+    },
+    {
+      "id": "UK_028",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Please explain your last qualification, what you have been doing since graduating and why you would like to study the course you have applied for now.",
+      "keywords": [
+        "university",
+        "course"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_029",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "Can you tell me about your recent studies and/or work positions? What are the reasons for going back to full-time education?",
+      "keywords": [
+        "work",
+        "rules"
+      ],
+      "followUpTriggers": [
+        "yes",
+        "allowed"
+      ]
+    },
+    {
+      "id": "UK_030",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "What is the level of your latest course and which subjects were part of the program? Is what you are applying for related to your previous studies?",
+      "keywords": [
+        "university",
+        "course"
+      ],
+      "followUpTriggers": []
+    },
+    {
+      "id": "UK_031",
+      "route": "uk_student",
+      "category": "academic",
+      "difficulty": "medium",
+      "question": "How does this university's reputation and ranking influence your decision to study here?",
+      "keywords": [
+        "university",
+        "course"
+      ],
+      "followUpTriggers": []
+    }
+  ]
+}

@@ -47,8 +47,9 @@ export default function InterviewRunner() {
   const processingRef = useRef<boolean>(false)
   const [resetKey, setResetKey] = useState(0)
   const answerBufferRef = useRef<string>('')
-  // Track last ASR confidence from transcript segments
-  const lastASRConfidenceRef = useRef<number | undefined>(undefined)
+  // Track ASR confidence from transcript segments (per-segment and aggregated)
+  const asrConfidencesRef = useRef<number[]>([])
+  const captureBodyScoreRef = useRef<(() => BodyLanguageScore | null) | null>(null)
   // Per-answer combined performance results (includes body language)
   const [perfList, setPerfList] = useState<Array<{ overall: number; categories: { content: number; speech: number; bodyLanguage: number } }>>([])
   const [finalReport, setFinalReport] = useState<null | {
@@ -59,6 +60,7 @@ export default function InterviewRunner() {
     recommendations: string[]
   }>(null)
   const preflightRef = useRef<boolean>(false)
+  const permissionRequestingRef = useRef<boolean>(false)
   const [permissionsReady, setPermissionsReady] = useState<boolean>(false)
   const [permError, setPermError] = useState<string | null>(null)
   const { running: micRunning, level: micLevel, error: micError, start: startMic, stop: stopMic } = useMicLevel()
@@ -120,6 +122,12 @@ export default function InterviewRunner() {
 
   // Helper to explicitly request permissions (can be called automatically and via button)
   const requestPermissions = useCallback(async () => {
+    // Prevent concurrent permission requests (causes race conditions and browser freezes)
+    if (permissionRequestingRef.current || permissionsReady) {
+      return permissionsReady
+    }
+    permissionRequestingRef.current = true
+    
     try {
       setPermError(null)
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
@@ -132,35 +140,35 @@ export default function InterviewRunner() {
       setPermError(`${name}: ${msg}`)
       setPermissionsReady(false)
       return false
+    } finally {
+      permissionRequestingRef.current = false
     }
-  }, [])
+  }, [permissionsReady])
 
   // Preflight permission request in the interview tab: ask for camera and mic access
   // without starting any recording until the user clicks Start Interview.
-  // Attempt immediately on mount so the browser shows the prompt right away.
+  // Single unified permission request on mount with debounce protection.
   useEffect(() => {
-    if (preflightRef.current) return
+    if (preflightRef.current || loading) return
     preflightRef.current = true
-    requestPermissions()
-  }, [requestPermissions])
+    // Small delay to let page render first, then request permissions
+    const timer = setTimeout(() => {
+      requestPermissions()
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [requestPermissions, loading])
 
-  // Also attempt after session is loaded and we are in preparing state.
+  // Retry once when tab becomes visible (only if not already requested successfully)
   useEffect(() => {
-    if (!session || session.status !== 'preparing' || permissionsReady) return
-    requestPermissions()
-  }, [session, permissionsReady, requestPermissions])
-
-  // If the tab wasn’t focused when opened, retry once when it becomes visible
-  useEffect(() => {
-    if (!session || session.status !== 'preparing' || permissionsReady) return
+    if (permissionsReady) return
     const handler = () => {
-      if (document.visibilityState === 'visible' && !permissionsReady) {
+      if (document.visibilityState === 'visible' && !permissionsReady && !permissionRequestingRef.current) {
         requestPermissions()
       }
     }
     document.addEventListener('visibilitychange', handler)
     return () => document.removeEventListener('visibilitychange', handler)
-  }, [session, permissionsReady, requestPermissions])
+  }, [permissionsReady, requestPermissions])
 
   // Start microphone level preview while preparing (after permissions granted); stop otherwise
   useEffect(() => {
@@ -188,6 +196,8 @@ export default function InterviewRunner() {
     if (p === 'answer') {
       answerBufferRef.current = ''
       setCurrentTranscript('')
+      // Clear ASR confidence buffer for new answer
+      asrConfidencesRef.current = []
     }
     countdownTimerRef.current = window.setInterval(() => {
       setSecondsRemaining((s) => (s > 0 ? s - 1 : 0))
@@ -256,6 +266,22 @@ export default function InterviewRunner() {
       // Stop timers
       if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
       
+      // CRITICAL FIX: Capture body language score at the exact moment of answer finalization
+      const capturedBodyScore = captureBodyScoreRef.current ? captureBodyScoreRef.current() : null
+      
+      // Calculate average ASR confidence across all segments for this answer
+      const avgConfidence = asrConfidencesRef.current.length > 0
+        ? asrConfidencesRef.current.reduce((sum, c) => sum + c, 0) / asrConfidencesRef.current.length
+        : undefined
+      
+      console.log('📊 Scoring answer:', {
+        transcriptLength: transcriptText.length,
+        bodyScoreCaptured: !!capturedBodyScore,
+        bodyScoreOverall: capturedBodyScore ? Math.round(capturedBodyScore.overallScore) : 'N/A',
+        avgASRConfidence: avgConfidence ? Math.round(avgConfidence * 100) + '%' : 'N/A',
+        confidenceSegments: asrConfidencesRef.current.length,
+      })
+      
       // Kick off combined scoring (content + speech + body) in parallel
       const currentQText = session.questions[session.currentQuestionIndex]?.question || ''
       const scoringPromise = (async () => {
@@ -272,8 +298,8 @@ export default function InterviewRunner() {
             body: JSON.stringify({
               question: currentQText,
               answer: transcriptText,
-              bodyLanguage: bodyScore || undefined,
-              assemblyConfidence: lastASRConfidenceRef.current,
+              bodyLanguage: capturedBodyScore || undefined,
+              assemblyConfidence: avgConfidence,
               interviewContext: ic,
             })
           })
@@ -287,7 +313,9 @@ export default function InterviewRunner() {
               }}])
             }
           }
-        } catch {}
+        } catch (err) {
+          console.error('❌ Scoring API failed:', err)
+        }
       })()
 
       const res = await fetch('/api/interview/session', {
@@ -323,6 +351,9 @@ export default function InterviewRunner() {
         questions: [...prev.questions, uiQ],
         currentQuestionIndex: prev.currentQuestionIndex + 1,
       } : prev)
+      // Clear ASR confidence buffer for next answer
+      asrConfidencesRef.current = []
+      
       // UK flow: new question => 30s prep again
       if (session.route === 'uk_student') {
         startPhase('prep', 30)
@@ -341,10 +372,13 @@ export default function InterviewRunner() {
 
   const handleTranscriptComplete = async (t: TranscriptionResult) => {
     if (!session || session.status !== 'active') return
-    // Track last ASR confidence
-    if (typeof t.confidence === 'number') {
-      lastASRConfidenceRef.current = t.confidence
+    
+    // CRITICAL FIX: Track ASR confidence for ALL segments (accumulate for averaging)
+    if (typeof t.confidence === 'number' && t.confidence > 0) {
+      asrConfidencesRef.current.push(t.confidence)
+      console.log('🎤 ASR confidence:', Math.round(t.confidence * 100) + '%', `(${asrConfidencesRef.current.length} segments)`)
     }
+    
     // UK: Do NOT auto-finalize on a transcript segment.
     // Accumulate text only during the answer window; finalize via timer or Stop & Next.
     if (session.route === 'uk_student') {
@@ -373,6 +407,7 @@ export default function InterviewRunner() {
 
   const computeFinalReport = async (finalApiSession: any) => {
     try {
+      // CRITICAL FIX: Pass per-answer scores to final evaluation for consistency
       const res = await fetch('/api/interview/final', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -380,6 +415,7 @@ export default function InterviewRunner() {
           route: session?.route,
           studentProfile: finalApiSession.studentProfile,
           conversationHistory: finalApiSession.conversationHistory,
+          perAnswerScores: perfList,  // Include detailed per-answer scoring data
         })
       })
       if (res.ok) {
@@ -412,9 +448,7 @@ export default function InterviewRunner() {
     const total = session.route === 'uk_student' ? 16 : session.questions.length
     return Math.round(((session.currentQuestionIndex + 1) / total) * 100)
   }, [session])
-  const bodyScoreValue = Math.round((bodyScore?.overallScore ?? 0))
   const phaseLabel = phase ? (phase === 'prep' ? 'Prep' : 'Answer') : null
-  const showBodyBadge = session?.status === 'active' && bodyScoreValue > 0
 
   // Aggregate combined performance across answers (shown on completion)
   const combinedAggregate = useMemo(() => {
@@ -439,7 +473,12 @@ export default function InterviewRunner() {
 
   if (loading) {
     return (
-      <div className="h-[calc(100vh-4rem)] flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
+      <div className="h-[calc(100vh-4rem)] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+          <div className="text-sm text-muted-foreground">Loading interview...</div>
+        </div>
+      </div>
     )
   }
 
@@ -538,7 +577,7 @@ export default function InterviewRunner() {
                 <CardTitle className="text-2xl">Camera & Microphone Access</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-center text-muted-foreground">We need access to your camera and microphone to conduct the interview. Please click <span className="font-semibold text-foreground">Allow</span> in the browser prompt.</p>
+                <p className="text-sm text-center text-muted-foreground">We need access to your camera and microphone to conduct the interview. <br/><span className="font-semibold text-foreground">Please click &ldquo;Allow&rdquo; when your browser asks for permission.</span></p>
                 {permError && (
                   <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                     <p className="text-xs text-destructive font-medium">{permError}</p>
@@ -663,6 +702,7 @@ export default function InterviewRunner() {
               questionText={''}
               currentTranscript={currentTranscript}
               onScore={setBodyScore}
+              captureScoreRef={captureBodyScoreRef}
               startedAt={session.startTime}
               statusBadge={session.status === 'active' ? 'Live' : 'Preparing'}
               candidateName={session.studentName}
@@ -695,12 +735,6 @@ export default function InterviewRunner() {
               <div className="text-xs text-gray-600 dark:text-gray-400">Progress</div>
               <div className="text-sm font-semibold">{progressPct}%</div>
             </div>
-            {showBodyBadge && (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800">
-                <div className="text-xs text-gray-600 dark:text-gray-400">Body Language</div>
-                <div className="text-sm font-semibold">{bodyScoreValue}/100</div>
-              </div>
-            )}
             {session.status === 'preparing' && !permissionsReady && (
               <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={requestPermissions}>
                 <Play className="h-5 w-5 mr-2" /> Allow Camera & Microphone

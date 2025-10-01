@@ -23,7 +23,8 @@ import {
   TrendingUp,
   CheckCircle,
   User,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { AssemblyAITranscription } from '@/components/speech/AssemblyAITranscription';
 import { InterviewStage } from '@/components/interview/InterviewStage';
@@ -91,6 +92,8 @@ export function InterviewSimulation() {
   const TARGET_QUESTIONS = 8; // default; UK completion handled server-side at 16
   const [showQuotaDialog, setShowQuotaDialog] = useState(false);
   const [quotaMessage, setQuotaMessage] = useState('');
+  const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   // Timers and activity tracking
   const questionTimerRef = useRef<number | null>(null);
@@ -203,6 +206,21 @@ export function InterviewSimulation() {
   // Initialize new AI-driven interview session
   const startNewSession = async () => {
     if (!studentName.trim()) return;
+    if (isStarting) return; // Prevent double-click
+
+    setIsStarting(true);
+    setStartError(null);
+
+    // Open interview tab IMMEDIATELY (before API call) to avoid popup blocker
+    let interviewWindow: Window | null = null;
+    try {
+      interviewWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
+      if (interviewWindow) {
+        interviewWindow.document.write('<html><body style="margin:0;padding:0;background:#0f172a;color:white;font-family:system-ui;display:flex;align-items:center;justify-center;min-height:100vh"><div style="text-align:center"><div style="font-size:48px;margin-bottom:16px">🎯</div><div style="font-size:24px;font-weight:600;margin-bottom:8px">Loading Interview...</div><div style="font-size:16px;opacity:0.7">Setting up your mock interview session</div></div></body></html>');
+      }
+    } catch (e) {
+      console.warn('Could not pre-open window:', e);
+    }
 
     try {
       // Get auth token for quota validation
@@ -229,9 +247,14 @@ export function InterviewSimulation() {
 
       if (!res.ok) {
         const error = await res.json();
+        // Close the loading window on error
+        if (interviewWindow) {
+          try { interviewWindow.close(); } catch {}
+        }
         if (error.error === 'Quota exceeded') {
           setQuotaMessage(error.message || 'Contact support for more interviews.');
           setShowQuotaDialog(true);
+          setIsStarting(false);
           return;
         }
         throw new Error(error.error || `Failed to start session: ${res.status}`);
@@ -258,7 +281,7 @@ export function InterviewSimulation() {
       setApiSession(seededApiSession);
       setCurrentLLMQuestion(firstQ);
 
-      // Redirect to dedicated interview page with init payload
+      // Store init payload for interview page
       try {
         const key = `interview:init:${apiSess.id}`;
         const payload = JSON.stringify({
@@ -268,16 +291,25 @@ export function InterviewSimulation() {
           studentName: studentName.trim(),
         });
         // Store in both sessionStorage (same-tab) and localStorage (cross-tab)
-        try { sessionStorage.setItem(key, payload) } catch {}
-        try { localStorage.setItem(key, payload) } catch {}
-      } catch {}
-      // Open interview in a NEW TAB as requested
-      try {
-        const url = `/interview/${apiSess.id}`;
-        window.open(url, '_blank', 'noopener,noreferrer');
-      } catch {
-        // Fallback to same-tab navigation if popups are blocked
-        router.push(`/interview/${apiSess.id}`);
+        try { sessionStorage.setItem(key, payload) } catch (e) { console.warn('sessionStorage failed:', e); }
+        try { localStorage.setItem(key, payload) } catch (e) { console.warn('localStorage failed:', e); }
+      } catch (e) {
+        console.warn('Storage failed:', e);
+      }
+
+      // Navigate the pre-opened window to the interview page
+      const url = `/interview/${apiSess.id}`;
+      if (interviewWindow && !interviewWindow.closed) {
+        try {
+          interviewWindow.location.href = url;
+        } catch {
+          // If navigation fails, close and fallback to router.push
+          try { interviewWindow.close(); } catch {}
+          router.push(url);
+        }
+      } else {
+        // Fallback: if popup was blocked or closed, navigate in same tab
+        router.push(url);
       }
       return;
 
@@ -302,7 +334,18 @@ export function InterviewSimulation() {
       setResetKey((k) => k + 1); // ensure clean transcript at start
       setLastAnsweredIndex(-1);
     } catch (e) {
-      console.error(e);
+      console.error('Failed to start interview:', e);
+      // Close the loading window on error
+      if (interviewWindow) {
+        try { interviewWindow.close(); } catch {}
+      }
+      setStartError(
+        e instanceof Error 
+          ? e.message 
+          : 'Failed to start interview session. Please check your internet connection and try again.'
+      );
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -662,13 +705,33 @@ export function InterviewSimulation() {
                 </SelectContent>
               </Select>
             </div>
+            {startError && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-sm font-medium text-destructive mb-1">Failed to Start Interview</div>
+                    <div className="text-xs text-destructive/80">{startError}</div>
+                  </div>
+                </div>
+              </div>
+            )}
             <Button 
               onClick={startNewSession}
-              disabled={!studentName.trim()}
+              disabled={!studentName.trim() || isStarting}
               className="w-full"
             >
-              <Play className="h-4 w-4 mr-2" />
-              Start Interview
+              {isStarting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Starting Interview...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Start Interview
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>

@@ -2,6 +2,8 @@
 import type { InterviewRoute } from './interview-routes'
 import { UK_QUESTION_POOL } from './uk-questions-data'
 import { F1_VISA_QUESTIONS } from './f1-questions-data'
+import { SmartQuestionSelector, loadQuestionBank } from './smart-question-selector'
+import type { InterviewRoute as LLMRoute } from './llm-provider-selector'
 
 interface QuestionGenerationRequest {
   previousQuestion?: string;
@@ -34,62 +36,102 @@ interface QuestionGenerationResponse {
 }
 
 export class LLMQuestionService {
-  private apiKey: string;
-  private baseUrl = 'https://openrouter.ai/api/v1';
+  private questionSelector: SmartQuestionSelector | null = null;
+  private initPromise: Promise<void>;
 
   constructor() {
-    this.apiKey = process.env.OPENROUTER_API_KEY || '';
-    if (!this.apiKey) {
-      throw new Error('OPENROUTER_API_KEY environment variable is required');
+    // Initialize question selector asynchronously
+    this.initPromise = this.initialize();
+  }
+
+  private async initialize() {
+    try {
+      const questionBank = await loadQuestionBank();
+      this.questionSelector = new SmartQuestionSelector(questionBank);
+      console.log('[Question Service] Initialized with smart question selector');
+    } catch (error) {
+      console.error('[Question Service] Failed to initialize smart selector:', error);
+      // Will fall back to legacy method
     }
   }
 
   async generateQuestion(request: QuestionGenerationRequest): Promise<QuestionGenerationResponse> {
-    const prompt = this.buildPrompt(request);
-    
-    try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
-          'X-Title': 'Visa Mock Interview System'
-        },
-        body: JSON.stringify({
-          model: process.env.LLM_MODEL || 'openai/gpt-3.5-turbo', // Configurable model
-          messages: [
-            {
-              role: 'system',
-              content: this.getSystemPrompt(request.interviewContext.route)
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 500
-        })
-      });
+    // Wait for initialization
+    await this.initPromise;
 
-      if (!response.ok) {
-        throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
+    const route = request.interviewContext.route || 'usa_f1';
+    const { studentProfile, conversationHistory, currentQuestionNumber } = request.interviewContext;
+
+    // Try smart question selector first
+    if (this.questionSelector) {
+      try {
+        // Build category coverage from conversation history
+        const categoryCoverage: Record<string, number> = {};
+        conversationHistory.forEach(h => {
+          const question = h.question.toLowerCase();
+          if (/financ|fund|cost|sponsor|pay|tuition|£|\$/i.test(question)) categoryCoverage['financial'] = (categoryCoverage['financial'] || 0) + 1;
+          else if (/course|university|study|major|degree|program/i.test(question)) categoryCoverage['academic'] = (categoryCoverage['academic'] || 0) + 1;
+          else if (/return|plan|after|future|career/i.test(question)) categoryCoverage['post_study'] = (categoryCoverage['post_study'] || 0) + 1;
+          else if (/accommodation|housing|living/i.test(question)) categoryCoverage['intent'] = (categoryCoverage['intent'] || 0) + 1;
+          else categoryCoverage['personal'] = (categoryCoverage['personal'] || 0) + 1;
+        });
+
+        const context = {
+          route: route as LLMRoute,
+          profile: {
+            name: studentProfile.name,
+            university: studentProfile.intendedUniversity,
+            course: studentProfile.fieldOfStudy,
+            degree: studentProfile.previousEducation,
+          },
+          history: conversationHistory.map(h => ({
+            question: h.question,
+            answer: h.answer,
+          })),
+          askedQuestionIds: [], // We don't track IDs in current system, but selector will avoid repeats
+          detectedRedFlags: this.detectRedFlags(conversationHistory),
+          categoryCoverage,
+        };
+
+        const result = await this.questionSelector.selectNextQuestion(context);
+        
+        console.log(`[Question Service] ${result.type} question selected:`, result.reasoning);
+
+        return {
+          question: result.question,
+          questionType: this.inferQuestionType(result.question),
+          difficulty: 'medium',
+          expectedAnswerLength: 'medium',
+          tips: result.reasoning,
+        };
+      } catch (error) {
+        console.error('[Question Service] Smart selector failed, using fallback:', error);
       }
-
-      const data = await response.json();
-      const generatedContent = data.choices[0]?.message?.content;
-
-      if (!generatedContent) {
-        throw new Error('No content generated from LLM');
-      }
-
-      return this.parseResponse(generatedContent);
-    } catch (error) {
-      console.error('Error generating question:', error);
-      // Fallback to predefined questions if API fails
-      return this.getFallbackQuestion(request);
     }
+
+    // Legacy fallback
+    return this.getFallbackQuestion(request);
+  }
+
+  private detectRedFlags(history: Array<{ question: string; answer: string }>): string[] {
+    const flags: string[] = [];
+    const allAnswers = history.map(h => h.answer.toLowerCase()).join(' ');
+    
+    if (/(agent|consultant).*?(told|said|helped|chose)/i.test(allAnswers)) flags.push('agent_dependency');
+    if (!/£\s*1[8-9],?\d{3}|\$\s*[2-9]\d,?\d{3}/i.test(allAnswers)) flags.push('no_specific_amounts');
+    if (/(maybe|probably|thinking|might).*?(return|go back)/i.test(allAnswers)) flags.push('weak_return_intent');
+    if (/(dream|world-class|best|pursue)/i.test(allAnswers)) flags.push('coached_language');
+    
+    return flags;
+  }
+
+  private inferQuestionType(question: string): 'academic' | 'financial' | 'intent' | 'background' | 'follow-up' {
+    const q = question.toLowerCase();
+    if (/financ|fund|cost|sponsor|pay|tuition|£|\$/i.test(q)) return 'financial';
+    if (/course|university|study|major|degree|module/i.test(q)) return 'academic';
+    if (/return|plan|after|future|career|post/i.test(q)) return 'intent';
+    if (/why|background|previous|experience/i.test(q)) return 'background';
+    return 'follow-up';
   }
 
   private getSystemPrompt(route?: InterviewRoute): string {

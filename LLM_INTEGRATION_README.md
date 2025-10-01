@@ -1,20 +1,23 @@
-# Dynamic Interview Question Generation with LLM Integration
+# Dynamic Interview Question Generation with Gemini AI
 
-This document explains how to use the LLM-powered dynamic interview question generation system for visa mock interviews.
+This document explains how to use the Gemini AI-powered dynamic interview question generation and scoring system for visa mock interviews.
 
 ## Overview
 
-The system uses OpenRouter API (with free GPT-3.5-turbo) to generate contextual interview questions that adapt based on student responses. It creates realistic visa interview scenarios that test knowledge, communication skills, and adaptability.
+The system uses **Google Gemini 2.5 Flash** (free tier) to generate contextual interview questions and provide strict, evidence-based scoring aligned with real US Embassy Nepal F1 and UK Home Office criteria. It creates realistic visa interview scenarios with adaptive follow-ups and session memory tracking for consistency.
 
 ## Setup
 
 ### 1. Environment Configuration
 
-Add your OpenRouter API key to your `.env` file:
+Add your Gemini API key to your `.env` file:
 
 ```bash
-# Get your free API key from https://openrouter.ai/keys
-OPENROUTER_API_KEY=your_openrouter_api_key_here
+# Get your free API key from https://aistudio.google.com/app/apikey
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# LLM Model (uses Gemini 2.5 Flash by default)
+LLM_MODEL=gemini-2.5-flash
 ```
 
 ### 2. Install Dependencies
@@ -157,15 +160,21 @@ Fallback behavior: if the LLM is not configured or temporarily unavailable, the 
 
 Environment variables:
 ```bash
-# Required for LLM scoring (get a free key at https://openrouter.ai/keys)
-OPENROUTER_API_KEY=your_openrouter_api_key_here
+# Required for LLM scoring (get a free key at https://aistudio.google.com/app/apikey)
+GEMINI_API_KEY=your_gemini_api_key_here
 
-# Optional: choose model (defaults to openai/gpt-3.5-turbo)
-LLM_MODEL=openai/gpt-4o-mini
+# Optional: choose model (defaults to gemini-2.5-flash)
+LLM_MODEL=gemini-2.5-flash
 
-# Optional: site URL for OpenRouter headers
+# Optional: site URL for reference
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
+
+**Why Gemini 2.5 Flash?**
+- **Free tier** with generous limits
+- **Superior reasoning** compared to GPT-3.5-turbo for nuanced F1 interview evaluation
+- **Structured JSON output** support built-in
+- **Lower latency** (~1-2 seconds per request)
 
 ## Usage Examples
 
@@ -334,23 +343,60 @@ npm run dev
 npx ts-node examples/interview-simulation-example.ts
 ```
 
+## Strict Scoring System
+
+### Nepal F1 Interview Criteria
+
+The system now uses **strict, evidence-based scoring** aligned with real US Embassy Nepal practices:
+
+**Scoring Philosophy:**
+- Starts at 50/100 baseline (neutral)
+- Adjusts UP for concrete evidence (numbers, names, specifics)
+- Adjusts DOWN for vagueness, contradictions, coached language
+- Tracks session memory to detect contradictions between answers
+
+**Common Nepal F1 Red Flags (auto-penalized):**
+1. Financial vagueness without amounts ("my father will sponsor")
+2. Coached phrases ("world-class education", "pursue my dreams")
+3. Weak return intent with US relatives mentioned
+4. Cannot explain program fit beyond rankings
+5. Contradictions between answers (tracked via session memory)
+
+**Scoring Benchmarks:**
+- **90-100**: Exceptional - specific amounts, consistent, strong evidence
+- **70-89**: Good - some specifics, minor gaps
+- **50-69**: Borderline - vague on 1-2 areas, coached language
+- **30-49**: Weak - multiple red flags, contradictions
+- **0-29**: Very weak - major red flags, likely rejection
+
+### Session Memory Tracking
+
+The system now tracks facts across answers:
+- Total cost, scholarship, loan amounts
+- Sponsor identity and occupation
+- Career plans and return destination
+- Relatives in US (red flag)
+
+If a student contradicts themselves (e.g., "$40k" → "$50k"), the consistency score drops to 20-40 range.
+
 ## Troubleshooting
 
 ### Common Issues:
 
-1. **"OPENROUTER_API_KEY not found"**
-   - Add API key to `.env` file
+1. **"GEMINI_API_KEY not found"**
+   - Get free key from https://aistudio.google.com/app/apikey
+   - Add to `.env` file
    - Restart development server
 
 2. **"Failed to generate question"**
    - Check internet connection
-   - Verify API key is valid
-   - System will use fallback questions
+   - Verify API key is valid (test at https://aistudio.google.com)
+   - System will use fallback questions from question bank
 
-3. **Poor question quality**
-   - Ensure student profile is complete
-   - Provide detailed conversation history
-   - Check prompt engineering in `llm-service.ts`
+3. **Low scores on good answers**
+   - System is intentionally strict (mimics real Nepal F1 interviews)
+   - Ensure answers include specific numbers, names, evidence
+   - Check for contradictions with previous answers
 
 ## Future Enhancements
 

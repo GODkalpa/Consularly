@@ -137,16 +137,25 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
         canvasRef.current.width = cfg.width
         canvasRef.current.height = cfg.height
         // Use willReadFrequently option to optimize for frequent drawing operations
-        // and avoid conflicts with WebCodec/other canvas consumers
+        // Try different context configurations in order of preference for compatibility
         try {
+          // First try with desynchronized flag (best performance)
           drawCtxRef.current = canvasRef.current.getContext('2d', { 
             willReadFrequently: false,
-            desynchronized: true // Allow canvas to be desynchronized for better performance
+            desynchronized: true
           })
-        } catch (ctxErr) {
-          console.warn('Failed to get 2d context:', ctxErr)
-          // Fallback to default context options
-          drawCtxRef.current = canvasRef.current.getContext('2d')
+        } catch (ctxErr1) {
+          console.warn('Canvas context with desynchronized failed, trying without it:', ctxErr1)
+          try {
+            // Fallback without desynchronized
+            drawCtxRef.current = canvasRef.current.getContext('2d', { 
+              willReadFrequently: false
+            })
+          } catch (ctxErr2) {
+            console.warn('Canvas context with willReadFrequently:false failed, using defaults:', ctxErr2)
+            // Final fallback to completely default context
+            drawCtxRef.current = canvasRef.current.getContext('2d')
+          }
         }
       }
     } catch (e: any) {
@@ -184,16 +193,37 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
 
   const loadDetectors = useCallback(async () => {
     const errors: string[] = []
-    // Lazy-load TFJS core and WebGL backend only when we actually start analysis
+    // Lazy-load TFJS core and backends only when we actually start analysis
     let tfMod: any = null
+    let backendName = 'webgl'
+    
     try {
       tfMod = await import('@tensorflow/tfjs-core')
-      await import('@tensorflow/tfjs-backend-webgl')
       await import('@tensorflow/tfjs-converter')
-      await tfMod.setBackend('webgl')
-      await tfMod.ready()
+      
+      // Try WebGL first (best performance)
+      try {
+        await import('@tensorflow/tfjs-backend-webgl')
+        await tfMod.setBackend('webgl')
+        await tfMod.ready()
+        console.log('✅ TensorFlow.js WebGL backend initialized')
+      } catch (webglError: any) {
+        console.warn('⚠️ WebGL backend failed, falling back to CPU:', webglError?.message || webglError)
+        
+        // Fallback to CPU backend (slower but more compatible)
+        try {
+          await import('@tensorflow/tfjs-backend-cpu')
+          await tfMod.setBackend('cpu')
+          await tfMod.ready()
+          backendName = 'cpu'
+          console.log('✅ TensorFlow.js CPU backend initialized (fallback)')
+        } catch (cpuError: any) {
+          errors.push('Failed to initialize TensorFlow.js (both WebGL and CPU backends failed). WebGL error: ' + (webglError?.message || webglError) + '. CPU error: ' + (cpuError?.message || cpuError))
+          throw new Error('No TensorFlow.js backend available')
+        }
+      }
     } catch (e: any) {
-      errors.push('Failed to initialize TensorFlow.js backend: ' + (e?.message || e))
+      errors.push('Failed to initialize TensorFlow.js: ' + (e?.message || e))
     }
 
     try {
@@ -445,19 +475,36 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     rafRef.current = requestAnimationFrame(step)
   }, [loadDetectors, setupCamera, state.running, step])
 
-  const disposeDetectors = useCallback(() => {
+  const disposeDetectors = useCallback(async () => {
     try { detectorsRef.current.pose?.dispose?.() } catch {}
     try { detectorsRef.current.hands?.dispose?.() } catch {}
     try { detectorsRef.current.face?.dispose?.() } catch {}
     detectorsRef.current = {}
+    
+    // Dispose TensorFlow.js backend to free WebGL contexts
+    try {
+      const tfMod = await import('@tensorflow/tfjs-core')
+      const backend = tfMod.getBackend()
+      if (backend === 'webgl') {
+        const webglBackend = tfMod.backend()
+        if (webglBackend && typeof webglBackend.dispose === 'function') {
+          webglBackend.dispose()
+          console.log('🧹 Disposed WebGL backend')
+        }
+      }
+      // Dispose all memory tensors
+      tfMod.disposeVariables()
+    } catch (e) {
+      console.warn('Failed to dispose TensorFlow backend:', e)
+    }
   }, [])
 
-  const stop = useCallback(() => {
+  const stop = useCallback(async () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     rafRef.current = null
     // Stop camera
     stopStream()
-    try { disposeDetectors() } catch {}
+    try { await disposeDetectors() } catch {}
     setState((s) => ({ ...s, running: false, previewing: false }))
   }, [stopStream, disposeDetectors])
 
@@ -465,7 +512,8 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       stopStream()
-      try { disposeDetectors() } catch {}
+      // Fire-and-forget async cleanup on unmount
+      disposeDetectors().catch(() => {})
     }
   }, [stopStream, disposeDetectors])
 
@@ -551,5 +599,32 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     setState((s) => ({ ...s, previewing: false }))
   }, [state.previewing, state.running, stopStream])
 
-  return { state, start, stop, startPreview, stopPreview, videoRef, canvasRef, cameras, switchCamera, refreshCameras }
+  // Capture current score on-demand (for accurate moment-of-answer capture)
+  const captureScore = useCallback((): BodyLanguageScore | null => {
+    if (!state.running || !state.score) {
+      console.warn('⚠️ Body language tracker not running or no score available')
+      return null
+    }
+    
+    // Validate the score has meaningful data (not just defaults)
+    const hasValidData = state.score.expressions.confidence > 0.3 || 
+                         state.score.gestures.confidence > 0.3 ||
+                         (state.pose && state.pose.keypoints?.length > 0)
+    
+    if (!hasValidData) {
+      console.warn('⚠️ Body language score confidence too low - data may be invalid')
+      return null
+    }
+    
+    console.log('✅ Captured body language score:', {
+      overall: Math.round(state.score.overallScore),
+      posture: Math.round(state.score.posture.score),
+      gestures: Math.round(state.score.gestures.score),
+      expressions: Math.round(state.score.expressions.score),
+    })
+    
+    return state.score
+  }, [state.running, state.score, state.pose])
+
+  return { state, start, stop, startPreview, stopPreview, captureScore, videoRef, canvasRef, cameras, switchCamera, refreshCameras }
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { selectLLMProvider, callLLMProvider, logProviderSelection, type InterviewRoute } from '@/lib/llm-provider-selector'
 
 // Final interview evaluation focused on UK pre-CAS metrics with graceful fallback
 // Request body:
@@ -19,29 +20,40 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { route, studentProfile, conversationHistory } = body as {
+    const { route, studentProfile, conversationHistory, perAnswerScores } = body as {
       route?: 'uk_student' | 'usa_f1'
       studentProfile: { name: string; country: string; intendedUniversity?: string; fieldOfStudy?: string; previousEducation?: string }
       conversationHistory: Array<{ question: string; answer: string; timestamp?: string; questionType?: string; difficulty?: string }>
+      perAnswerScores?: Array<{ overall: number; categories: { content: number; speech: number; bodyLanguage: number } }>
     }
 
     if (!studentProfile || !Array.isArray(conversationHistory)) {
       return NextResponse.json({ error: 'Missing studentProfile or conversationHistory' }, { status: 400 })
     }
 
-    // Try LLM-based final evaluation if configured
-    const apiKey = process.env.OPENROUTER_API_KEY
-    if (apiKey) {
-      try {
-        const llmRes = await evaluateWithLLM({ route, studentProfile, conversationHistory, apiKey })
-        if (llmRes) return NextResponse.json(llmRes)
-      } catch {
-        // fall through to heuristics
-      }
+    // CRITICAL FIX: Combine per-answer scores with LLM evaluation for consistency
+    const avgPerAnswerScore = perAnswerScores && perAnswerScores.length > 0
+      ? perAnswerScores.reduce((sum, s) => sum + s.overall, 0) / perAnswerScores.length
+      : null
+    
+    console.log('📄 Final evaluation:', {
+      route,
+      answersCount: conversationHistory.length,
+      perAnswerScoresCount: perAnswerScores?.length || 0,
+      avgPerAnswerScore: avgPerAnswerScore ? Math.round(avgPerAnswerScore) : 'N/A',
+    })
+    
+    // Try LLM-based final evaluation using provider selector
+    try {
+      const llmRes = await evaluateWithLLM({ route, studentProfile, conversationHistory, perAnswerScores })
+      if (llmRes) return NextResponse.json(llmRes)
+    } catch (e) {
+      console.error('LLM final evaluation failed:', e)
+      // fall through to heuristics
     }
 
     // Heuristic fallback (deterministic, no external calls)
-    const fallback = evaluateHeuristically(route, conversationHistory)
+    const fallback = evaluateHeuristically(route, conversationHistory, perAnswerScores)
     return NextResponse.json(fallback)
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -56,22 +68,103 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function evaluateWithLLM({ route, studentProfile, conversationHistory, apiKey }: { route?: 'uk_student' | 'usa_f1'; studentProfile: any; conversationHistory: any[]; apiKey: string }) {
-  const baseUrl = 'https://openrouter.ai/api/v1'
-  const system = route === 'uk_student'
-    ? `You are an expert UK pre-CAS (credibility) evaluator. Produce a FINAL decision after reviewing the entire interview.
-Score along these UK-focused dimensions: communication, courseAndUniversityFit, financialRequirement, accommodationLogistics, complianceCredibility, postStudyIntent.
-- Be unbiased and use only information evident in the answers.
-- Penalize vagueness, contradictions, and lack of specifics.
-- Decision must be one of: accepted, rejected, borderline.
-Return STRICT JSON only.`
-    : `You are an expert visa interview evaluator. Produce a FINAL decision after reviewing the entire interview.
-Score along dimensions: communication, content, financials, intent.
-Return STRICT JSON only.`
+async function evaluateWithLLM({ route, studentProfile, conversationHistory, perAnswerScores }: { 
+  route?: 'uk_student' | 'usa_f1'; 
+  studentProfile: any; 
+  conversationHistory: any[];
+  perAnswerScores?: Array<{ overall: number; categories: { content: number; speech: number; bodyLanguage: number } }>;
+}) {
+  const effectiveRoute: InterviewRoute = route || 'usa_f1'
+  
+  // Select provider for final evaluation
+  const config = selectLLMProvider(effectiveRoute, 'final_evaluation')
+  if (!config) {
+    console.warn('[Final Evaluation] No provider available')
+    return null
+  }
+  
+  logProviderSelection(effectiveRoute, 'final_evaluation', config)
+  
+  const system = effectiveRoute === 'uk_student'
+    ? `You are a STRICT UK Home Office credibility evaluator conducting FINAL pre-CAS assessment. Review the ENTIRE interview and make a FINAL DECISION based on real UK visa refusal patterns.
 
+CRITICAL EVALUATION CRITERIA (UK Pre-CAS Standards):
+1. **courseAndUniversityFit** (0-100):
+   - Can name 3+ specific modules from chosen course (not generic "business" or "IT")
+   - Explains why THIS course fits their background/career goals (not just ranking)
+   - Shows independent research (faculty, facilities, course structure)
+   - RED FLAG: Only knows university reputation, cannot discuss course content
+
+2. **financialRequirement** (0-100):
+   - Knows exact maintenance amount (£18,000+ for London, varies for other cities)
+   - Understands 28-day bank balance rule explicitly
+   - Clear tuition + living cost breakdown
+   - RED FLAG: Says "sufficient funds" without specific amounts or 28-day rule
+
+3. **accommodationLogistics** (0-100):
+   - Specific plan: location name, cost per week/month, pre-booked or planned
+   - RED FLAG: "I'll find somewhere" or completely vague
+
+4. **complianceCredibility** (0-100):
+   - Understands 20 hours/week work limit during term
+   - Knows CAS requirements, attendance monitoring
+   - Shows independent application process (not agent-led)
+   - RED FLAG: Heavily references agent, doesn't know work rules or compliance basics
+
+5. **postStudyIntent** (0-100):
+   - Clear post-study plan (return home OR understands Graduate Route properly)
+   - RED FLAG: Vague about future plans, or shows immigration intent without proper route
+
+6. **communication** (0-100):
+   - Natural, confident answers (not scripted/coached)
+   - Consistent across all answers (no contradictions)
+
+STRICT DECISION THRESHOLDS (Real UK standards):
+- **accepted**: ALL dimensions ≥75 AND no major red flags (genuine student, likely approved)
+- **borderline**: Any dimension 55-74 OR 1-2 minor red flags (needs improvement, 50/50 chance)
+- **rejected**: ANY dimension <55 OR any major red flag (likely refusal - UK rejects ~35% of student applications)
+
+MAJOR RED FLAGS (instant rejection):
+- Cannot name 3+ course modules
+- No understanding of 28-day bank rule
+- Complete accommodation ignorance
+- Work visa rule confusion (20h limit)
+- Heavy agent dependency without independent knowledge
+- Financial contradictions or vagueness
+
+BE EXTREMELY HARSH - UK credibility interviews were introduced to catch non-genuine students. Return STRICT JSON only.`
+    : `You are a STRICT US Embassy Nepal F1 visa officer conducting FINAL interview assessment. Review the ENTIRE interview transcript and make a FINAL decision.
+
+EVALUATION CRITERIA (Nepal F1 specific):
+- communication: Clear, coherent, confident (not coached/scripted)
+- content: Solid academic rationale for THIS program at THIS university
+- financials: SPECIFIC amounts, sponsor details (name, occupation, income), no vagueness
+- intent: Strong Nepal ties, concrete return plans (not "I will return to serve my country")
+
+COMMON RED FLAGS = AUTO-REJECT:
+- Financial vagueness (no specific amounts mentioned)
+- Contradictions between answers
+- Weak return intent + mentions relatives in US
+- Cannot explain program fit beyond rankings
+
+DECISION THRESHOLDS:
+- accepted: All dimensions >75, no major red flags
+- borderline: Mixed scores 60-75, minor concerns
+- rejected: Any dimension <60 OR any major red flag
+
+BE STRICT - Real F1 rejection rate from Nepal is 30-40%. Return STRICT JSON only.`
+
+  // Include per-answer scores in the prompt for consistency
   const history = conversationHistory
-    .map((h, i) => `Q${i + 1}: ${h.question}\nA${i + 1}: ${h.answer}`)
-    .join('\n')
+    .map((h, i) => {
+      let entry = `Q${i + 1}: ${h.question}\nA${i + 1}: ${h.answer}`
+      if (perAnswerScores && perAnswerScores[i]) {
+        const score = perAnswerScores[i]
+        entry += `\n[Score: ${Math.round(score.overall)}/100 (Content: ${Math.round(score.categories.content)}, Speech: ${Math.round(score.categories.speech)}, Body: ${Math.round(score.categories.bodyLanguage)})]`
+      }
+      return entry
+    })
+    .join('\n\n')
 
   const dimensionsSchema = route === 'uk_student'
     ? `"courseAndUniversityFit": number,
@@ -83,39 +176,39 @@ Return STRICT JSON only.`
 "financials": number,
 "intent": number,`
 
-  const user = `Student: ${studentProfile.name} (${studentProfile.country})\nUniversity: ${studentProfile.intendedUniversity || 'Not specified'}\nField: ${studentProfile.fieldOfStudy || 'Not specified'}\nPrev Edu: ${studentProfile.previousEducation || 'Not specified'}\n\nFull Conversation (order):\n${history}\n\nResponse Format (STRICT JSON):\n{
-  "decision": "accepted|rejected|borderline",
-  "overall": number, // 0-100
-  "dimensions": { // pick appropriate keys per system
-    "communication": number,
+  const avgScoreNote = perAnswerScores && perAnswerScores.length > 0
+    ? `\n\nPER-ANSWER AVERAGE SCORE: ${Math.round(perAnswerScores.reduce((sum, s) => sum + s.overall, 0) / perAnswerScores.length)}/100\n(Based on detailed content + speech + body language analysis of each answer)`
+    : ''
+  
+  const userPrompt = `STUDENT PROFILE:
+Name: ${studentProfile.name} (${studentProfile.country})
+University: ${studentProfile.intendedUniversity || 'Not specified'}
+Field: ${studentProfile.fieldOfStudy || 'Not specified'}
+Previous Education: ${studentProfile.previousEducation || 'Not specified'}${avgScoreNote}
+
+FULL INTERVIEW TRANSCRIPT:
+${history}
+
+---
+
+IMPORTANT: Consider the per-answer scores above (if provided) alongside your holistic evaluation. The scores reflect AI analysis of content accuracy, speech quality, and body language for each answer. Your final decision should be consistent with these granular scores while focusing on credibility and overall readiness.
+
+OUTPUT FORMAT (STRICT JSON - no markdown, no extra text):
+{
+  "decision": "accepted" | "rejected" | "borderline",
+  "overall": <number 0-100>,
+  "dimensions": {
+    "communication": <number 0-100>,
     ${dimensionsSchema}
   },
-  "summary": string,
-  "recommendations": string[]
+  "summary": "<2-3 sentence harsh final assessment>",
+  "recommendations": ["<improvement 1>", "<improvement 2>", "<improvement 3>"]
 }`
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
-      'X-Title': 'Visa Mock Interview Final Scoring',
-    },
-    body: JSON.stringify({
-      model: process.env.LLM_MODEL || 'openai/gpt-3.5-turbo',
-      temperature: 0.2,
-      max_tokens: 1000,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
-  })
-  if (!res.ok) throw new Error(`OpenRouter error: ${res.status}`)
-  const data = await res.json()
-  const content: string | undefined = data?.choices?.[0]?.message?.content
-  if (!content) throw new Error('No LLM content')
+  const response = await callLLMProvider(config, system, userPrompt, 0.3, 1200)
+  const content = response.content
+  if (!content) throw new Error('No LLM content returned')
+  
   try {
     const parsed = JSON.parse(content)
     // basic sanity checks
@@ -130,28 +223,91 @@ Return STRICT JSON only.`
   }
 }
 
-function evaluateHeuristically(route: 'uk_student' | 'usa_f1' | undefined, history: Array<{ answer: string }>) {
+function evaluateHeuristically(
+  route: 'uk_student' | 'usa_f1' | undefined, 
+  history: Array<{ answer: string }>,
+  perAnswerScores?: Array<{ overall: number; categories: { content: number; speech: number; bodyLanguage: number } }>
+) {
   const answers = history.map((h) => String(h.answer || ''))
   const words = answers.join(' ').trim().split(/\s+/).filter(Boolean)
   const totalWords = words.length
   const avgLen = answers.length ? totalWords / answers.length : 0
 
-  // Simple keyword coverage for UK dimensions
+  // Stricter keyword coverage for UK dimensions
   const txt = answers.join(' ').toLowerCase()
-  const hasFinance = /(fund|finance|bank|maintenance|28-?day|proof|statement|tuition|fees|sponsor)/i.test(txt)
-  const hasCourseFit = /(course|module|university|ranking|curriculum|faculty)/i.test(txt)
-  const hasAccommodation = /(accommodation|rent|housing|dorm|hostel|flat|room|living|city)/i.test(txt)
-  const hasCompliance = /(cas|refusal|ukvi|agent|gap|visa|rules|work)/i.test(txt)
-  const hasIntent = /(return|plans after|post-study|career|job)/i.test(txt)
+  
+  // UK-specific pattern matching (more strict)
+  const has28DayRule = /28[-\s]?day/i.test(txt)
+  const hasMaintenanceAmount = /(£|pound|gbp)\s*1[5-9],?\d{3}|£\s*2[0-5],?\d{3}/i.test(txt) // £15,000-£25,000 range
+  const hasModuleNames = /(module|course|subject|unit).*?(analytics|management|engineering|computing|finance|marketing)/i.test(txt)
+  const hasWorkHourLimit = /20\s*hours?|part[-\s]?time\s*work/i.test(txt)
+  const hasAccommodationDetail = /(accommodation|housing|halls?|dorm|flat|room).*?(£|pound|\d+\s*(per|\/)\s*(week|month))/i.test(txt)
+  
+  // Broader checks
+  const hasFinance = /(fund|finance|bank|maintenance|proof|statement|tuition|fees|sponsor)/i.test(txt)
+  const hasCourseFit = /(course|module|university|ranking|curriculum|faculty|program)/i.test(txt)
+  const hasAccommodation = /(accommodation|rent|housing|dorm|hostel|flat|room|living)/i.test(txt)
+  const hasCompliance = /(cas|ukvi|visa|rules|work|hours)/i.test(txt)
+  const hasIntent = /(return|plans after|post-study|career|job|graduate route)/i.test(txt)
 
   const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)))
 
-  const communication = clamp(40 + Math.min(60, (avgLen / 40) * 60)) // longer, coherent answers -> higher
-  const courseAndUniversityFit = clamp(hasCourseFit ? 70 : 50)
-  const financialRequirement = clamp(hasFinance ? 70 : 45)
-  const accommodationLogistics = clamp(hasAccommodation ? 65 : 45)
-  const complianceCredibility = clamp(hasCompliance ? 65 : 50)
-  const postStudyIntent = clamp(hasIntent ? 65 : 50)
+  // CRITICAL FIX: If per-answer scores are available, use them as primary source
+  // Otherwise fall back to keyword-based heuristics
+  if (perAnswerScores && perAnswerScores.length > 0) {
+    const avgContent = perAnswerScores.reduce((sum, s) => sum + s.categories.content, 0) / perAnswerScores.length
+    const avgSpeech = perAnswerScores.reduce((sum, s) => sum + s.categories.speech, 0) / perAnswerScores.length
+    const avgBody = perAnswerScores.reduce((sum, s) => sum + s.categories.bodyLanguage, 0) / perAnswerScores.length
+    const avgOverall = perAnswerScores.reduce((sum, s) => sum + s.overall, 0) / perAnswerScores.length
+    
+    console.log('✅ Using per-answer scores for final evaluation:', {
+      avgContent: Math.round(avgContent),
+      avgSpeech: Math.round(avgSpeech),
+      avgBody: Math.round(avgBody),
+      avgOverall: Math.round(avgOverall),
+    })
+    
+    // Use per-answer scores as dimensions (more accurate than keyword matching)
+    const communication = Math.round(avgSpeech)
+    const content = Math.round(avgContent)
+    
+    const decision: 'accepted' | 'rejected' | 'borderline' = 
+      avgOverall >= 75 ? 'accepted' : avgOverall < 55 ? 'rejected' : 'borderline'
+    
+    const dimensions = route === 'uk_student'
+      ? {
+          communication,
+          courseAndUniversityFit: content,
+          financialRequirement: content, // Content includes all answer quality
+          accommodationLogistics: content,
+          complianceCredibility: communication,
+          postStudyIntent: content,
+        }
+      : { communication, content, financials: content, intent: content }
+    
+    return {
+      decision,
+      overall: Math.round(avgOverall),
+      dimensions,
+      summary: `Based on detailed per-answer analysis: Average score ${Math.round(avgOverall)}/100 across ${perAnswerScores.length} questions. ${decision === 'accepted' ? 'Strong performance across content, speech, and body language.' : decision === 'rejected' ? 'Significant weaknesses detected in answer quality and delivery.' : 'Mixed performance with room for improvement.'}`,
+      recommendations: [
+        avgContent < 70 ? 'Improve answer content: add specific details, numbers, and concrete examples' : 'Content quality is adequate',
+        avgSpeech < 70 ? 'Improve speech delivery: reduce filler words, speak more clearly' : 'Speech quality is adequate',
+        avgBody < 50 ? 'Improve body language: maintain eye contact, sit upright, use open gestures' : 'Body language is adequate',
+      ].filter(r => !r.includes('adequate')),
+    }
+  }
+  
+  // Fallback to keyword-based heuristics if no per-answer scores available
+  console.warn('⚠️ No per-answer scores available, using weak keyword-based heuristics')
+  
+  // More strict UK scoring (requires specific details, not just keywords)
+  const communication = clamp(35 + Math.min(60, (avgLen / 45) * 60)) // longer, coherent answers -> higher
+  const courseAndUniversityFit = clamp(hasModuleNames ? 72 : (hasCourseFit ? 55 : 40))
+  const financialRequirement = clamp((has28DayRule && hasMaintenanceAmount) ? 75 : (hasFinance ? 55 : 35))
+  const accommodationLogistics = clamp(hasAccommodationDetail ? 68 : (hasAccommodation ? 50 : 35))
+  const complianceCredibility = clamp(hasWorkHourLimit ? 70 : (hasCompliance ? 55 : 40))
+  const postStudyIntent = clamp(hasIntent ? 62 : 45)
 
   // Weighted overall (UK-style if route is uk_student)
   let overall = communication
@@ -171,14 +327,40 @@ function evaluateHeuristically(route: 'uk_student' | 'usa_f1' | undefined, histo
     overall = clamp(0.4 * communication + 0.3 * content + 0.2 * financials + 0.1 * intent)
   }
 
-  const decision: 'accepted' | 'rejected' | 'borderline' = overall >= 75 ? 'accepted' : overall < 55 ? 'rejected' : 'borderline'
+  // Stricter UK decision thresholds (all dimensions must be strong)
+  const minDimension = route === 'uk_student' 
+    ? Math.min(courseAndUniversityFit, financialRequirement, accommodationLogistics, complianceCredibility, postStudyIntent)
+    : overall
+  
+  const decision: 'accepted' | 'rejected' | 'borderline' = 
+    route === 'uk_student'
+      ? (overall >= 75 && minDimension >= 70 ? 'accepted' : (overall < 60 || minDimension < 50 ? 'rejected' : 'borderline'))
+      : (overall >= 75 ? 'accepted' : overall < 55 ? 'rejected' : 'borderline')
 
   const recommendations: string[] = []
-  if (!hasFinance) recommendations.push('Clearly explain maintenance funds and 28-day bank balance proof with figures.')
-  if (!hasCourseFit) recommendations.push('Link your chosen course and university to your background and career goals with specifics.')
-  if (!hasAccommodation) recommendations.push('Describe concrete accommodation plans (location, costs, arrangements).')
-  if (!hasCompliance) recommendations.push('Address compliance and credibility (CAS clarity, agent role, previous refusals if any).')
-  if (!hasIntent) recommendations.push('State clear post-study intentions and ties without implying immigration intent.')
+  if (route === 'uk_student') {
+    if (!has28DayRule || !hasMaintenanceAmount) {
+      recommendations.push('State exact maintenance amount (£18,000+ for London) and mention 28-day bank balance rule explicitly.')
+    }
+    if (!hasModuleNames) {
+      recommendations.push('Name at least 3 specific modules from your course syllabus (not generic categories).')
+    }
+    if (!hasAccommodationDetail) {
+      recommendations.push('Provide specific accommodation plan: location, cost per week/month, pre-booked or planned.')
+    }
+    if (!hasWorkHourLimit) {
+      recommendations.push('Demonstrate understanding of 20 hours/week work limit during term time.')
+    }
+    if (!hasIntent) {
+      recommendations.push('Clearly state post-study plans (return home or Graduate Route) with specifics.')
+    }
+  } else {
+    if (!hasFinance) recommendations.push('Clearly explain maintenance funds and 28-day bank balance proof with figures.')
+    if (!hasCourseFit) recommendations.push('Link your chosen course and university to your background and career goals with specifics.')
+    if (!hasAccommodation) recommendations.push('Describe concrete accommodation plans (location, costs, arrangements).')
+    if (!hasCompliance) recommendations.push('Address compliance and credibility (CAS clarity, agent role, previous refusals if any).')
+    if (!hasIntent) recommendations.push('State clear post-study intentions and ties without implying immigration intent.')
+  }
   if (avgLen < 30) recommendations.push('Give fuller, structured answers with concrete numbers and examples.')
 
   const dimensions = route === 'uk_student'

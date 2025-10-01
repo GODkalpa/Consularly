@@ -34,6 +34,8 @@ export interface InterviewStageProps {
   showQuestionOverlay?: boolean
   /** Hide the live body language score badge */
   showBodyBadge?: boolean
+  /** Ref to expose captureScore method to parent */
+  captureScoreRef?: React.MutableRefObject<(() => BodyLanguageScore | null) | null>
 }
 
 export const InterviewStage: React.FC<InterviewStageProps> = ({
@@ -58,9 +60,10 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   secondsRemaining,
   showCaptions = true,
   showQuestionOverlay = true,
-  showBodyBadge = true
+  showBodyBadge = true,
+  captureScoreRef
 }) => {
-  const { state, start, stop, startPreview, stopPreview, videoRef, canvasRef } = useBodyLanguageTracker({
+  const { state, start, stop, startPreview, stopPreview, captureScore, videoRef, canvasRef } = useBodyLanguageTracker({
     width,
     height,
     enableFace: true,
@@ -70,6 +73,13 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   })
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Expose captureScore to parent via ref
+  useEffect(() => {
+    if (captureScoreRef) {
+      captureScoreRef.current = captureScore
+    }
+  }, [captureScore, captureScoreRef])
 
   // Parent-driven start/stop
   useEffect(() => {
@@ -101,9 +111,20 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, preview])
 
+  // Continuously update parent with latest score for live display
   useEffect(() => {
     if (state.score && onScore) onScore(state.score)
   }, [state.score, onScore])
+
+  // Log model loading status for debugging
+  useEffect(() => {
+    if (state.running && state.backend) {
+      console.log('✅ TensorFlow backend active:', state.backend)
+    }
+    if (state.errors.length > 0) {
+      console.error('❌ Body language tracker errors:', state.errors)
+    }
+  }, [state.running, state.backend, state.errors])
 
   // Debug: Log video stream status
   useEffect(() => {
