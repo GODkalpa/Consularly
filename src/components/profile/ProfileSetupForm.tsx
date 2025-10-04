@@ -104,8 +104,8 @@ export function ProfileSetupForm({
               <SelectValue placeholder="Select your degree level" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="undergraduate">🎓 Undergraduate (Bachelor's)</SelectItem>
-              <SelectItem value="graduate">📚 Graduate (Master's)</SelectItem>
+              <SelectItem value="undergraduate">🎓 Undergraduate (Bachelor&apos;s)</SelectItem>
+              <SelectItem value="graduate">📚 Graduate (Master&apos;s)</SelectItem>
               <SelectItem value="doctorate">🔬 Doctorate (PhD)</SelectItem>
               <SelectItem value="other">📖 Other</SelectItem>
             </SelectContent>

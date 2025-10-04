@@ -628,7 +628,7 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     })
     
     return state.score
-  }, [state.running, state.score, state.pose])
+  }, [state.running, state.score, state.pose, state.previewing])
 
   return { state, start, stop, startPreview, stopPreview, captureScore, videoRef, canvasRef, cameras, switchCamera, refreshCameras }
 }
