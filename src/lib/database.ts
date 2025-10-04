@@ -16,6 +16,21 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 
+// Degree level types
+export type DegreeLevel = 'undergraduate' | 'graduate' | 'doctorate' | 'other';
+
+// Student Profile Information (for interview context)
+export interface StudentProfileInfo {
+  degreeLevel?: DegreeLevel; // What degree level are they applying for
+  programName?: string; // Specific program (e.g., "Master's in Computer Science")
+  universityName?: string; // University applied to
+  programLength?: string; // Duration (e.g., "2 years", "4 years")
+  programCost?: string; // Total cost (e.g., "$50,000", "£30,000")
+  fieldOfStudy?: string; // Field of study
+  intendedMajor?: string; // Intended major/specialization
+  profileCompleted?: boolean; // Whether user has completed profile setup
+}
+
 // User profile operations
 export interface UserProfile {
   uid: string;
@@ -37,6 +52,7 @@ export interface UserProfile {
     startDate: string;
     endDate?: string;
   };
+  studentProfile?: StudentProfileInfo; // Pre-interview profile information
 }
 
 export const createUserProfile = async (uid: string, userData: Partial<UserProfile>) => {
@@ -74,6 +90,22 @@ export const updateUserProfile = async (uid: string, updates: Partial<UserProfil
     });
   } catch (error) {
     console.error('Error updating user profile:', error);
+    throw error;
+  }
+};
+
+// Update user's student profile information
+export const updateStudentProfile = async (uid: string, studentProfile: StudentProfileInfo) => {
+  try {
+    await updateDoc(doc(db, 'users', uid), {
+      studentProfile: {
+        ...studentProfile,
+        profileCompleted: true
+      },
+      lastLoginAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error updating student profile:', error);
     throw error;
   }
 };

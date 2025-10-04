@@ -61,7 +61,8 @@ export default function SignUpPage() {
 
     try {
       await signUp(formData.email, formData.password, formData.displayName)
-      router.push('/')
+      // Redirect to profile setup page after sign-up
+      router.push('/profile-setup')
     } catch (error: any) {
       setError(error.message || 'Failed to create account')
     } finally {
@@ -75,7 +76,8 @@ export default function SignUpPage() {
 
     try {
       await signInWithGoogle()
-      router.push('/')
+      // Redirect to profile setup page after Google sign-up
+      router.push('/profile-setup')
     } catch (error: any) {
       setError(error.message || 'Failed to sign up with Google')
     } finally {

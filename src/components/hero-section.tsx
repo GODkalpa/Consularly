@@ -71,8 +71,8 @@ export default function HeroSection() {
                                     preset="fade-in-blur"
                                     speedSegment={0.3}
                                     as="h1"
-                                    className="mx-auto mt-8 max-w-4xl text-balance text-5xl max-md:font-semibold md:text-7xl lg:mt-16 xl:text-[5.25rem]">
-                                    Ace Your Student Visa Interview &quot;Anywhere&quot;
+                                    className="mx-auto mt-8 max-w-4xl text-balance text-4xl leading-tight max-md:font-semibold sm:text-5xl md:text-7xl lg:mt-16 xl:text-[5.25rem]">
+                                    Ace Your Student Visa Interview Anywhere
                                 </TextEffect>
                                 <TextEffect
                                     per="line"
@@ -80,7 +80,7 @@ export default function HeroSection() {
                                     speedSegment={0.3}
                                     delay={0.5}
                                     as="p"
-                                    className="mx-auto mt-8 max-w-2xl text-balance text-lg">
+                                    className="mx-auto mt-6 max-w-2xl text-balance text-base md:mt-8 md:text-lg">
                                     Real-time AI mock interviews with camera tracking, voice transcription, and instant scoring.
                                 </TextEffect>
 
@@ -97,24 +97,22 @@ export default function HeroSection() {
                                         ...transitionVariants,
                                     }}
                                     className="mt-12 flex flex-col items-center justify-center gap-2 md:flex-row">
-                                    <div
+                                    <Button
                                         key={1}
-                                        className="bg-foreground/10 rounded-[calc(var(--radius-xl)+0.125rem)] border p-0.5">
-                                        <Button
-                                            asChild
-                                            size="lg"
-                                            className="rounded-xl px-5 text-base">
-                                            <Link href="/signup">
-                                                <span>Start Free Trial</span>
-                                            </Link>
-                                        </Button>
-                                    </div>
+                                        asChild
+                                        size="lg"
+                                        className="h-11 rounded-xl px-6 text-base bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/30 ring-1 ring-primary/30 hover:shadow-xl hover:from-primary/95 transition-all group">
+                                        <Link href="/signup" className="inline-flex items-center">
+                                            <span>Start Free Trial</span>
+                                            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                                        </Link>
+                                    </Button>
                                     <Button
                                         key={2}
                                         asChild
                                         size="lg"
                                         variant="ghost"
-                                        className="h-10.5 rounded-xl px-5">
+                                        className="h-11 rounded-xl px-6">
                                         <Link href="#features">
                                             <span>See Features</span>
                                         </Link>

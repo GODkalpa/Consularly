@@ -84,6 +84,13 @@ export function InterviewSimulation() {
   const [studentName, setStudentName] = useState('');
   const [route, setRoute] = useState<InterviewRoute>('usa_f1');
   const [resetKey, setResetKey] = useState(0);
+  const [studentProfile, setStudentProfile] = useState({
+    degreeLevel: '' as 'undergraduate' | 'graduate' | 'doctorate' | 'other' | '',
+    programName: '',
+    universityName: '',
+    programLength: '',
+    programCost: '',
+  });
   const [bodyScore, setBodyScore] = useState<BodyLanguageScore | null>(null);
   const [lastAnsweredIndex, setLastAnsweredIndex] = useState<number>(-1);
   const [showInsights, setShowInsights] = useState(false);
@@ -205,7 +212,30 @@ export function InterviewSimulation() {
 
   // Initialize new AI-driven interview session
   const startNewSession = async () => {
-    if (!studentName.trim()) return;
+    if (!studentName.trim()) {
+      setStartError('Please enter student name');
+      return;
+    }
+    if (!studentProfile.degreeLevel) {
+      setStartError('Please select degree level');
+      return;
+    }
+    if (!studentProfile.programName.trim()) {
+      setStartError('Please enter program name');
+      return;
+    }
+    if (!studentProfile.universityName.trim()) {
+      setStartError('Please enter university name');
+      return;
+    }
+    if (!studentProfile.programLength.trim()) {
+      setStartError('Please enter program length');
+      return;
+    }
+    if (!studentProfile.programCost.trim()) {
+      setStartError('Please enter program cost');
+      return;
+    }
     if (isStarting) return; // Prevent double-click
 
     setIsStarting(true);
@@ -371,7 +401,12 @@ export function InterviewSimulation() {
           route,
           studentProfile: {
             name: studentName.trim(),
-            country: 'Nepal'
+            country: 'Nepal',
+            degreeLevel: studentProfile.degreeLevel,
+            programName: studentProfile.programName.trim(),
+            universityName: studentProfile.universityName.trim(),
+            programLength: studentProfile.programLength.trim(),
+            programCost: studentProfile.programCost.trim(),
           }
         })
       });
@@ -692,6 +727,14 @@ export function InterviewSimulation() {
     setSession(null);
     setCurrentTranscript('');
     setStudentName('');
+    setStudentProfile({
+      degreeLevel: '',
+      programName: '',
+      universityName: '',
+      programLength: '',
+      programCost: '',
+    });
+    setStartError(null);
     clearTimers();
     processingRef.current = false;
     clearPhaseTimers();
@@ -785,32 +828,87 @@ export function InterviewSimulation() {
               Start New Interview Session
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="studentName">Student Name</Label>
-              <Input
-                id="studentName"
-                placeholder="Enter student's full name"
-                value={studentName}
-                onChange={(e) => setStudentName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && studentName.trim()) {
-                    startNewSession();
-                  }
-                }}
-              />
+          <CardContent className="space-y-4 max-h-[70vh] overflow-y-auto">
+            {/* Basic Info */}
+            <div className="space-y-4 pb-4 border-b">
+              <h3 className="font-medium text-sm">Basic Information</h3>
+              <div className="space-y-2">
+                <Label htmlFor="studentName">Student Name <span className="text-destructive">*</span></Label>
+                <Input
+                  id="studentName"
+                  placeholder="Enter student's full name"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Country <span className="text-destructive">*</span></Label>
+                <Select value={route} onValueChange={(v) => setRoute(v as InterviewRoute)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder='Select interview country/route' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='usa_f1'>{routeDisplayName.usa_f1}</SelectItem>
+                    <SelectItem value='uk_student'>{routeDisplayName.uk_student}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Country</Label>
-              <Select value={route} onValueChange={(v) => setRoute(v as InterviewRoute)}>
-                <SelectTrigger>
-                  <SelectValue placeholder='Select interview country/route' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='usa_f1'>{routeDisplayName.usa_f1}</SelectItem>
-                  <SelectItem value='uk_student'>{routeDisplayName.uk_student}</SelectItem>
-                </SelectContent>
-              </Select>
+
+            {/* Profile Info */}
+            <div className="space-y-4">
+              <h3 className="font-medium text-sm">Program Information</h3>
+              <div className="space-y-2">
+                <Label>Degree Level <span className="text-destructive">*</span></Label>
+                <Select
+                  value={studentProfile.degreeLevel}
+                  onValueChange={(value) => setStudentProfile(prev => ({ ...prev, degreeLevel: value as any }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select degree level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="undergraduate">Undergraduate (Bachelor's)</SelectItem>
+                    <SelectItem value="graduate">Graduate (Master's)</SelectItem>
+                    <SelectItem value="doctorate">Doctorate (PhD)</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Program Name <span className="text-destructive">*</span></Label>
+                <Input 
+                  value={studentProfile.programName} 
+                  onChange={(e) => setStudentProfile(prev => ({ ...prev, programName: e.target.value }))} 
+                  placeholder="e.g., Master's in Computer Science" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>University Name <span className="text-destructive">*</span></Label>
+                <Input 
+                  value={studentProfile.universityName} 
+                  onChange={(e) => setStudentProfile(prev => ({ ...prev, universityName: e.target.value }))} 
+                  placeholder="e.g., Stanford University" 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Program Length <span className="text-destructive">*</span></Label>
+                  <Input 
+                    value={studentProfile.programLength} 
+                    onChange={(e) => setStudentProfile(prev => ({ ...prev, programLength: e.target.value }))} 
+                    placeholder="e.g., 2 years" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Total Cost <span className="text-destructive">*</span></Label>
+                  <Input 
+                    value={studentProfile.programCost} 
+                    onChange={(e) => setStudentProfile(prev => ({ ...prev, programCost: e.target.value }))} 
+                    placeholder="e.g., $50,000" 
+                  />
+                </div>
+              </div>
             </div>
             {startError && (
               <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3">

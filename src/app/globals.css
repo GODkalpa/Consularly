@@ -201,6 +201,15 @@
   }
 }
 
+@keyframes progress {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
 @keyframes gradient {
   0% {
     background-position: 0% 50%;

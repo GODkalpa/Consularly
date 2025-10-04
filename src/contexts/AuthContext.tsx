@@ -82,7 +82,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const latest = (snap.data() as UserProfile | undefined) || null;
               console.log('📡 Profile snapshot update:', latest);
               setUserProfile(latest);
-              setIsAdmin(latest?.role === 'admin' || latest?.role === 'super_admin');
+              const isAdminUser = latest?.role === 'admin' || latest?.role === 'super_admin';
+              setIsAdmin(isAdminUser);
+
+              // Auto-redirect to profile setup if profile incomplete (only for non-admin users)
+              // Admins don't need student profiles
+              if (latest && !isAdminUser && !latest.studentProfile?.profileCompleted) {
+                const currentPath = window.location.pathname;
+                const allowedPaths = ['/profile-setup', '/signin', '/signup', '/'];
+                
+                // Only redirect if not already on allowed paths
+                if (!allowedPaths.includes(currentPath)) {
+                  console.log('[AuthContext] Profile incomplete, redirecting to setup');
+                  router.push('/profile-setup');
+                }
+              }
             },
             (error) => {
               console.error('❌ Profile snapshot error:', error);

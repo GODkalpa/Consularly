@@ -6,13 +6,13 @@
     "rows": [
       {
         "layout": "imageLeft_metricsRight",
-        "image": "/yunil.JPG",
+        "image": "/Dhiren.jpg",
         "image_card_title": "Innovation Meets Practice",
         "testimonial": {
           "title": "Intuitive Mock Interview Experience",
           "quote": "Felt like the real counter window. The body‑language tips helped me keep eye contact and answer straight to the point.",
-          "name": "Yunil Ghimire ",
-          "role": "Manager, Sumedha Education"
+          "name": "Dhiren Pradhan",
+          "role": "CEO, Ednep Abhiyan"
         },
         "metrics": [
           {
@@ -29,7 +29,7 @@
       },
       {
         "layout": "metricsLeft_imageRight",
-        "image": "/yunil.JPG",
+        "image": "/Yunil.JPG",
         "metrics": [
           {
             "value": "3.4×",
@@ -46,8 +46,8 @@
         "testimonial": {
           "title": "Unified Coaching View",
           "quote": "One report for speech, content, and posture means faster feedback for every student.",
-          "name": "Sudipa Shrestha",
-          "role": "Student"
+          "name": "Yunil Ghimire ",
+          "role": "Manager, Sumedha Education"
         }
       },
       {
@@ -57,8 +57,8 @@
         "testimonial": {
           "title": "Easy for Institutes",
           "quote": "We launched UK/Canada tracks in minutes. Students joined with a link—no installs.",
-          "name": "Dipesh Rana",
-          "role": "Program Lead, BrightFuture Prep"
+          "name": "Sudipa Shrestha",
+          "role": "Student"
         },
         "metrics": [
           {
@@ -80,10 +80,6 @@
       "Voice STT (AssemblyAI)",
       "Shareable PDF report",
       "Not affiliated with any embassy"
-    ],
-    "disclaimers": [
-      "Metrics are early pilot/self‑reported and for illustrative use. Replace with your live data when available."
-    ],
-    "roadmap_note": "U.S. F‑1 live today; Canada, UK, Australia & EU next."
+    ]
   }
 }

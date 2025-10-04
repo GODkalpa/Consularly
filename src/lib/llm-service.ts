@@ -17,6 +17,11 @@ interface QuestionGenerationRequest {
       intendedUniversity?: string;
       fieldOfStudy?: string;
       previousEducation?: string;
+      degreeLevel?: 'undergraduate' | 'graduate' | 'doctorate' | 'other';
+      programName?: string;
+      universityName?: string;
+      programLength?: string;
+      programCost?: string;
     };
     currentQuestionNumber: number;
     conversationHistory: Array<{
@@ -35,29 +40,49 @@ interface QuestionGenerationResponse {
   tips?: string;
 }
 
+// PERFORMANCE FIX: Cache question selector globally to avoid repeated loads
+let cachedQuestionSelector: SmartQuestionSelector | null = null;
+let initPromise: Promise<void> | null = null;
+
+async function getOrInitializeQuestionSelector(): Promise<SmartQuestionSelector | null> {
+  if (cachedQuestionSelector) {
+    return cachedQuestionSelector;
+  }
+
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        const questionBank = await loadQuestionBank();
+        cachedQuestionSelector = new SmartQuestionSelector(questionBank);
+        console.log('[Question Service] Initialized with cached smart question selector');
+      } catch (error) {
+        console.error('[Question Service] Failed to initialize smart selector:', error);
+        // Will fall back to legacy method
+      }
+    })();
+  }
+
+  await initPromise;
+  return cachedQuestionSelector;
+}
+
 export class LLMQuestionService {
   private questionSelector: SmartQuestionSelector | null = null;
-  private initPromise: Promise<void>;
 
   constructor() {
-    // Initialize question selector asynchronously
-    this.initPromise = this.initialize();
+    // Use cached selector instead of creating new instance
+    this.initialize();
   }
 
   private async initialize() {
-    try {
-      const questionBank = await loadQuestionBank();
-      this.questionSelector = new SmartQuestionSelector(questionBank);
-      console.log('[Question Service] Initialized with smart question selector');
-    } catch (error) {
-      console.error('[Question Service] Failed to initialize smart selector:', error);
-      // Will fall back to legacy method
-    }
+    this.questionSelector = await getOrInitializeQuestionSelector();
   }
 
   async generateQuestion(request: QuestionGenerationRequest): Promise<QuestionGenerationResponse> {
-    // Wait for initialization
-    await this.initPromise;
+    // Wait for initialization (now uses cached selector)
+    if (!this.questionSelector) {
+      this.questionSelector = await getOrInitializeQuestionSelector();
+    }
 
     const route = request.interviewContext.route || 'usa_f1';
     const { studentProfile, conversationHistory, currentQuestionNumber } = request.interviewContext;
@@ -212,22 +237,42 @@ Make every question purposeful, adaptive, and officer-authentic.`;
 Student Profile:
 - Name: ${studentProfile.name}
 - Country: ${studentProfile.country}
-- University: ${studentProfile.intendedUniversity || 'Not specified'}
+- Degree Level: ${studentProfile.degreeLevel || 'Not specified'}
+- Program: ${studentProfile.programName || 'Not specified'}
+- University: ${studentProfile.universityName || studentProfile.intendedUniversity || 'Not specified'}
 - Field of Study: ${studentProfile.fieldOfStudy || 'Not specified'}
+- Program Length: ${studentProfile.programLength || 'Not specified'}
+- Total Cost: ${studentProfile.programCost || 'Not specified'}
 - Previous Education: ${studentProfile.previousEducation || 'Not specified'}
 
-Interview Progress: Question ${currentQuestionNumber}`
+Interview Progress: Question ${currentQuestionNumber}
+
+IMPORTANT: Use the degree level (${studentProfile.degreeLevel || 'not specified'}) to tailor questions appropriately:
+- For undergraduate: Focus on high school background, career exploration, foundational knowledge
+- For graduate (Master's): Ask about undergraduate degree, research interests, specialization reasons, career advancement
+- For doctorate (PhD): Emphasize research proposals, advisor fit, long-term academic goals, publications`
 
     const headerUS = `Generate the next visa interview question for a ${visaType} visa applicant.
 
 Student Profile:
 - Name: ${studentProfile.name}
 - Country: ${studentProfile.country}
-- University: ${studentProfile.intendedUniversity || 'Not specified'}
+- Degree Level: ${studentProfile.degreeLevel || 'Not specified'}
+- Program: ${studentProfile.programName || 'Not specified'}
+- University: ${studentProfile.universityName || studentProfile.intendedUniversity || 'Not specified'}
 - Field of Study: ${studentProfile.fieldOfStudy || 'Not specified'}
+- Program Length: ${studentProfile.programLength || 'Not specified'}
+- Total Cost: ${studentProfile.programCost || 'Not specified'}
 - Previous Education: ${studentProfile.previousEducation || 'Not specified'}
 
-Interview Progress: Question ${currentQuestionNumber}`
+Interview Progress: Question ${currentQuestionNumber}
+
+IMPORTANT: Use the degree level (${studentProfile.degreeLevel || 'not specified'}) and program details to tailor questions:
+- For undergraduate: Questions should focus on basic career goals, high school background, why they need a US education
+- For graduate (Master's): Ask about their existing degree, why further study is necessary, career advancement plans
+- For doctorate (PhD): Emphasize research, why this specific program/advisor, post-completion plans
+- Reference the specific program (${studentProfile.programName || 'their program'}) and cost (${studentProfile.programCost || 'program costs'}) in questions when relevant
+- Use university name (${studentProfile.universityName || studentProfile.intendedUniversity || 'this university'}) to ask why they chose this specific institution`
 
     let prompt = isUK ? headerUK : headerUS;
 
@@ -252,12 +297,19 @@ Interview Progress: Question ${currentQuestionNumber}`
 - Ensure smooth transitions between categories (Study Plans → University → Academic → Financial → Post-grad)`
     }
 
+    // PERFORMANCE FIX: Only include recent conversation history (last 3 exchanges)
+    // Full history is unnecessary and slows down LLM processing
     if (conversationHistory.length > 0) {
-      prompt += `\n\nConversation History:`;
-      conversationHistory.forEach((exchange, index) => {
-        prompt += `\nQ${index + 1}: ${exchange.question}`;
-        prompt += `\nA${index + 1}: ${exchange.answer}`;
+      const recentHistory = conversationHistory.slice(-3); // Last 3 Q&A pairs
+      prompt += `\n\nRecent Conversation History (last ${recentHistory.length} exchanges):`;
+      recentHistory.forEach((exchange, index) => {
+        const actualIndex = conversationHistory.length - recentHistory.length + index;
+        prompt += `\nQ${actualIndex + 1}: ${exchange.question}`;
+        prompt += `\nA${actualIndex + 1}: ${exchange.answer.slice(0, 200)}`; // Limit answer length to 200 chars
       });
+      if (conversationHistory.length > 3) {
+        prompt += `\n(${conversationHistory.length - 3} earlier exchanges omitted for efficiency)`;
+      }
     }
 
     if (previousQuestion && studentAnswer) {

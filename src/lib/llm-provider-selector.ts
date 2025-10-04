@@ -40,11 +40,12 @@ export function selectLLMProvider(
   }
 
   // Question Selection: Always use Groq Llama 3.1 8B (fast + cheap)
+  // PERFORMANCE: 8B instant model is 3-5x faster than 70B models
   if (useCase === 'question_selection') {
     if (process.env.GROQ_API_KEY) {
       return {
         provider: 'groq',
-        model: process.env.LLM_MODEL_QUESTIONS || 'llama-3.1-8b-instant',
+        model: process.env.LLM_MODEL_QUESTIONS || 'llama-3.1-8b-instant', // Ultra-fast for question selection
         apiKey: process.env.GROQ_API_KEY,
         baseUrl: 'https://api.groq.com/openai/v1',
       };
@@ -141,34 +142,49 @@ async function callOpenAICompatible(
   temperature: number,
   maxTokens: number
 ): Promise<LLMResponse> {
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature,
-      max_tokens: maxTokens,
-      response_format: { type: 'json_object' },
-    }),
-  });
+  // PERFORMANCE FIX: Add timeout to prevent hanging requests
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+  
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature,
+        max_tokens: maxTokens,
+        response_format: { type: 'json_object' },
+      }),
+      signal: controller.signal,
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`${config.provider} API error: ${response.status} - ${error}`);
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`${config.provider} API error: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json();
+    return {
+      content: data.choices[0].message.content,
+      usage: data.usage,
+    };
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`${config.provider} API timeout after 15 seconds`);
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  return {
-    content: data.choices[0].message.content,
-    usage: data.usage,
-  };
 }
 
 /**

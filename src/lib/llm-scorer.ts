@@ -181,8 +181,13 @@ Return ONLY strict JSON - no extra commentary.`;
     const { question, answer, interviewContext, sessionMemory } = req;
     const { visaType, route, studentProfile, conversationHistory } = interviewContext;
 
-    const history = conversationHistory
-      .map((h, i) => `Q${i + 1}: ${h.question}\nA${i + 1}: ${h.answer}`)
+    // PERFORMANCE FIX: Only include recent conversation history for consistency checking
+    const recentHistory = conversationHistory.slice(-2); // Last 2 Q&A pairs are sufficient
+    const history = recentHistory
+      .map((h, i) => {
+        const actualIndex = conversationHistory.length - recentHistory.length + i;
+        return `Q${actualIndex + 1}: ${h.question}\nA${actualIndex + 1}: ${h.answer.slice(0, 150)}`; // Limit to 150 chars
+      })
       .join('\n\n');
 
     // Build session memory context for contradiction checking

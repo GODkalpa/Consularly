@@ -13,10 +13,10 @@ import {
   BookOpen,
   Users,
   Phone,
-  Star,
   LogOut,
   User,
-  LayoutDashboard
+  LayoutDashboard,
+  ArrowRight
 } from "lucide-react"
 
 const navigationItems = [
@@ -252,10 +252,12 @@ export function Navbar() {
                 </Link>
                 <Link href="/signup">
                   <Button 
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all"
+                    className="h-10 rounded-xl px-4 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/30 ring-1 ring-primary/30 hover:shadow-xl hover:from-primary/95 transition-all group"
                   >
-                    Start Free Trial
-                    <Star className="ml-2 w-4 h-4" />
+                    <span className="inline-flex items-center">
+                      Start Free Trial
+                      <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                    </span>
                   </Button>
                 </Link>
               </>
@@ -388,11 +390,13 @@ export function Navbar() {
                   </Link>
                   <Link href="/signup">
                     <Button 
-                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                      className="w-full h-11 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/30 ring-1 ring-primary/30 hover:shadow-xl hover:from-primary/95 transition-all group"
                       onClick={() => setIsOpen(false)}
                     >
-                      Start Free Trial
-                      <Star className="ml-2 w-4 h-4" />
+                      <span className="inline-flex items-center justify-center w-full">
+                        Start Free Trial
+                        <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                      </span>
                     </Button>
                   </Link>
                 </>

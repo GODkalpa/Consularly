@@ -12,7 +12,16 @@ import { Badge } from "@/components/ui/badge"
 import { GraduationCap, Play, Search, Plus } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { toast } from "sonner"
+
+import type { DegreeLevel } from '@/lib/database'
 
 export type OrgStudent = {
   id: string
@@ -20,6 +29,15 @@ export type OrgStudent = {
   email: string
   lastActive?: Date
   interviewsCompleted?: number
+  studentProfile?: {
+    degreeLevel?: DegreeLevel
+    programName?: string
+    universityName?: string
+    programLength?: string
+    programCost?: string
+    fieldOfStudy?: string
+    intendedMajor?: string
+  }
 }
 
 interface OrgStudentManagementProps {
@@ -36,6 +54,15 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState("")
   const [newEmail, setNewEmail] = useState("")
+  const [newProfile, setNewProfile] = useState({
+    degreeLevel: '' as DegreeLevel | '',
+    programName: '',
+    universityName: '',
+    programLength: '',
+    programCost: '',
+    fieldOfStudy: '',
+    intendedMajor: ''
+  })
 
   async function loadStudents() {
     if (!firebaseEnabled) { setLoading(false); return }
@@ -135,25 +162,121 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
               <Plus className="h-4 w-4 mr-2" /> Add Student
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add Student</DialogTitle>
-              <DialogDescription>Create a database-only student record for your organization.</DialogDescription>
+              <DialogDescription>Create a database-only student record for your organization with complete profile information.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Full name" />
+              {/* Basic Info */}
+              <div className="space-y-4 pb-4 border-b">
+                <h3 className="font-medium text-sm">Basic Information</h3>
+                <div className="space-y-2">
+                  <Label>Name <span className="text-destructive">*</span></Label>
+                  <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Full name" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email (optional)</Label>
+                  <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="name@example.com" />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Email (optional)</Label>
-                <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="name@example.com" />
+
+              {/* Profile Info */}
+              <div className="space-y-4">
+                <h3 className="font-medium text-sm">Program Information</h3>
+                <div className="space-y-2">
+                  <Label>Degree Level <span className="text-destructive">*</span></Label>
+                  <Select
+                    value={newProfile.degreeLevel}
+                    onValueChange={(value) => setNewProfile(prev => ({ ...prev, degreeLevel: value as DegreeLevel }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select degree level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="undergraduate">Undergraduate (Bachelor's)</SelectItem>
+                      <SelectItem value="graduate">Graduate (Master's)</SelectItem>
+                      <SelectItem value="doctorate">Doctorate (PhD)</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Program Name <span className="text-destructive">*</span></Label>
+                  <Input 
+                    value={newProfile.programName} 
+                    onChange={(e) => setNewProfile(prev => ({ ...prev, programName: e.target.value }))} 
+                    placeholder="e.g., Master's in Computer Science" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>University Name <span className="text-destructive">*</span></Label>
+                  <Input 
+                    value={newProfile.universityName} 
+                    onChange={(e) => setNewProfile(prev => ({ ...prev, universityName: e.target.value }))} 
+                    placeholder="e.g., Stanford University" 
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Program Length <span className="text-destructive">*</span></Label>
+                    <Input 
+                      value={newProfile.programLength} 
+                      onChange={(e) => setNewProfile(prev => ({ ...prev, programLength: e.target.value }))} 
+                      placeholder="e.g., 2 years" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Total Cost <span className="text-destructive">*</span></Label>
+                    <Input 
+                      value={newProfile.programCost} 
+                      onChange={(e) => setNewProfile(prev => ({ ...prev, programCost: e.target.value }))} 
+                      placeholder="e.g., $50,000" 
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Field of Study (Optional)</Label>
+                  <Input 
+                    value={newProfile.fieldOfStudy} 
+                    onChange={(e) => setNewProfile(prev => ({ ...prev, fieldOfStudy: e.target.value }))} 
+                    placeholder="e.g., Computer Science" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Intended Major (Optional)</Label>
+                  <Input 
+                    value={newProfile.intendedMajor} 
+                    onChange={(e) => setNewProfile(prev => ({ ...prev, intendedMajor: e.target.value }))} 
+                    placeholder="e.g., Artificial Intelligence" 
+                  />
+                </div>
               </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setAddOpen(false)} disabled={creating}>Cancel</Button>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button variant="outline" onClick={() => {
+                  setAddOpen(false)
+                  setNewName('')
+                  setNewEmail('')
+                  setNewProfile({
+                    degreeLevel: '',
+                    programName: '',
+                    universityName: '',
+                    programLength: '',
+                    programCost: '',
+                    fieldOfStudy: '',
+                    intendedMajor: ''
+                  })
+                }} disabled={creating}>Cancel</Button>
                 <Button
                   onClick={async () => {
                     if (!newName.trim()) { toast.error('Name is required'); return }
+                    if (!newProfile.degreeLevel) { toast.error('Degree level is required'); return }
+                    if (!newProfile.programName.trim()) { toast.error('Program name is required'); return }
+                    if (!newProfile.universityName.trim()) { toast.error('University name is required'); return }
+                    if (!newProfile.programLength.trim()) { toast.error('Program length is required'); return }
+                    if (!newProfile.programCost.trim()) { toast.error('Program cost is required'); return }
+                    
                     try {
                       setCreating(true)
                       const token = await auth.currentUser?.getIdToken()
@@ -161,13 +284,36 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                       const res = await fetch('/api/org/students', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify({ name: newName.trim(), email: newEmail.trim() })
+                        body: JSON.stringify({ 
+                          name: newName.trim(), 
+                          email: newEmail.trim(),
+                          studentProfile: {
+                            degreeLevel: newProfile.degreeLevel,
+                            programName: newProfile.programName.trim(),
+                            universityName: newProfile.universityName.trim(),
+                            programLength: newProfile.programLength.trim(),
+                            programCost: newProfile.programCost.trim(),
+                            fieldOfStudy: newProfile.fieldOfStudy.trim() || undefined,
+                            intendedMajor: newProfile.intendedMajor.trim() || undefined,
+                            profileCompleted: true
+                          }
+                        })
                       })
                       const data = await res.json()
                       if (!res.ok) throw new Error(data?.error || 'Failed to add student')
-                      toast.success('Student added')
+                      toast.success('Student added with complete profile')
                       setAddOpen(false)
-                      setNewName(''); setNewEmail('')
+                      setNewName('')
+                      setNewEmail('')
+                      setNewProfile({
+                        degreeLevel: '',
+                        programName: '',
+                        universityName: '',
+                        programLength: '',
+                        programCost: '',
+                        fieldOfStudy: '',
+                        intendedMajor: ''
+                      })
                       await loadStudents()
                     } catch (e: any) {
                       toast.error('Add student failed', { description: e?.message })

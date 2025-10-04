@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
         name: data?.name || data?.displayName || 'Unknown',
         email: data?.email || '',
         lastActive: lastActive ? lastActive.toISOString() : null,
+        studentProfile: data?.studentProfile || null,
       }
     })
 
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/org/students
-// Body: { name: string, email?: string }
+// Body: { name: string, email?: string, studentProfile?: {...} }
 // Creates a database-only student record scoped to the caller's organization
 export async function POST(req: NextRequest) {
   try {
@@ -89,15 +90,23 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const name = String(body?.name || '').trim()
     const email = body?.email ? String(body.email).trim() : ''
+    const studentProfile = body?.studentProfile || null
     if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
-    const docRef = await adminDb().collection('orgStudents').add({
+    const studentData: any = {
       orgId,
       name,
       email,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    })
+    }
+
+    // Include student profile if provided
+    if (studentProfile) {
+      studentData.studentProfile = studentProfile
+    }
+
+    const docRef = await adminDb().collection('orgStudents').add(studentData)
 
     return NextResponse.json({ id: docRef.id }, { status: 201 })
   } catch (e: any) {

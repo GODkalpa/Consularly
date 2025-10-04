@@ -15,6 +15,21 @@ export type InterviewType = 'visa' | 'job' | 'academic';
 // Organization plan enum
 export type OrganizationPlan = 'basic' | 'premium' | 'enterprise';
 
+// Degree level enum
+export type DegreeLevel = 'undergraduate' | 'graduate' | 'doctorate' | 'other';
+
+// Student Profile Information (for interview context)
+export interface StudentProfileInfo {
+  degreeLevel?: DegreeLevel; // What degree level are they applying for
+  programName?: string; // Specific program (e.g., "Master's in Computer Science")
+  universityName?: string; // University applied to
+  programLength?: string; // Duration (e.g., "2 years", "4 years")
+  programCost?: string; // Total cost (e.g., "$50,000", "£30,000")
+  fieldOfStudy?: string; // Field of study
+  intendedMajor?: string; // Intended major/specialization
+  profileCompleted?: boolean; // Whether user has completed profile setup
+}
+
 // User Profile Interface
 export interface UserProfile {
   role: UserRole;
@@ -26,6 +41,7 @@ export interface UserProfile {
   isActive: boolean;
   quotaLimit?: number; // Individual user quota limit (for signup users)
   quotaUsed?: number; // Individual user quota used (for signup users)
+  studentProfile?: StudentProfileInfo; // Pre-interview profile information
 }
 
 // Score Details Interface

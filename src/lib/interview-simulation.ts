@@ -14,6 +14,12 @@ export interface InterviewSession {
     intendedUniversity?: string;
     fieldOfStudy?: string;
     previousEducation?: string;
+    // New profile fields for better question targeting
+    degreeLevel?: 'undergraduate' | 'graduate' | 'doctorate' | 'other';
+    programName?: string;
+    universityName?: string;
+    programLength?: string;
+    programCost?: string;
   };
   conversationHistory: Array<{
     question: string;

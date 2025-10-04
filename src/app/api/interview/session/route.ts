@@ -126,6 +126,8 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        // PERFORMANCE FIX: Process answer and generate next question WITHOUT waiting for scoring
+        // This significantly reduces perceived latency
         const { updatedSession, nextQuestion, isComplete } = await simulationService.processAnswer(
           currentSession,
           answer
