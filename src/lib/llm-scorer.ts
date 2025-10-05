@@ -69,7 +69,20 @@ export class LLMScoringService {
 
     try {
       const response = await callLLMProvider(config, systemPrompt, userPrompt, 0.3, 1500);
-      return this.parseResponse(response.content);
+      const parsed = this.parseResponse(response.content);
+      
+      // DEBUG: Log if contentScore is suspiciously low
+      if (parsed.contentScore < 20) {
+        console.warn('🚨 [LLM Scorer] Very low contentScore detected:', {
+          contentScore: parsed.contentScore,
+          answerLength: req.answer.length,
+          answerPreview: req.answer.slice(0, 100),
+          rubric: parsed.rubric,
+          rawLLMResponse: response.content.slice(0, 500),
+        });
+      }
+      
+      return parsed;
     } catch (error) {
       console.error('[LLM Scorer] API error, using heuristic fallback:', error);
       return this.heuristicFallback(req);

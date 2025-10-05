@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import {
   Sidebar,
@@ -37,6 +37,8 @@ import {
   Target,
 } from "lucide-react"
 import { UserInterviewSimulation } from "./UserInterviewSimulation"
+import { db, firebaseEnabled } from "@/lib/firebase"
+import { collection, onSnapshot, query, where, type DocumentData } from "firebase/firestore"
 
 const menuItems = [
   { title: "Overview", icon: BarChart3, id: "overview" },
@@ -49,6 +51,49 @@ const menuItems = [
 export function UserDashboard() {
   const { user, userProfile } = useAuth()
   const [activeSection, setActiveSection] = useState<(typeof menuItems)[number]["id"]>("overview")
+
+  // User interviews state
+  const [resultsLoading, setResultsLoading] = useState<boolean>(true)
+  const [interviews, setInterviews] = useState<Array<{
+    id: string
+    status?: string
+    score?: number
+    route?: string
+    startTime?: Date | null
+    endTime?: Date | null
+  }>>([])
+
+  // Live subscribe to user's interviews
+  useEffect(() => {
+    if (!firebaseEnabled) {
+      setResultsLoading(false)
+      return
+    }
+    if (!user?.uid) return
+    setResultsLoading(true)
+    const q = query(collection(db, 'interviews'), where('userId', '==', user.uid))
+    const unsub = onSnapshot(q, (snap) => {
+      const rows = snap.docs.map((d) => {
+        const data = d.data() as DocumentData
+        const toDate = (v: any): Date | null => (v && typeof v.toDate === 'function') ? v.toDate() : (v instanceof Date ? v : null)
+        return {
+          id: d.id,
+          status: data?.status,
+          score: typeof data?.score === 'number' ? Math.round(data.score) : undefined,
+          route: data?.route,
+          startTime: toDate(data?.startTime),
+          endTime: toDate(data?.endTime),
+        }
+      }).sort((a, b) => (b.startTime?.getTime() || 0) - (a.startTime?.getTime() || 0))
+      setInterviews(rows)
+      setResultsLoading(false)
+    }, (err) => {
+      // eslint-disable-next-line no-console
+      console.error('[UserDashboard] Results subscription error', err)
+      setResultsLoading(false)
+    })
+    return () => unsub()
+  }, [user?.uid])
 
   const activeTitle = useMemo(
     () => menuItems.find((item) => item.id === activeSection)?.title || "Dashboard",
@@ -263,6 +308,49 @@ export function UserDashboard() {
   }
 
   const renderResults = () => {
+    if (resultsLoading) {
+      return (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Interview History</CardTitle>
+              <CardDescription>Your past interview sessions and scores</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                <span className="animate-pulse">Loading results…</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )
+    }
+
+    if (!interviews.length) {
+      return (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Interview History</CardTitle>
+              <CardDescription>Your past interview sessions and scores</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-12 text-muted-foreground">
+                <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-lg font-medium mb-2">No interviews yet</p>
+                <p className="text-sm mb-4">Start your first practice interview to see results here</p>
+                <Button onClick={() => setActiveSection("interview")}
+                >
+                  <PlayCircle className="h-4 w-4 mr-2" />
+                  Start Interview
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )
+    }
+
     return (
       <div className="space-y-6">
         <Card>
@@ -271,14 +359,28 @@ export function UserDashboard() {
             <CardDescription>Your past interview sessions and scores</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-12 text-muted-foreground">
-              <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium mb-2">No interviews yet</p>
-              <p className="text-sm mb-4">Start your first practice interview to see results here</p>
-              <Button onClick={() => setActiveSection("interview")}>
-                <PlayCircle className="h-4 w-4 mr-2" />
-                Start Interview
-              </Button>
+            <div className="divide-y rounded-md border">
+              {interviews.map((iv) => (
+                <div key={iv.id} className="flex items-center justify-between p-4 text-sm">
+                  <div>
+                    <div className="font-medium">
+                      {iv.startTime ? iv.startTime.toLocaleString() : '—'}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {iv.route || 'visa'} • {iv.status || 'scheduled'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground">Score</div>
+                      <div className="text-base font-semibold">{typeof iv.score === 'number' ? `${iv.score}/100` : '—'}</div>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setActiveSection('interview')}>
+                      Practice Again
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
               
               // Only check quota for signup users (those without orgId)
               // Org members' quota is checked in /api/org/interviews before reaching here
+              let createdInterviewId: string | undefined = undefined;
               if (!caller?.orgId) {
                 const quotaLimit = caller?.quotaLimit ?? 0;
                 const quotaUsed = caller?.quotaUsed ?? 0;
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
                 }
 
                 // Create interview record and increment quota for signup users
-                await adminDb().collection('interviews').add({
+                const docRef = await adminDb().collection('interviews').add({
                   userId: callerUid,
                   orgId: '',
                   startTime: FieldValue.serverTimestamp(),
@@ -74,12 +75,15 @@ export async function POST(request: NextRequest) {
                   createdAt: FieldValue.serverTimestamp(),
                   updatedAt: FieldValue.serverTimestamp(),
                 });
+                createdInterviewId = docRef.id;
 
                 // Increment user quota usage
                 await adminDb().collection('users').doc(callerUid).update({
                   quotaUsed: FieldValue.increment(1),
                   updatedAt: FieldValue.serverTimestamp()
                 });
+                // Attach to request-local scope for response
+                (request as any).__createdInterviewId = createdInterviewId;
               }
             }
           }
@@ -102,9 +106,12 @@ export async function POST(request: NextRequest) {
           route
         );
 
+        // If quota check created an interview for signup users, return its id for persistence
+        const createdInterviewId = (request as any).__createdInterviewId as string | undefined;
         return NextResponse.json({
           session,
           question: firstQuestion,
+          interviewId: createdInterviewId,
           message: 'Interview session started successfully'
         });
 

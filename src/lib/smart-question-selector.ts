@@ -126,10 +126,99 @@ export class SmartQuestionSelector {
       trigger: (answer: string) => answer.split(' ').length < 15 && !/because|specific|career|interest|experience/i.test(answer),
       followUp: "Can you elaborate more on your specific academic interests and how they relate to your career goals in Nepal?"
     },
+    // Education loan specifics
+    {
+      pattern: /loan|education loan|bank loan/i,
+      trigger: (answer: string) => /loan/i.test(answer) && !/(approved|sanctioned|\$\d+|interest|rate|tenure|emi|amount)/i.test(answer),
+      followUp: "You mentioned an education loan. Is it approved? What is the sanctioned amount, interest rate, and repayment plan?"
+    },
+    // Large deposits in statements
+    {
+      pattern: /deposit|lump sum|recently deposited|bank statement/i,
+      trigger: (answer: string) => /(deposit|lump sum|recent)/i.test(answer) && !/(salary|business income|sale deed|gift deed|inheritance|evidence)/i.test(answer),
+      followUp: "There are large recent deposits in your bank statements. Can you explain the source with evidence (salary, business revenue, sale deed, or gift deed)?"
+    },
+    // Family business clarity
+    {
+      pattern: /business|family business|shop|company|factory/i,
+      trigger: (answer: string) => /business|company|factory|shop/i.test(answer) && !/(annual (income|revenue)|turnover|tax returns?|profit)/i.test(answer),
+      followUp: "You said your family runs a business. What is the annual revenue and what do the tax returns show for the last year?"
+    },
+    // Relatives in the US
+    {
+      pattern: /uncle|aunt|cousin|relative|friend in (the )?US|usa/i,
+      trigger: (answer: string) => /(uncle|aunt|cousin|relative|friend)/i.test(answer) && !/(financial support|sponsor|no support)/i.test(answer),
+      followUp: "You mentioned relatives/friends in the US. Are they providing any financial support? If not, clarify your independent funding."
+    },
   ];
 
   constructor(questionBank: QuestionBank) {
     this.questionBank = questionBank;
+  }
+
+  /**
+   * Nepal F1 (USA) stage flow helpers
+   */
+  private getUsaStage(step: number): 'study_plans' | 'university_choice' | 'academic_capability' | 'financial' | 'post_study' {
+    if (step <= 2) return 'study_plans';
+    if (step === 3) return 'university_choice';
+    if (step === 4) return 'academic_capability';
+    if (step <= 6) return 'financial';
+    return 'post_study';
+  }
+
+  private getUsaStageLabel(stage: ReturnType<SmartQuestionSelector['getUsaStage']>): string {
+    switch (stage) {
+      case 'study_plans': return 'Study Plans (why US, why this major/program)';
+      case 'university_choice': return 'University Choice specifics';
+      case 'academic_capability': return 'Academic Capability (scores/GPA/background)';
+      case 'financial': return 'Financial Status (costs, sponsors, sources)';
+      case 'post_study': return 'Post-graduation Plans and Return Intent';
+    }
+  }
+
+  private filterUsaQuestionsByStage(available: Question[], stage: ReturnType<SmartQuestionSelector['getUsaStage']>): Question[] {
+    const has = (q: Question, k: string) => q.keywords?.includes(k);
+    const any = (q: Question, keys: string[]) => keys.some(k => has(q, k));
+    const none = (q: Question, keys: string[]) => !any(q, keys);
+    const qText = (q: Question) => q.question.toLowerCase();
+
+    switch (stage) {
+      case 'study_plans':
+        // Academic, introductory motivation questions; exclude university- and score-specific items
+        return available.filter(q =>
+          (q.route === 'usa_f1' || q.route === 'both') &&
+          q.category === 'academic' &&
+          any(q, ['study', 'major', 'degree']) &&
+          none(q, ['university', 'school', 'test', 'scores', 'gpa'])
+        );
+      case 'university_choice':
+        // Why this university, city, professors, admits/rejects
+        return available.filter(q =>
+          (q.route === 'usa_f1' || q.route === 'both') &&
+          q.category === 'academic' &&
+          any(q, ['university', 'school'])
+        );
+      case 'academic_capability':
+        // Scores/GPA/marksheet/backlogs
+        return available.filter(q =>
+          (q.route === 'usa_f1' || q.route === 'both') &&
+          q.category === 'academic' &&
+          (any(q, ['test', 'scores', 'gpa']) || /marksheet|fail|backlog/i.test(qText(q)))
+        );
+      case 'financial':
+        return available.filter(q =>
+          (q.route === 'usa_f1' || q.route === 'both') && q.category === 'financial'
+        );
+      case 'post_study':
+        // Prefer post_study category; allow intent with return/ties semantics
+        const post = available.filter(q => (q.route === 'usa_f1' || q.route === 'both') && q.category === 'post_study');
+        if (post.length) return post;
+        return available.filter(q =>
+          (q.route === 'usa_f1' || q.route === 'both') &&
+          q.category === 'intent' && any(q, ['return', 'plans', 'future'])
+        );
+    }
   }
 
   /**
@@ -215,18 +304,30 @@ export class SmartQuestionSelector {
 
     logProviderSelection(context.route, 'question_selection', config);
 
+    // Build route-specific guidance with STRICT Nepal F1 stage gating
+    const step = context.history.length + 1;
+    const stage = context.route === 'usa_f1' ? this.getUsaStage(step) : null;
+    const stageLabel = stage ? this.getUsaStageLabel(stage) : '';
+    const usaFlowHint = stage
+      ? `STRICT Nepal F1 flow at step ${step}: ${stageLabel}. Do not jump ahead; stay within this stage.`
+      : '';
+
+    // Restrict the candidate pool to stage-appropriate questions for USA
+    const stagePool = context.route === 'usa_f1' ? this.filterUsaQuestionsByStage(availableQuestions, this.getUsaStage(step)) : availableQuestions;
+    const pool = stagePool.length ? stagePool : availableQuestions;
+
     // Build route-specific guidance
     const routeGuidance = context.route === 'uk_student'
       ? 'UK Student Visa priorities: course module specificity, £18,000 maintenance requirement, 28-day rule awareness, agent dependency detection, work hour compliance (20h/week), accommodation costs in £/week.'
-      : 'USA F1 Visa priorities: specific dollar amounts for funding, Nepal ties and return intent, detect coached language (dreams, world-class), sponsor occupation details, concrete post-graduation plans.';
+      : 'USA F1 Visa priorities: specific dollar amounts for funding, Nepal ties and return intent, detect coached language (dreams, world-class), sponsor occupation details, concrete post-graduation plans. ' + usaFlowHint;
 
     // Category coverage status
     const coverageStatus = Object.entries(context.categoryCoverage)
       .map(([cat, count]) => `${cat}: ${count}`)
       .join(', ');
 
-    // Question summaries (first 20 for context window)
-    const questionSummaries = availableQuestions.slice(0, 20).map((q) => ({
+    // Question summaries (first 20 from the current pool)
+    const questionSummaries = pool.slice(0, 20).map((q) => ({
       id: q.id,
       category: q.category,
       difficulty: q.difficulty,
@@ -251,7 +352,7 @@ Selection criteria (in priority order):
 
 Return JSON: {"questionId": "selected_id", "reasoning": "brief explanation"}`;
 
-    const userPrompt = `Available questions (${availableQuestions.length} total, showing first 20):
+    const userPrompt = `Available questions (${pool.length} in current stage pool, showing first 20):
 ${JSON.stringify(questionSummaries, null, 2)}
 
 Recent conversation context:
@@ -260,10 +361,18 @@ ${context.history.slice(-2).map((h) => `Q: ${h.question}\nA: ${h.answer}`).join(
 Select the best next question ID.`;
 
     try {
-      const response = await callLLMProvider(config, systemPrompt, userPrompt, 0.3, 500);
+      // Enforce a short timeout for snappy selection; fallback if slow
+      const timeoutMs = 1200;
+      const response = await Promise.race([
+        callLLMProvider(config, systemPrompt, userPrompt, 0.3, 500),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('LLM selection timeout')), timeoutMs)),
+      ]);
       const result = JSON.parse(response.content);
-      
-      const selectedQuestion = availableQuestions.find((q) => q.id === result.questionId);
+      // Enforce selection from the current pool first
+      let selectedQuestion = pool.find((q) => q.id === result.questionId);
+      if (!selectedQuestion) {
+        selectedQuestion = availableQuestions.find((q) => q.id === result.questionId);
+      }
       if (selectedQuestion) {
         return {
           question: selectedQuestion.question,
@@ -283,24 +392,31 @@ Select the best next question ID.`;
    * Rule-based fallback selection
    */
   private selectRuleBased(context: StudentContext, availableQuestions: Question[]): QuestionResult {
-    // Find least covered category
+    // USA: strictly follow Nepal F1 stage flow
+    if (context.route === 'usa_f1') {
+      const step = context.history.length + 1;
+      const stage = this.getUsaStage(step);
+      const pool = this.filterUsaQuestionsByStage(availableQuestions, stage);
+      const stagePool = pool.length ? pool : availableQuestions;
+      const selected = stagePool.find((q) => q.difficulty !== 'hard') || stagePool[0] || availableQuestions[0];
+      return {
+        question: selected.question,
+        type: 'bank',
+        questionId: selected.id,
+        reasoning: `Rule-based: Nepal F1 stage '${this.getUsaStageLabel(stage)}'`,
+      };
+    }
+
+    // UK and others: previous least-covered-category heuristic
     const categories: Array<'financial' | 'academic' | 'intent' | 'personal' | 'post_study'> = 
       ['financial', 'academic', 'intent', 'personal', 'post_study'];
-    
     const leastCoveredCategory = categories.reduce((min, cat) => {
       const count = context.categoryCoverage[cat] || 0;
       const minCount = context.categoryCoverage[min] || 0;
       return count < minCount ? cat : min;
     });
-
-    // Filter by least covered category
-    const categoryQuestions = availableQuestions.filter(
-      (q) => q.category === leastCoveredCategory
-    );
-
-    // Pick first easy/medium question from that category
+    const categoryQuestions = availableQuestions.filter((q) => q.category === leastCoveredCategory);
     const selected = categoryQuestions.find((q) => q.difficulty !== 'hard') || categoryQuestions[0] || availableQuestions[0];
-
     return {
       question: selected.question,
       type: 'bank',

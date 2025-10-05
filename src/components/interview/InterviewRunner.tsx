@@ -14,6 +14,7 @@ import type { TranscriptionResult } from '@/lib/assemblyai-service'
 import { mapQuestionTypeToCategory, type InterviewRoute } from '@/lib/interview-routes'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
 import { motion, AnimatePresence } from 'motion/react'
+import { auth } from '@/lib/firebase'
 
 // Dynamically import the heavy InterviewStage (TensorFlow/MediaPipe) client-only to reduce initial bundle size
 const InterviewStage = dynamic(() => import('@/components/interview/InterviewStage'), { ssr: false })
@@ -50,6 +51,11 @@ export default function InterviewRunner() {
   // Track ASR confidence from transcript segments (per-segment and aggregated)
   const asrConfidencesRef = useRef<number[]>([])
   const captureBodyScoreRef = useRef<(() => BodyLanguageScore | null) | null>(null)
+  // Persist targets
+  const firestoreInterviewIdRef = useRef<string | null>(null)
+  const scopeRef = useRef<'org'|'user'|null>(null)
+  // PERFORMANCE FIX: Debounce transcript updates to reduce re-renders
+  const transcriptDebounceRef = useRef<number | null>(null)
   // Per-answer combined performance results (includes body language)
   const [perfList, setPerfList] = useState<Array<{ overall: number; categories: { content: number; speech: number; bodyLanguage: number } }>>([])
   const [finalReport, setFinalReport] = useState<null | {
@@ -129,6 +135,17 @@ export default function InterviewRunner() {
         }
         setApiSession(seeded)
         setSession(s)
+        // Persist context
+        if (init.firestoreInterviewId) {
+          firestoreInterviewIdRef.current = String(init.firestoreInterviewId)
+        } else {
+          firestoreInterviewIdRef.current = null
+        }
+        if (init.scope === 'org' || init.scope === 'user') {
+          scopeRef.current = init.scope
+        } else {
+          scopeRef.current = null
+        }
         console.log('[InterviewRunner] Session loaded successfully:', s.id)
         setLoading(false)
       } catch (e) {
@@ -205,12 +222,47 @@ export default function InterviewRunner() {
     return () => {
       if (phaseTimerRef.current) window.clearTimeout(phaseTimerRef.current)
       if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
+      if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
     }
   }, [])
 
-  const startPhase = (p: 'prep' | 'answer', durationSec: number) => {
+  // PERFORMANCE FIX: Use requestAnimationFrame for smooth timer updates instead of setInterval
+  const timerStartTimeRef = useRef<number>(0)
+  const timerDurationRef = useRef<number>(0)
+  const timerRafRef = useRef<number | null>(null)
+  
+  const updateTimer = useCallback(() => {
+    const elapsed = (performance.now() - timerStartTimeRef.current) / 1000
+    const remaining = Math.max(0, timerDurationRef.current - elapsed)
+    const roundedRemaining = Math.ceil(remaining)
+    
+    setSecondsRemaining(roundedRemaining)
+    
+    if (remaining > 0.1) {
+      // Continue timer updates
+      timerRafRef.current = requestAnimationFrame(updateTimer)
+    } else {
+      // Timer completed
+      if (phase === 'prep') {
+        setPhase('answer')
+        timerStartTimeRef.current = performance.now()
+        timerDurationRef.current = 30
+        setResetKey((k) => k + 1)
+        answerBufferRef.current = ''
+        setCurrentTranscript('')
+        timerRafRef.current = requestAnimationFrame(updateTimer)
+      } else {
+        finalizeAnswer()
+      }
+    }
+  }, [phase])
+
+  const startPhase = useCallback((p: 'prep' | 'answer', durationSec: number) => {
+    // Clear old timers
     if (phaseTimerRef.current) window.clearTimeout(phaseTimerRef.current)
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
+    if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
+    
     setPhase(p)
     setSecondsRemaining(durationSec)
     if (p === 'prep') setCurrentTranscript('')
@@ -220,22 +272,12 @@ export default function InterviewRunner() {
       // Clear ASR confidence buffer for new answer
       asrConfidencesRef.current = []
     }
-    countdownTimerRef.current = window.setInterval(() => {
-      setSecondsRemaining((s) => (s > 0 ? s - 1 : 0))
-    }, 1000)
-    phaseTimerRef.current = window.setTimeout(() => {
-      if (p === 'prep') {
-        setPhase('answer')
-        setSecondsRemaining(30)
-        setResetKey((k) => k + 1)
-        answerBufferRef.current = ''
-        setCurrentTranscript('')
-        startPhase('answer', 30)
-      } else {
-        finalizeAnswer()
-      }
-    }, durationSec * 1000)
-  }
+    
+    // Start smooth RAF-based timer
+    timerStartTimeRef.current = performance.now()
+    timerDurationRef.current = durationSec
+    timerRafRef.current = requestAnimationFrame(updateTimer)
+  }, [updateTimer])
 
   const beginInterview = async () => {
     if (!session) return
@@ -244,6 +286,20 @@ export default function InterviewRunner() {
       if (!ok) return
     }
     setSession((prev) => (prev ? { ...prev, status: 'active', startTime: new Date() } : prev))
+    // Mark interview as in_progress in Firestore if available
+    try {
+      const interviewId = firestoreInterviewIdRef.current
+      const scope = scopeRef.current
+      if (interviewId && scope) {
+        const token = await auth.currentUser?.getIdToken()
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const url = scope === 'org'
+          ? `/api/org/interviews/${interviewId}`
+          : `/api/interviews/${interviewId}`
+        await fetch(url, { method: 'PATCH', headers, body: JSON.stringify({ status: 'in_progress' }) })
+      }
+    } catch {}
     if (session.route === 'uk_student') {
       startPhase('prep', 30)
     } else if (session.route === 'usa_f1') {
@@ -252,40 +308,72 @@ export default function InterviewRunner() {
     }
   }
 
-  const startUSF1QuestionTimer = () => {
+  const startUSF1QuestionTimer = useCallback(() => {
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
-    setSecondsRemaining(40) // 40s soft cap per MVP config
-    countdownTimerRef.current = window.setInterval(() => {
-      setSecondsRemaining((s) => (s > 0 ? s - 1 : 0))
-    }, 1000)
-  }
+    if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
+    
+    // Use RAF-based timer for USA F1 as well
+    timerStartTimeRef.current = performance.now()
+    timerDurationRef.current = 40
+    setSecondsRemaining(40)
+    timerRafRef.current = requestAnimationFrame(updateTimer)
+  }, [updateTimer])
 
-  const startAnswerNow = () => {
+  const startAnswerNow = useCallback(() => {
     if (session?.route !== 'uk_student') return
     if (phaseTimerRef.current) window.clearTimeout(phaseTimerRef.current)
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
-    setPhase('answer')
-    setSecondsRemaining(30)
+    if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
     setResetKey((k) => k + 1)
     answerBufferRef.current = ''
     setCurrentTranscript('')
     startPhase('answer', 30)
-  }
+  }, [session?.route, startPhase])
 
-  const finalizeAnswer = async () => {
-    if (processingRef.current) return
-    processingRef.current = true
-    if (phaseTimerRef.current) window.clearTimeout(phaseTimerRef.current)
-    if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
-    const text = currentTranscript.trim()
-    await processAnswer(text.length >= 1 ? text : '[No response]')
-  }
+  // Define computeFinalReport first to avoid circular dependency
+  const computeFinalReport = useCallback(async (finalApiSession: any) => {
+    try {
+      // CRITICAL FIX: Pass per-answer scores to final evaluation for consistency
+      const res = await fetch('/api/interview/final', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          route: session?.route,
+          studentProfile: finalApiSession.studentProfile,
+          conversationHistory: finalApiSession.conversationHistory,
+          perAnswerScores: perfList,  // Include detailed per-answer scoring data
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setFinalReport(data)
+      } else {
+        setFinalReport({
+          decision: 'borderline',
+          overall: 60,
+          dimensions: { communication: 60, credibility: 60 },
+          summary: 'Final AI evaluation unavailable. This is a heuristic fallback based on response lengths and consistency.',
+          recommendations: ['Add more concrete details (numbers, evidence).', 'Clarify financial maintenance and accommodation arrangements.']
+        })
+      }
+    } catch (e) {
+      setFinalReport({
+        decision: 'borderline',
+        overall: 60,
+        dimensions: { communication: 60, credibility: 60 },
+        summary: 'Final AI evaluation failed. Showing fallback.',
+        recommendations: ['Add more concrete details (numbers, evidence).', 'Clarify financial maintenance and accommodation arrangements.']
+      })
+    }
+  }, [session?.route, perfList])
 
-  const processAnswer = async (transcriptText: string) => {
+  // Define processAnswer before finalizeAnswer to avoid initialization error
+  const processAnswer = useCallback(async (transcriptText: string) => {
     if (!session || session.status !== 'active' || !apiSession) return
     try {
       // Stop timers
       if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
+      if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
       
       // CRITICAL FIX: Capture body language score at the exact moment of answer finalization
       const capturedBodyScore = captureBodyScoreRef.current ? captureBodyScoreRef.current() : null
@@ -313,6 +401,49 @@ export default function InterviewRunner() {
         conversationHistory: apiSession.conversationHistory.map((h: any) => ({ question: h.question, answer: h.answer, timestamp: h.timestamp }))
       }
       
+      // Persist helper and start both API calls simultaneously
+      const orderValue = session.currentQuestionIndex + 1
+      const words = transcriptText ? transcriptText.trim().split(/\s+/).length : 0
+      const contentHeuristic = Math.min(100, Math.round(words * 3))
+      const speechHeuristic = typeof avgConfidence === 'number' ? Math.round(avgConfidence * 100) : 70
+      const bodyHeuristic = capturedBodyScore ? Math.round(capturedBodyScore.overallScore) : 60
+      const perfFallback = {
+        overall: Math.round((contentHeuristic + speechHeuristic + bodyHeuristic) / 3),
+        categories: { content: contentHeuristic, speech: speechHeuristic, bodyLanguage: bodyHeuristic }
+      }
+      const persistResponse = async (
+        orderParam: number,
+        perfPayload: { overall: number; categories: { content: number; speech: number; bodyLanguage: number } }
+      ) => {
+        const interviewId = firestoreInterviewIdRef.current
+        const scope = scopeRef.current
+        if (!interviewId || !scope) return
+        try {
+          const token = await auth.currentUser?.getIdToken()
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+          if (token) headers['Authorization'] = `Bearer ${token}`
+          const url = scope === 'org'
+            ? `/api/org/interviews/${interviewId}/responses`
+            : `/api/interviews/${interviewId}/responses`
+          await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              order: orderParam,
+              question: currentQText,
+              answer: transcriptText,
+              perf: perfPayload,
+              bodyLanguageOverall: capturedBodyScore?.overallScore ?? null,
+              asrConfidence: typeof avgConfidence === 'number' ? Math.round(avgConfidence * 100) : null,
+              timestamp: new Date().toISOString(),
+            })
+          })
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[InterviewRunner] Persist response failed', e)
+        }
+      }
+
       // Start both API calls simultaneously
       const [scoringPromise, nextQuestionPromise] = [
         fetch('/api/interview/score', {
@@ -324,19 +455,30 @@ export default function InterviewRunner() {
             bodyLanguage: capturedBodyScore || undefined,
             assemblyConfidence: avgConfidence,
             interviewContext: ic,
+            // Pass session memory to enhance contradiction detection and fair scoring
+            sessionMemory: apiSession?.sessionMemory,
           })
         }).then(async (resScore) => {
           if (resScore.ok) {
             const data = await resScore.json()
             if (typeof data?.overall === 'number' && data?.categories) {
-              setPerfList((prev) => [...prev, { overall: Math.round(data.overall), categories: {
-                content: Math.round(data.categories.content ?? 0),
-                speech: Math.round(data.categories.speech ?? 0),
-                bodyLanguage: Math.round(data.categories.bodyLanguage ?? 0),
-              }}])
+              const normalized = {
+                overall: Math.round(data.overall),
+                categories: {
+                  content: Math.round(data.categories.content ?? 0),
+                  speech: Math.round(data.categories.speech ?? 0),
+                  bodyLanguage: Math.round(data.categories.bodyLanguage ?? 0),
+                }
+              }
+              setPerfList((prev) => [...prev, normalized])
+              await persistResponse(orderValue, normalized)
+            } else {
+              await persistResponse(orderValue, perfFallback)
             }
+          } else {
+            await persistResponse(orderValue, perfFallback)
           }
-        }).catch(err => console.error('❌ Scoring API failed:', err)),
+        }).catch(async err => { console.error('❌ Scoring API failed:', err); await persistResponse(orderValue, perfFallback) }),
         
         fetch('/api/interview/session', {
           method: 'POST',
@@ -395,7 +537,17 @@ export default function InterviewRunner() {
       processingRef.current = false
       setResetKey((k) => k + 1)
     }
-  }
+  }, [session, apiSession, startPhase, startUSF1QuestionTimer, computeFinalReport])
+
+  const finalizeAnswer = useCallback(async () => {
+    if (processingRef.current) return
+    processingRef.current = true
+    if (phaseTimerRef.current) window.clearTimeout(phaseTimerRef.current)
+    if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
+    if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
+    const text = currentTranscript.trim()
+    await processAnswer(text.length >= 1 ? text : '[No response]')
+  }, [currentTranscript, processAnswer])
 
   const handleTranscriptComplete = async (t: TranscriptionResult) => {
     if (!session || session.status !== 'active') return
@@ -432,42 +584,6 @@ export default function InterviewRunner() {
     await processAnswer(t.text.trim())
   }
 
-  const computeFinalReport = async (finalApiSession: any) => {
-    try {
-      // CRITICAL FIX: Pass per-answer scores to final evaluation for consistency
-      const res = await fetch('/api/interview/final', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          route: session?.route,
-          studentProfile: finalApiSession.studentProfile,
-          conversationHistory: finalApiSession.conversationHistory,
-          perAnswerScores: perfList,  // Include detailed per-answer scoring data
-        })
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setFinalReport(data)
-      } else {
-        setFinalReport({
-          decision: 'borderline',
-          overall: 60,
-          dimensions: { communication: 60, credibility: 60 },
-          summary: 'Final AI evaluation unavailable. This is a heuristic fallback based on response lengths and consistency.',
-          recommendations: ['Add more concrete details (numbers, evidence).', 'Clarify financial maintenance and accommodation arrangements.']
-        })
-      }
-    } catch (e) {
-      setFinalReport({
-        decision: 'borderline',
-        overall: 60,
-        dimensions: { communication: 60, credibility: 60 },
-        summary: 'Final AI evaluation failed. Showing fallback.',
-        recommendations: ['Add more concrete details (numbers, evidence).', 'Clarify financial maintenance and accommodation arrangements.']
-      })
-    }
-  }
-
   const currentQuestion = session?.questions[session.currentQuestionIndex]
   const progressPct = useMemo(() => {
     if (!session) return 0
@@ -497,6 +613,45 @@ export default function InterviewRunner() {
       }
     }
   }, [perfList])
+
+  // Finalize interview record in Firestore (user or org scope) when completed
+  useEffect(() => {
+    const interviewId = firestoreInterviewIdRef.current
+    const scope = scopeRef.current
+    if (!interviewId || !scope) return
+    if (!session || session.status !== 'completed') return
+
+    const score = typeof finalReport?.overall === 'number' ? Math.round(finalReport.overall)
+      : (combinedAggregate ? combinedAggregate.overall : undefined)
+
+    const scoreDetails = combinedAggregate ? {
+      communication: combinedAggregate.categories.content,
+      technical: combinedAggregate.categories.speech,
+      confidence: combinedAggregate.categories.bodyLanguage,
+      overall: combinedAggregate.overall,
+    } : undefined
+
+    ;(async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken()
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const url = scope === 'org'
+          ? `/api/org/interviews/${interviewId}`
+          : `/api/interviews/${interviewId}`
+        const body: any = {
+          status: 'completed',
+          endTime: new Date().toISOString(),
+        }
+        if (typeof score === 'number') body.score = score
+        if (scoreDetails) body.scoreDetails = scoreDetails
+        await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) })
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[InterviewRunner] Finalize interview patch failed', e)
+      }
+    })()
+  }, [session?.status, combinedAggregate, finalReport])
 
   if (loading) {
     return (
@@ -808,13 +963,21 @@ export default function InterviewRunner() {
           onTranscriptComplete={handleTranscriptComplete}
           onTranscriptUpdate={(t) => {
             if (session.status !== 'active') return
-            if (session.route === 'uk_student') {
-              if (phase !== 'answer') return
-              const combined = answerBufferRef.current ? `${answerBufferRef.current} ${t}` : t
-              setCurrentTranscript(combined)
-            } else {
-              setCurrentTranscript(t)
+            
+            // PERFORMANCE FIX: Debounce transcript updates to 100ms to reduce re-renders
+            if (transcriptDebounceRef.current) {
+              window.clearTimeout(transcriptDebounceRef.current)
             }
+            
+            transcriptDebounceRef.current = window.setTimeout(() => {
+              if (session.route === 'uk_student') {
+                if (phase !== 'answer') return
+                const combined = answerBufferRef.current ? `${answerBufferRef.current} ${t}` : t
+                setCurrentTranscript(combined)
+              } else {
+                setCurrentTranscript(t)
+              }
+            }, 100)
           }}
           showControls={false}
           showTranscripts={false}

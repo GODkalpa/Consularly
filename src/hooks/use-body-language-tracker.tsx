@@ -371,10 +371,10 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     }
     const now = performance.now()
 
-    // Throttle detectors to balance performance
+    // PERFORMANCE FIX: Throttle detectors more aggressively to reduce lag
     const poseDue = now - lastTimesRef.current.pose > 1000 / cfg.maxFPS
-    const handsDue = now - lastTimesRef.current.hands > 1000 / Math.min(15, cfg.maxFPS)
-    const faceDue = now - lastTimesRef.current.face > 1000 / Math.min(15, cfg.maxFPS)
+    const handsDue = now - lastTimesRef.current.hands > 1000 / Math.min(10, cfg.maxFPS) // Reduced from 15
+    const faceDue = now - lastTimesRef.current.face > 1000 / Math.min(10, cfg.maxFPS) // Reduced from 15
 
     try {
       const v = videoRef.current
@@ -402,10 +402,13 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
         lastTimesRef.current.face = now
       }
 
-      drawOverlay(pose, hands, face)
+      // PERFORMANCE FIX: Skip drawing overlay during interview to reduce canvas operations
+      // drawOverlay(pose, hands, face) // Disabled - canvas drawing is expensive
 
       const raw = evaluateBodyLanguage({ pose, hands, face })
       const blend = (prev: number | undefined, curr: number) => (typeof prev === 'number' ? (prev * (1 - SMOOTH) + curr * SMOOTH) : curr)
+      
+      // PERFORMANCE FIX: Use batch state update to reduce re-renders
       setState((s) => {
         const prev = s.score
         const smoothed = prev ? {
@@ -611,13 +614,26 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     }
     
     // Validate the score has meaningful data (not just defaults)
-    const hasValidData = state.score.expressions.confidence > 0.3 || 
-                         state.score.gestures.confidence > 0.3 ||
+    // RELAXED: Accept any score data if pose detection is working (even with low confidence)
+    const hasValidData = state.score.expressions.confidence > 0.1 || 
+                         state.score.gestures.confidence > 0.1 ||
                          (state.pose && state.pose.keypoints?.length > 0)
     
     if (!hasValidData) {
-      console.warn('⚠️ Body language score confidence too low - data may be invalid')
+      console.warn('⚠️ Body language score confidence too low - data may be invalid', {
+        expressionConf: state.score.expressions.confidence,
+        gestureConf: state.score.gestures.confidence,
+        poseKeypoints: state.pose?.keypoints?.length || 0
+      })
       return null
+    }
+    
+    // Log successful capture even if confidence is low
+    if (state.score.expressions.confidence < 0.3 && state.score.gestures.confidence < 0.3) {
+      console.warn('⚠️ Body language confidence is low but accepting score:', {
+        expressionConf: state.score.expressions.confidence,
+        gestureConf: state.score.gestures.confidence,
+      })
     }
     
     console.log('✅ Captured body language score:', {

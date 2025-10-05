@@ -76,6 +76,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // DEBUG: Log the answer being scored
+    console.log('📝 [Scoring API] Answer to score:', {
+      questionPreview: question.slice(0, 80),
+      answerLength: answer.length,
+      answerPreview: answer.slice(0, 150),
+      hasBodyLanguage: !!bodyLanguage,
+      assemblyConfidence,
+    });
+
     // Try AI scoring for content (with session memory for consistency checking)
     let aiRes: Awaited<ReturnType<LLMScoringService['scoreAnswer']>> | null = null
     try {

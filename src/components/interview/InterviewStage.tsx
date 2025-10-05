@@ -63,13 +63,14 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   showBodyBadge = true,
   captureScoreRef
 }) => {
+  // PERFORMANCE FIX: Reduce body language tracking FPS to 15 to minimize lag
   const { state, start, stop, startPreview, stopPreview, captureScore, videoRef, canvasRef } = useBodyLanguageTracker({
     width,
     height,
     enableFace: true,
     enableHands: true,
     enablePose: true,
-    maxFPS: 30,
+    maxFPS: 15, // Reduced from 30 to minimize CPU/GPU load
   })
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -85,29 +86,42 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   useEffect(() => {
     const control = async () => {
       try {
-        console.log('📹 Camera control check:', { running, preview, stateRunning: state.running, statePreviewing: state.previewing })
+        console.log('📹 [InterviewStage] Camera control check:', { 
+          running, 
+          preview, 
+          stateRunning: state.running, 
+          statePreviewing: state.previewing,
+          hasVideoStream: !!videoRef.current?.srcObject,
+          hasScore: !!state.score,
+          errors: state.errors.length
+        })
         
         if (running && !state.running) {
-          console.log('🎥 Starting interview recording')
+          console.log('🎥 [InterviewStage] Starting interview recording...')
           await start()
+          console.log('✅ [InterviewStage] Camera start completed. State:', { 
+            running: state.running, 
+            backend: state.backend, 
+            errors: state.errors 
+          })
         } else if (running && state.running) {
-          console.log('✅ Already running, skipping start')
+          console.log('✅ [InterviewStage] Already running, skipping start')
         } else if (!running && preview && !state.previewing && !state.running) {
           // Preview only - only start if not already in any active state
-          console.log('👁️ Starting camera preview')
+          console.log('👁️ [InterviewStage] Starting camera preview')
           await startPreview()
         } else if (!running && !preview) {
           // Neither running nor previewing - cleanup
           if (state.running) {
-            console.log('🛑 Stopping interview recording')
+            console.log('🛑 [InterviewStage] Stopping interview recording')
             await stop()
           } else if (state.previewing) {
-            console.log('🛑 Stopping camera preview')
+            console.log('🛑 [InterviewStage] Stopping camera preview')
             await stopPreview()
           }
         }
       } catch (err) {
-        console.error('❌ Camera control error:', err)
+        console.error('❌ [InterviewStage] Camera control error:', err)
       }
     }
     control()
@@ -115,9 +129,15 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, preview])
 
-  // Continuously update parent with latest score for live display
+  // Continuously update parent with latest score for live display (throttled)
+  const lastScoreSentRef = useRef<number>(0)
   useEffect(() => {
-    if (state.score && onScore) onScore(state.score)
+    if (!state.score || !onScore) return
+    const now = performance.now()
+    // Throttle to ~4 FPS (every 250ms)
+    if (now - lastScoreSentRef.current < 250) return
+    lastScoreSentRef.current = now
+    onScore(state.score)
   }, [state.score, onScore])
 
   // Log model loading status for debugging
@@ -147,7 +167,8 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   const body = state.score?.overallScore ?? 0
 
   const progressPct = useMemo(() => {
-    if (!questionIndex || !questionTotal) return 0
+    // BUGFIX: handle questionIndex === 0 correctly; treat only null/undefined as missing
+    if (questionIndex == null || !questionTotal) return 0
     return Math.round(((questionIndex + 1) / questionTotal) * 100)
   }, [questionIndex, questionTotal])
 
@@ -216,6 +237,17 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
             <span className="inline-block h-2 w-2 rounded-full bg-white animate-pulse" />
             <span className="text-sm font-medium text-white">{statusBadge}</span>
           </motion.div>
+          {state.errors.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center gap-2 bg-destructive text-destructive-foreground px-3 py-1.5 rounded-full shadow-lg"
+              title={state.errors[state.errors.length - 1]}
+            >
+              <span className="inline-block h-2 w-2 rounded-full bg-white" />
+              <span className="text-sm font-medium">Camera error ({state.errors.length})</span>
+            </motion.div>
+          )}
           {phase && typeof secondsRemaining === 'number' && (
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}

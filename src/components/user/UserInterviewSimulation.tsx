@@ -1,12 +1,11 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
 import { Play, User, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { defaultVisaTypeForRoute, type InterviewRoute, routeDisplayName } from '@/lib/interview-routes'
@@ -22,15 +21,20 @@ import {
 } from '@/components/ui/alert-dialog'
 
 export function UserInterviewSimulation() {
-  const { user } = useAuth()
+  const { user, userProfile } = useAuth()
   const router = useRouter()
-  const [studentName, setStudentName] = useState('')
   const [route, setRoute] = useState<InterviewRoute>('usa_f1')
   const [showQuotaDialog, setShowQuotaDialog] = useState(false)
   const [quotaMessage, setQuotaMessage] = useState('')
 
+  // Auto-derived candidate name from profile; no manual input needed
+  const candidateName = useMemo(() => {
+    const n = (userProfile?.displayName || user?.displayName || user?.email?.split('@')[0] || '').trim()
+    return n
+  }, [userProfile?.displayName, user?.displayName, user?.email])
+
   const startNewSession = async () => {
-    if (!studentName.trim()) return
+    if (!candidateName) return
 
     // Open interview tab IMMEDIATELY (before API call) to avoid popup blocker
     const interviewWindow = window.open('about:blank', '_blank')
@@ -181,6 +185,20 @@ export function UserInterviewSimulation() {
         headers['Authorization'] = `Bearer ${token}`
       }
 
+      // Build enriched student profile for personalized question selection
+      const sp = (userProfile as any)?.studentProfile || {}
+      const studentProfilePayload = {
+        name: candidateName,
+        country: 'Nepal',
+        degreeLevel: sp.degreeLevel || undefined,
+        programName: sp.programName || undefined,
+        universityName: sp.universityName || sp.intendedUniversity || undefined,
+        programLength: sp.programLength || undefined,
+        programCost: sp.programCost || undefined,
+        fieldOfStudy: sp.fieldOfStudy || sp.intendedMajor || undefined,
+        previousEducation: sp.previousEducation || undefined,
+      }
+
       const res = await fetch('/api/interview/session', {
         method: 'POST',
         headers,
@@ -189,10 +207,7 @@ export function UserInterviewSimulation() {
           userId: user?.uid || 'guest',
           visaType: defaultVisaTypeForRoute(route),
           route,
-          studentProfile: {
-            name: studentName.trim(),
-            country: 'Nepal'
-          }
+          studentProfile: studentProfilePayload
         })
       })
 
@@ -213,6 +228,7 @@ export function UserInterviewSimulation() {
       const data = await res.json()
       const apiSess = data.session
       const firstQ = data.question
+      const firestoreInterviewId: string | undefined = data.interviewId
 
       // Seed the API session with the first question
       const seededApiSession = {
@@ -235,7 +251,9 @@ export function UserInterviewSimulation() {
         apiSession: seededApiSession,
         firstQuestion: firstQ,
         route,
-        studentName: studentName.trim(),
+        studentName: candidateName,
+        firestoreInterviewId: firestoreInterviewId || null,
+        scope: 'user',
       })
       
       localStorage.setItem(key, payload)
@@ -277,18 +295,10 @@ export function UserInterviewSimulation() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="studentName">Your Name</Label>
-              <Input
-                id="studentName"
-                placeholder="Enter your full name"
-                value={studentName}
-                onChange={(e) => setStudentName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && studentName.trim()) {
-                    startNewSession()
-                  }
-                }}
-              />
+              <Label>Candidate</Label>
+              <div className="h-10 px-3 flex items-center rounded-md bg-muted/40 border text-sm">
+                {candidateName || '—'}
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Interview Type</Label>
@@ -304,7 +314,7 @@ export function UserInterviewSimulation() {
             </div>
             <Button 
               onClick={startNewSession}
-              disabled={!studentName.trim()}
+              disabled={!candidateName}
               className="w-full"
             >
               <Play className="h-4 w-4 mr-2" />

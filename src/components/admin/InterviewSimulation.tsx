@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -92,6 +92,18 @@ export function InterviewSimulation() {
     programCost: '',
   });
   const [bodyScore, setBodyScore] = useState<BodyLanguageScore | null>(null);
+  
+  // DEBUG: Log whenever body score is updated
+  const handleBodyScoreUpdate = useCallback((score: BodyLanguageScore) => {
+    console.log('📥 [InterviewSimulation] Received body language score update:', {
+      overall: Math.round(score.overallScore),
+      posture: Math.round(score.posture.score),
+      gestures: Math.round(score.gestures.score),
+      expressions: Math.round(score.expressions.score),
+    });
+    setBodyScore(score);
+    console.log('✅ [InterviewSimulation] bodyScore state updated');
+  }, []);
   const [lastAnsweredIndex, setLastAnsweredIndex] = useState<number>(-1);
   const [showInsights, setShowInsights] = useState(false);
   const [apiSession, setApiSession] = useState<ApiInterviewSession | null>(null);
@@ -128,10 +140,11 @@ export function InterviewSimulation() {
     }
   };
 
-  const clearPhaseTimers = () => {
+  const clearPhaseTimers = useCallback(() => {
     if (phaseTimerRef.current) { window.clearTimeout(phaseTimerRef.current); phaseTimerRef.current = null }
     if (countdownTimerRef.current) { window.clearInterval(countdownTimerRef.current); countdownTimerRef.current = null }
-  };
+    if (timerRafRef.current) { cancelAnimationFrame(timerRafRef.current); timerRafRef.current = null }
+  }, []);
 
   const finalizeAnswer = () => {
     if (processingRef.current) return;
@@ -141,8 +154,39 @@ export function InterviewSimulation() {
     processAnswer(text.length >= 1 ? text : '[No response]');
   };
 
-  const startPhase = (p: 'prep' | 'answer', durationSec: number) => {
+  // PERFORMANCE FIX: Use RAF-based timer for smooth updates
+  const timerStartTimeRef = useRef<number>(0);
+  const timerDurationRef = useRef<number>(0);
+  const timerRafRef = useRef<number | null>(null);
+  
+  const updateTimer = useCallback(() => {
+    const elapsed = (performance.now() - timerStartTimeRef.current) / 1000;
+    const remaining = Math.max(0, timerDurationRef.current - elapsed);
+    const roundedRemaining = Math.ceil(remaining);
+    
+    setSecondsRemaining(roundedRemaining);
+    
+    if (remaining > 0.1) {
+      timerRafRef.current = requestAnimationFrame(updateTimer);
+    } else {
+      if (phase === 'prep') {
+        setPhase('answer');
+        timerStartTimeRef.current = performance.now();
+        timerDurationRef.current = 30;
+        setResetKey((k) => k + 1);
+        answerBufferRef.current = '';
+        setCurrentTranscript('');
+        timerRafRef.current = requestAnimationFrame(updateTimer);
+      } else {
+        finalizeAnswer();
+      }
+    }
+  }, [phase]);
+
+  const startPhase = useCallback((p: 'prep' | 'answer', durationSec: number) => {
     clearPhaseTimers();
+    if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current);
+    
     setPhase(p);
     setSecondsRemaining(durationSec);
     if (p === 'prep') {
@@ -152,22 +196,11 @@ export function InterviewSimulation() {
       answerBufferRef.current = '';
       setCurrentTranscript('');
     }
-    countdownTimerRef.current = window.setInterval(() => {
-      setSecondsRemaining((s) => (s > 0 ? s - 1 : 0));
-    }, 1000);
-    phaseTimerRef.current = window.setTimeout(() => {
-      if (p === 'prep') {
-        setPhase('answer');
-        setSecondsRemaining(30);
-        setResetKey((k) => k + 1);
-        answerBufferRef.current = '';
-        setCurrentTranscript('');
-        startPhase('answer', 30);
-      } else {
-        finalizeAnswer();
-      }
-    }, durationSec * 1000);
-  };
+    
+    timerStartTimeRef.current = performance.now();
+    timerDurationRef.current = durationSec;
+    timerRafRef.current = requestAnimationFrame(updateTimer);
+  }, [updateTimer]);
 
   // UK: allow user to start the answer window early by clicking Start during prep
   const startAnswerNow = () => {
@@ -501,6 +534,18 @@ export function InterviewSimulation() {
     try {
       const currentQuestion = session.questions[session.currentQuestionIndex];
 
+      // DEBUG: Log body language capture status
+      if (!bodyScore) {
+        console.warn('⚠️ [InterviewSimulation] No body language score available when scoring answer');
+      } else {
+        console.log('✅ [InterviewSimulation] Body language score captured:', {
+          overall: Math.round(bodyScore.overallScore),
+          posture: Math.round(bodyScore.posture.score),
+          gestures: Math.round(bodyScore.gestures.score),
+          expressions: Math.round(bodyScore.expressions.score),
+        });
+      }
+
       const body = bodyScore || {
         posture: { torsoAngleDeg: 0, headTiltDeg: 0, slouchDetected: false, score: 70 },
         gestures: { left: 'unknown', right: 'unknown', confidence: 0, score: 65 },
@@ -547,6 +592,7 @@ export function InterviewSimulation() {
             bodyLanguage: body,
             assemblyConfidence: typeof confidence === 'number' ? confidence : undefined,
             interviewContext: ic,
+            sessionMemory: (apiSession as any)?.sessionMemory,
           })
         });
         if (res.ok) {
@@ -971,7 +1017,7 @@ export function InterviewSimulation() {
               questionCategory={currentQuestion.category}
               questionText={currentQuestion.question}
               currentTranscript={currentTranscript}
-              onScore={setBodyScore}
+              onScore={handleBodyScoreUpdate}
               onNext={session.status === 'active' && route !== 'uk_student' ? nextQuestion : undefined}
               startedAt={session.startTime}
               statusBadge={session.status === 'active' ? 'Live' : session.status === 'paused' ? 'Paused' : 'Completed'}

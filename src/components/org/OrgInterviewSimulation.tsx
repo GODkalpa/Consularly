@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -68,7 +68,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
   const router = useRouter()
 
   // Student selection
-  const [students, setStudents] = useState<Array<{ id: string; name: string }>>([])
+  const [students, setStudents] = useState<Array<{ id: string; name: string; studentProfile?: any | null }>>([])
   const [studentId, setStudentId] = useState<string>(initialStudentId || '')
   const [studentName, setStudentName] = useState<string>(initialStudentName || '')
   const [route, setRoute] = useState<InterviewRoute>('usa_f1')
@@ -92,6 +92,10 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
   const silenceTimerRef = useRef<number | null>(null)
   const lastActivityAtRef = useRef<number>(0)
   const processingRef = useRef<boolean>(false)
+  // Throttle live transcript UI updates
+  const lastTranscriptTsRef = useRef<number>(0)
+  const lastTranscriptValRef = useRef<string>('')
+  const transcriptDebounceRef = useRef<number | null>(null)
 
   // UK-specific per-question phase timers (30s prep + 30s answer)
   const [phase, setPhase] = useState<'prep' | 'answer' | null>(null)
@@ -112,7 +116,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
         const res = await fetch('/api/org/students', { headers: { Authorization: `Bearer ${token}` } })
         const data = await res.json()
         if (!canceled && res.ok) {
-          const list = (data.students || []).map((s: any) => ({ id: s.id, name: s.name }))
+          const list = (data.students || []).map((s: any) => ({ id: s.id, name: s.name, studentProfile: s.studentProfile || null }))
           setStudents(list)
           if (!initialStudentName && initialStudentId) {
             const match = list.find((s: any) => s.id === initialStudentId)
@@ -129,10 +133,11 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
     if (silenceTimerRef.current) { window.clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
   }
 
-  const clearPhaseTimers = () => {
+  const clearPhaseTimers = useCallback(() => {
     if (phaseTimerRef.current) { window.clearTimeout(phaseTimerRef.current); phaseTimerRef.current = null }
     if (countdownTimerRef.current) { window.clearInterval(countdownTimerRef.current); countdownTimerRef.current = null }
-  }
+    if (timerRafRef.current) { cancelAnimationFrame(timerRafRef.current); timerRafRef.current = null }
+  }, [])
 
   const finalizeAnswer = () => {
     if (processingRef.current) return
@@ -142,8 +147,39 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
     processAnswer(text.length >= 1 ? text : '[No response]')
   }
 
-  const startPhase = (p: 'prep' | 'answer', durationSec: number) => {
+  // PERFORMANCE FIX: Use RAF-based timer for smooth updates
+  const timerStartTimeRef = useRef<number>(0)
+  const timerDurationRef = useRef<number>(0)
+  const timerRafRef = useRef<number | null>(null)
+  
+  const updateTimer = useCallback(() => {
+    const elapsed = (performance.now() - timerStartTimeRef.current) / 1000
+    const remaining = Math.max(0, timerDurationRef.current - elapsed)
+    const roundedRemaining = Math.ceil(remaining)
+    
+    setSecondsRemaining(roundedRemaining)
+    
+    if (remaining > 0.1) {
+      timerRafRef.current = requestAnimationFrame(updateTimer)
+    } else {
+      if (phase === 'prep') {
+        setPhase('answer')
+        timerStartTimeRef.current = performance.now()
+        timerDurationRef.current = 30
+        setResetKey((k) => k + 1)
+        answerBufferRef.current = ''
+        setCurrentTranscript('')
+        timerRafRef.current = requestAnimationFrame(updateTimer)
+      } else {
+        finalizeAnswer()
+      }
+    }
+  }, [phase])
+
+  const startPhase = useCallback((p: 'prep' | 'answer', durationSec: number) => {
     clearPhaseTimers()
+    if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
+    
     setPhase(p)
     setSecondsRemaining(durationSec)
     if (p === 'prep') {
@@ -153,24 +189,11 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       answerBufferRef.current = ''
       setCurrentTranscript('')
     }
-    countdownTimerRef.current = window.setInterval(() => {
-      setSecondsRemaining((s) => (s > 0 ? s - 1 : 0))
-    }, 1000)
-    phaseTimerRef.current = window.setTimeout(() => {
-      if (p === 'prep') {
-        // Switch to answer window
-        setPhase('answer')
-        setSecondsRemaining(30)
-        // reset transcription stream
-        setResetKey((k) => k + 1)
-        answerBufferRef.current = ''
-        setCurrentTranscript('')
-        startPhase('answer', 30)
-      } else {
-        finalizeAnswer()
-      }
-    }, durationSec * 1000)
-  }
+    
+    timerStartTimeRef.current = performance.now()
+    timerDurationRef.current = durationSec
+    timerRafRef.current = requestAnimationFrame(updateTimer)
+  }, [updateTimer, clearPhaseTimers])
 
   // UK: allow early start of answer during prep
   const startAnswerNow = () => {
@@ -384,6 +407,21 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       setFirestoreInterviewId(created.id as string)
 
       // Start LLM session
+      // Build enriched student profile for personalized question selection
+      const selected = students.find((s) => s.id === studentId)
+      const sp: any = selected?.studentProfile || {}
+      const studentProfilePayload = {
+        name: studentName.trim(),
+        country: 'Nepal',
+        degreeLevel: sp.degreeLevel || undefined,
+        programName: sp.programName || undefined,
+        universityName: sp.universityName || sp.intendedUniversity || undefined,
+        programLength: sp.programLength || undefined,
+        programCost: sp.programCost || undefined,
+        fieldOfStudy: sp.fieldOfStudy || sp.intendedMajor || undefined,
+        previousEducation: sp.previousEducation || undefined,
+      }
+
       const res = await fetch('/api/interview/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -392,7 +430,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
           userId: studentId,
           visaType: defaultVisaTypeForRoute(route),
           route,
-          studentProfile: { name: studentName, country: 'Nepal' }
+          studentProfile: studentProfilePayload
         })
       })
       if (!res.ok) {
@@ -428,6 +466,8 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
         firstQuestion: firstQ,
         route,
         studentName: studentName.trim(),
+        firestoreInterviewId: created.id,
+        scope: 'org',
       })
       
       localStorage.setItem(key, payload)
@@ -498,44 +538,10 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
 
       const perf = scorePerformance({ transcript: transcriptText, body, assemblyConfidence: typeof confidence === 'number' ? confidence : undefined })
 
-      let combinedOverall = perf.overall
-      let combinedCategories = perf.categories
-      let aiFeedback: string | null = null
-      let aiSuggestions: string[] | null = null
-
-      try {
-        const ic = apiSession ? {
-          visaType: apiSession.visaType,
-          route: (apiSession as any).route || route,
-          studentProfile: apiSession.studentProfile,
-          conversationHistory: apiSession.conversationHistory.map((h: any) => ({ question: h.question, answer: h.answer, timestamp: h.timestamp })),
-        } : {
-          visaType: defaultVisaTypeForRoute(route),
-          route,
-          studentProfile: { name: session.studentName, country: 'Nepal' },
-          conversationHistory: [] as Array<{ question: string; answer: string; timestamp: string }>,
-        }
-        const res = await fetch('/api/interview/score', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: currentQuestion.question,
-            answer: transcriptText,
-            bodyLanguage: body,
-            assemblyConfidence: typeof confidence === 'number' ? confidence : undefined,
-            interviewContext: ic,
-          }),
-        })
-        if (res.ok) {
-          const data = await res.json()
-          combinedOverall = data.overall ?? combinedOverall
-          combinedCategories = data.categories ?? combinedCategories
-          aiFeedback = data.summary || null
-          aiSuggestions = Array.isArray(data.recommendations) ? data.recommendations.slice(0, 3) : null
-        }
-      } catch {}
-
-      const score10 = Math.min(10, Math.max(1, Math.round(combinedOverall / 10)))
+      // Build immediate analysis (non-blocking) to keep UI snappy
+      const baseOverall = perf.overall
+      const baseCategories = perf.categories
+      const score10 = Math.min(10, Math.max(1, Math.round(baseOverall / 10)))
       const fallbackFeedback = [
         ...perf.details.content.notes,
         ...perf.details.speech.notes,
@@ -546,52 +552,120 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       if (perf.details.speech.fillerRate > 0.05) fallbackSuggestions.push('Reduce filler words and slow down slightly.')
       if ((bodyScore?.overallScore ?? body.overallScore) < 65) fallbackSuggestions.push('Maintain eye contact and sit upright.')
 
-      const analysis = {
-        score: score10,
-        feedback: (aiFeedback || fallbackFeedback) || 'Good effort. Aim for clearer structure and specific details.',
-        suggestions: (aiSuggestions && aiSuggestions.length ? aiSuggestions : (fallbackSuggestions.length ? fallbackSuggestions : ['Provide concrete numbers or evidence where possible.'])),
-        bodyScore: bodyScore?.overallScore,
-        perf: { overall: combinedOverall, categories: combinedCategories },
-      }
-
+      const responseTimestamp = new Date()
       const newResponse = {
         question: currentQuestion.question,
         transcription: transcriptText,
-        analysis,
-        timestamp: new Date(),
+        analysis: {
+          score: score10,
+          feedback: fallbackFeedback || 'Good effort. Aim for clearer structure and specific details.',
+          suggestions: fallbackSuggestions.length ? fallbackSuggestions : ['Provide concrete numbers or evidence where possible.'],
+          bodyScore: bodyScore?.overallScore,
+          perf: { overall: baseOverall, categories: baseCategories },
+        },
+        timestamp: responseTimestamp,
       }
 
       setSession((prev) => (prev ? { ...prev, responses: [...prev.responses, newResponse] } : prev))
       setCurrentTranscript('')
       setLastAnsweredIndex(session.currentQuestionIndex)
 
+      // Prepare requests in parallel: next question and AI scoring
+      let nextPromise: Promise<void> | null = null
       if (apiSession) {
-        const res = await fetch('/api/interview/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'answer',
-            sessionId: apiSession.id,
-            session: apiSession,
-            answer: transcriptText,
-          }),
-        })
-        if (res.ok) {
-          const data = await res.json()
-          const updated = data.session
-          setApiSession(updated)
-          if (data.isComplete) {
-            setSession((prev) => (prev ? { ...prev, status: 'completed' } : prev))
-          } else if (data.question) {
-            const nextQ = data.question
-            setCurrentLLMQuestion(nextQ)
-            const uiQ: InterviewQuestion = { question: nextQ.question, category: mapQuestionTypeToCategory(route, nextQ.questionType) }
-            setSession((prev) => (prev ? { ...prev, questions: [...prev.questions, uiQ], currentQuestionIndex: prev.currentQuestionIndex + 1 } : prev))
-            if (route === 'uk_student') {
-              startPhase('prep', 30)
+        nextPromise = (async () => {
+          const res = await fetch('/api/interview/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'answer',
+              sessionId: apiSession.id,
+              session: apiSession,
+              answer: transcriptText,
+            }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            const updated = data.session
+            setApiSession(updated)
+            if (data.isComplete) {
+              setSession((prev) => (prev ? { ...prev, status: 'completed' } : prev))
+            } else if (data.question) {
+              const nextQ = data.question
+              setCurrentLLMQuestion(nextQ)
+              const uiQ: InterviewQuestion = { question: nextQ.question, category: mapQuestionTypeToCategory(route, nextQ.questionType) }
+              setSession((prev) => (prev ? { ...prev, questions: [...prev.questions, uiQ], currentQuestionIndex: prev.currentQuestionIndex + 1 } : prev))
+              if (route === 'uk_student') {
+                startPhase('prep', 30)
+              }
             }
           }
-        }
+          // Hide analyzing spinner as soon as next question is ready
+          setIsAnalyzing(false)
+        })()
+      }
+
+      // Fire scoring request in background; update the last response when it returns
+      ;(async () => {
+        try {
+          const ic = apiSession ? {
+            visaType: apiSession.visaType,
+            route: (apiSession as any).route || route,
+            studentProfile: apiSession.studentProfile,
+            conversationHistory: apiSession.conversationHistory.map((h: any) => ({ question: h.question, answer: h.answer, timestamp: h.timestamp })),
+          } : {
+            visaType: defaultVisaTypeForRoute(route),
+            route,
+            studentProfile: { name: session.studentName, country: 'Nepal' },
+            conversationHistory: [] as Array<{ question: string; answer: string; timestamp: string }>,
+          }
+          const res = await fetch('/api/interview/score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: currentQuestion.question,
+              answer: transcriptText,
+              bodyLanguage: body,
+              assemblyConfidence: typeof confidence === 'number' ? confidence : undefined,
+              interviewContext: ic,
+              sessionMemory: (apiSession as any)?.sessionMemory,
+            }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            setSession((prev) => {
+              if (!prev) return prev
+              const responses = prev.responses.map((r) => {
+                if (r.timestamp && new Date(r.timestamp).getTime() === responseTimestamp.getTime()) {
+                  const combinedOverall = data.overall ?? r.analysis?.perf?.overall ?? baseOverall
+                  const combinedCategories = data.categories ?? r.analysis?.perf?.categories ?? baseCategories
+                  const aiFeedback = data.summary || r.analysis?.feedback
+                  const aiSuggestions = Array.isArray(data.recommendations) ? data.recommendations.slice(0, 3) : r.analysis?.suggestions
+                  const score10b = Math.min(10, Math.max(1, Math.round(combinedOverall / 10)))
+                  return {
+                    ...r,
+                    analysis: {
+                      score: score10b,
+                      feedback: aiFeedback || r.analysis?.feedback,
+                      suggestions: aiSuggestions && aiSuggestions.length ? aiSuggestions : (r.analysis?.suggestions || []),
+                      bodyScore: r.analysis?.bodyScore,
+                      perf: { overall: combinedOverall, categories: combinedCategories },
+                    }
+                  }
+                }
+                return r
+              })
+              return { ...prev, responses }
+            })
+          }
+        } catch {}
+      })()
+
+      // If we started the next question request, await it to sequence timers/UI; else end analysis now
+      if (nextPromise) {
+        await nextPromise
+      } else {
+        setIsAnalyzing(false)
       }
     } catch (e) {
       // eslint-disable-next-line no-console
@@ -810,9 +884,14 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
 
           <div className='hidden'>
             <AssemblyAITranscription
-              onTranscriptComplete={handleTranscriptComplete}
-              onTranscriptUpdate={(t) => {
-                if (!session || session.status !== 'active') return
+            onTranscriptComplete={handleTranscriptComplete}
+            onTranscriptUpdate={(t) => {
+              if (!session || session.status !== 'active') return
+              // Debounce UI updates to 100ms to reduce re-renders
+              if (transcriptDebounceRef.current) {
+                window.clearTimeout(transcriptDebounceRef.current)
+              }
+              transcriptDebounceRef.current = window.setTimeout(() => {
                 if (route === 'uk_student') {
                   if (phase !== 'answer') return
                   const combined = answerBufferRef.current ? `${answerBufferRef.current} ${t}` : t
@@ -821,12 +900,13 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
                   setCurrentTranscript(t)
                 }
                 lastActivityAtRef.current = Date.now()
-              }}
-              showControls={false}
-              showTranscripts={false}
-              running={session.status === 'active' && (route !== 'uk_student' || phase === 'answer')}
-              resetKey={resetKey}
-            />
+              }, 100)
+            }}
+            showControls={false}
+            showTranscripts={false}
+            running={session.status === 'active' && (route !== 'uk_student' || phase === 'answer')}
+            resetKey={resetKey}
+          />
           </div>
 
           {/* Completed */}

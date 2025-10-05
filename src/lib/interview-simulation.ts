@@ -1,6 +1,7 @@
 import { QuestionGenerationRequest, QuestionGenerationResponse } from './llm-service';
 import type { InterviewRoute } from './interview-routes'
 import { UK_QUESTION_POOL, ukFallbackQuestionByIndex } from './uk-questions-data'
+import { F1_VISA_QUESTIONS, mapQuestionTypeToF1Category } from './f1-questions-data'
 import { F1SessionMemory, updateMemory } from './f1-mvp-session-memory'
 
 export interface InterviewSession {
@@ -195,27 +196,95 @@ export class InterviewSimulationService {
 
       const next: QuestionGenerationResponse = await response.json();
 
-      // Deduplicate: avoid repeating previously asked questions
+      // Helpers for de-duplication and flow gating
       const normalize = (s: string) => s
         .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, ' ') // remove punctuation/symbols (ASCII-safe)
+        .replace(/[“”"'’]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-      const asked = new Set(session.conversationHistory.map(h => normalize(h.question)));
-      const candidate = normalize(next.question);
-      // Enforce UK bank membership for UK route
-      if (session.route === 'uk_student') {
-        const bank = new Set(UK_QUESTION_POOL.map(q => normalize(q.question)));
-        if (!bank.has(candidate) || asked.has(candidate)) {
-          return this.getUniqueFallbackQuestion(session.currentQuestionNumber, asked, session.route);
-        }
+      const STOP = new Set(['what','why','how','do','did','are','is','your','you','the','in','to','of','for','on','at','this','that','it','a','an','any','have','will','can'])
+      const tokens = (s: string) => normalize(s).split(' ').filter(t => t && !STOP.has(t))
+      const jaccard = (a: string[], b: string[]) => {
+        const A = new Set(a), B = new Set(b)
+        let inter = 0
+        A.forEach((t) => { if (B.has(t)) inter++ })
+        const union = A.size + B.size - inter
+        return union === 0 ? 0 : inter / union
       }
-      if (asked.has(candidate)) {
-        // Fallback to a unique question
-        return this.getUniqueFallbackQuestion(session.currentQuestionNumber, asked, session.route);
+      const askedList = session.conversationHistory.map(h => h.question)
+      const askedNorm = askedList.map(q => ({ raw: q, norm: normalize(q), toks: tokens(q) }))
+      const candNorm = normalize(next.question)
+      const candToks = tokens(next.question)
+
+      // Enforce UK strict bank + no duplicates
+      if (session.route === 'uk_student') {
+        const bank = new Set(UK_QUESTION_POOL.map(q => normalize(q.question)))
+        const isDuplicate = askedNorm.some(a => a.norm === candNorm || jaccard(a.toks, candToks) >= 0.82)
+        if (!bank.has(candNorm) || isDuplicate) {
+          const askedSet = new Set(askedNorm.map(a => a.norm))
+          return this.getUniqueFallbackQuestion(session.currentQuestionNumber, askedSet, session.route)
+        }
+        return next
       }
 
-      return next;
+      // USA F1: apply fuzzy de-duplication and category gating by question number
+      const isNearDuplicate = askedNorm.some(a => a.norm === candNorm || jaccard(a.toks, candToks) >= 0.82)
+
+      // Allowed flow by question number (Nepal F1 realistic pattern)
+      const allowedTypesByIndex = (n: number): Array<'background'|'academic'|'financial'|'intent'|'follow-up'> => {
+        if (n <= 2) return ['background','follow-up']
+        if (n === 3) return ['academic','follow-up'] // University choice
+        if (n === 4) return ['academic','follow-up'] // Academic capability
+        if (n === 5 || n === 6) return ['financial','follow-up']
+        return ['intent','follow-up'] // Q7+
+      }
+      const allowed = allowedTypesByIndex(session.currentQuestionNumber)
+      const type = next.questionType || 'follow-up'
+
+      if (!isNearDuplicate && allowed.includes(type as any)) {
+        return next
+      }
+
+      // Build unique fallback from F1 bank constrained by allowed types
+      const allowedF1Categories = new Set(
+        allowed
+          .filter(t => t !== 'follow-up')
+          .map(t => mapQuestionTypeToF1Category(t))
+      )
+      const askedSet = new Set(askedNorm.map(a => a.norm))
+
+      // Flatten candidates from allowed categories
+      const candidates: string[] = []
+      F1_VISA_QUESTIONS.forEach(cat => {
+        if (allowedF1Categories.has(cat.category)) {
+          cat.questions.forEach(q => candidates.push(q))
+        }
+      })
+      // Filter out duplicates
+      const remaining = candidates.filter(q => {
+        const n = normalize(q)
+        if (askedSet.has(n)) return false
+        const t = tokens(q)
+        return !askedNorm.some(a => jaccard(a.toks, t) >= 0.82)
+      })
+      if (remaining.length > 0) {
+        // Choose by simple rotation based on question number to keep semi-random but patterned
+        const idx = (session.currentQuestionNumber - 1) % remaining.length
+        const q = remaining[idx]
+        // Map back to type: prefer the first allowed non-follow-up type for UI badge
+        const preferred = allowed.find(t => t !== 'follow-up') || 'background'
+        const qType: QuestionGenerationResponse['questionType'] = preferred as any
+        return {
+          question: q,
+          questionType: qType,
+          difficulty: 'medium',
+          expectedAnswerLength: 'medium',
+        }
+      }
+
+      // As last resort, fall back to generic rotation while avoiding exact repeats
+      return this.getFallbackQuestion(session.currentQuestionNumber, session.route)
     } catch (error) {
       console.error('Error generating question:', error);
       // If API fails, pick a unique question from the UK bank when on UK route

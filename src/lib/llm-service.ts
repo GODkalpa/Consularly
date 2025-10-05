@@ -43,6 +43,45 @@ interface QuestionGenerationResponse {
 // PERFORMANCE FIX: Cache question selector globally to avoid repeated loads
 let cachedQuestionSelector: SmartQuestionSelector | null = null;
 let initPromise: Promise<void> | null = null;
+let cachedQuestionBank: { questions: Array<{ id: string; route: string; category: string; difficulty: string; question: string }> } | null = null;
+
+function normalizeQ(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[“”"'’]/g, '')
+    .replace(/\b(colleges?|schools?|universit(?:y|ies))\b/g, 'institution')
+    .replace(/\b(admit(?:s|ted)?)\b/g, 'admission')
+    .replace(/\b(reject(?:s|ed|ion)?)\b/g, 'reject')
+    .replace(/\b(program|course|major|degree)\b/g, 'program')
+    .replace(/\b(tuition|fees?)\b/g, 'tuition')
+    .replace(/\b(sponsor(?:ship)?)\b/g, 'sponsor')
+    .replace(/\b(plan(?:s|ning)?)\b/g, 'plan')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const STOP = new Set(['what','why','how','do','did','are','is','your','you','the','in','to','of','for','on','at','this','that','it','a','an','any','have','will','can'])
+function tokens(s: string): string[] {
+  return normalizeQ(s).split(' ').filter(t => t && !STOP.has(t))
+}
+function jaccard(a: string[], b: string[]): number {
+  const A = new Set(a), B = new Set(b)
+  let inter = 0
+  A.forEach((t) => { if (B.has(t)) inter++ })
+  const union = A.size + B.size - inter
+  return union === 0 ? 0 : inter / union
+}
+
+async function getQuestionBankCached() {
+  if (cachedQuestionBank) return cachedQuestionBank
+  try {
+    cachedQuestionBank = await loadQuestionBank()
+  } catch {
+    cachedQuestionBank = { questions: [] }
+  }
+  return cachedQuestionBank
+}
 
 async function getOrInitializeQuestionSelector(): Promise<SmartQuestionSelector | null> {
   if (cachedQuestionSelector) {
@@ -101,6 +140,31 @@ export class LLMQuestionService {
           else categoryCoverage['personal'] = (categoryCoverage['personal'] || 0) + 1;
         });
 
+        // Derive asked question IDs from the question bank to prevent repeats
+        const bank = await getQuestionBankCached()
+        const askedIds: string[] = []
+        const seen = new Set<string>()
+        for (const h of conversationHistory) {
+          const normH = normalizeQ(h.question)
+          if (seen.has(normH)) continue
+          seen.add(normH)
+          // Exact match first
+          let match = bank.questions.find(q => normalizeQ(q.question) === normH)
+          if (!match) {
+            // Soft match via Jaccard similarity
+            let best: { id: string; score: number } | null = null
+            const htoks = tokens(h.question)
+            for (const q of bank.questions) {
+              const score = jaccard(htoks, tokens(q.question))
+              if (!best || score > best.score) best = { id: q.id, score }
+            }
+            if (best && best.score >= 0.8) {
+              match = bank.questions.find(q => q.id === best!.id) as any
+            }
+          }
+          if (match) askedIds.push(match.id)
+        }
+
         const context = {
           route: route as LLMRoute,
           profile: {
@@ -113,7 +177,7 @@ export class LLMQuestionService {
             question: h.question,
             answer: h.answer,
           })),
-          askedQuestionIds: [], // We don't track IDs in current system, but selector will avoid repeats
+          askedQuestionIds: askedIds,
           detectedRedFlags: this.detectRedFlags(conversationHistory),
           categoryCoverage,
         };
