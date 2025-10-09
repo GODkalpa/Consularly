@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { AssemblyAITranscription } from '@/components/speech/AssemblyAITranscription'
-import { InterviewStage } from '@/components/interview/InterviewStage'
+import InterviewStage from '@/components/interview/InterviewStage'
 import { TranscriptionResult } from '@/lib/assemblyai-service'
 import { mapQuestionTypeToCategory, defaultVisaTypeForRoute, type InterviewRoute, routeDisplayName } from '@/lib/interview-routes'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'

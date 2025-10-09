@@ -91,6 +91,7 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
               deviceId: { exact: selectedDeviceIdRef.current },
               width: { ideal: cfg.width },
               height: { ideal: cfg.height },
+              frameRate: { max: 24 },
             },
             audio: false,
           }
@@ -99,6 +100,7 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
               width: { ideal: cfg.width },
               height: { ideal: cfg.height },
               facingMode: 'user',
+              frameRate: { max: 24 },
             },
             audio: false,
           }
@@ -200,17 +202,16 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     try {
       tfMod = await import('@tensorflow/tfjs-core')
       await import('@tensorflow/tfjs-converter')
-      
-      // Try WebGL first (best performance)
+
+      // Try WebGL first (best performance), then CPU fallback. Avoid WebGPU to prevent missing dependency builds.
       try {
         await import('@tensorflow/tfjs-backend-webgl')
         await tfMod.setBackend('webgl')
         await tfMod.ready()
+        backendName = 'webgl'
         console.log('✅ TensorFlow.js WebGL backend initialized')
       } catch (webglError: any) {
         console.warn('⚠️ WebGL backend failed, falling back to CPU:', webglError?.message || webglError)
-        
-        // Fallback to CPU backend (slower but more compatible)
         try {
           await import('@tensorflow/tfjs-backend-cpu')
           await tfMod.setBackend('cpu')
@@ -218,7 +219,7 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
           backendName = 'cpu'
           console.log('✅ TensorFlow.js CPU backend initialized (fallback)')
         } catch (cpuError: any) {
-          errors.push('Failed to initialize TensorFlow.js (both WebGL and CPU backends failed). WebGL error: ' + (webglError?.message || webglError) + '. CPU error: ' + (cpuError?.message || cpuError))
+          errors.push('Failed to initialize TensorFlow.js (WebGL and CPU backends failed). WebGL error: ' + (webglError?.message || webglError) + '. CPU error: ' + (cpuError?.message || cpuError))
           throw new Error('No TensorFlow.js backend available')
         }
       }
@@ -248,7 +249,7 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
           const handMod = await import('@tensorflow-models/hand-pose-detection')
           const detector = await handMod.createDetector(handMod.SupportedModels.MediaPipeHands, {
             runtime: 'tfjs',
-            modelType: 'full',
+            modelType: 'lite',
           })
           detectorsRef.current.hands = detector
         })())
@@ -261,14 +262,14 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
           try {
             detector = await faceMod.createDetector(faceMod.SupportedModels.MediaPipeFaceMesh, {
               runtime: 'mediapipe',
-              refineLandmarks: true,
+              refineLandmarks: false,
               solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
             } as any)
           } catch (e) {
             // Fallback to tfjs runtime
             detector = await faceMod.createDetector(faceMod.SupportedModels.MediaPipeFaceMesh, {
               runtime: 'tfjs',
-              refineLandmarks: true,
+              refineLandmarks: false,
             } as any)
           }
           detectorsRef.current.face = detector
@@ -373,8 +374,8 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
 
     // PERFORMANCE FIX: Throttle detectors more aggressively to reduce lag
     const poseDue = now - lastTimesRef.current.pose > 1000 / cfg.maxFPS
-    const handsDue = now - lastTimesRef.current.hands > 1000 / Math.min(10, cfg.maxFPS) // Reduced from 15
-    const faceDue = now - lastTimesRef.current.face > 1000 / Math.min(10, cfg.maxFPS) // Reduced from 15
+    const handsDue = now - lastTimesRef.current.hands > 1000 / Math.min(6, cfg.maxFPS) // Reduced further from 10
+    const faceDue = now - lastTimesRef.current.face > 1000 / Math.min(6, cfg.maxFPS) // Reduced further from 10
 
     try {
       const v = videoRef.current
@@ -400,6 +401,13 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
         const faces = await detectorsRef.current.face!.estimateFaces(videoRef.current!)
         face = faces[0]
         lastTimesRef.current.face = now
+      }
+
+      // If none of the detectors ran this frame, skip scoring/state update
+      const anyUpdated = (cfg.enablePose && poseDue) || (cfg.enableHands && handsDue) || (cfg.enableFace && faceDue)
+      if (!anyUpdated && state.score) {
+        rafRef.current = requestAnimationFrame(step)
+        return
       }
 
       // PERFORMANCE FIX: Skip drawing overlay during interview to reduce canvas operations

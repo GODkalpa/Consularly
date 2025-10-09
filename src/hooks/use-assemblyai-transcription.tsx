@@ -91,6 +91,8 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
         setState(prev => ({ ...prev, isConnected: false, isRecording: false }));
       });
 
+      // Throttle interim transcript updates to reduce UI work
+      const lastInterimRef = { ts: 0, text: '' }
       assemblyAIRef.current.onTranscript((result: TranscriptionResult) => {
         if (result.is_final) {
           setState(prev => ({
@@ -101,6 +103,12 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
           }));
           options.onTranscriptComplete?.(result);
         } else {
+          const now = performance.now()
+          const tooSoon = now - lastInterimRef.ts < 120
+          const sameText = result.text === lastInterimRef.text
+          if (tooSoon && sameText) return
+          lastInterimRef.ts = now
+          lastInterimRef.text = result.text
           setState(prev => ({
             ...prev,
             currentTranscript: result.text,

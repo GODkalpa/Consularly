@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import type { InterviewStageProps } from '@/components/interview/InterviewStage'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,7 +18,10 @@ import { motion, AnimatePresence } from 'motion/react'
 import { auth } from '@/lib/firebase'
 
 // Dynamically import the heavy InterviewStage (TensorFlow/MediaPipe) client-only to reduce initial bundle size
-const InterviewStage = dynamic(() => import('@/components/interview/InterviewStage'), { ssr: false })
+const InterviewStage = dynamic<InterviewStageProps>(
+  () => import('@/components/interview/InterviewStage').then((m) => m.InterviewStage),
+  { ssr: false }
+)
 
 interface UIQuestion { question: string; category: string }
 interface UISession {
@@ -230,13 +234,17 @@ export default function InterviewRunner() {
   const timerStartTimeRef = useRef<number>(0)
   const timerDurationRef = useRef<number>(0)
   const timerRafRef = useRef<number | null>(null)
+  const lastSecondsSentRef = useRef<number>(-1)
   
   const updateTimer = useCallback(() => {
     const elapsed = (performance.now() - timerStartTimeRef.current) / 1000
     const remaining = Math.max(0, timerDurationRef.current - elapsed)
     const roundedRemaining = Math.ceil(remaining)
     
-    setSecondsRemaining(roundedRemaining)
+    if (roundedRemaining !== lastSecondsSentRef.current) {
+      lastSecondsSentRef.current = roundedRemaining
+      setSecondsRemaining(roundedRemaining)
+    }
     
     if (remaining > 0.1) {
       // Continue timer updates

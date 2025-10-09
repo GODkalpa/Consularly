@@ -34,7 +34,6 @@ export interface InterviewStageProps {
   showQuestionOverlay?: boolean
   /** Hide the live body language score badge */
   showBodyBadge?: boolean
-  /** Ref to expose captureScore method to parent */
   captureScoreRef?: React.MutableRefObject<(() => BodyLanguageScore | null) | null>
 }
 
@@ -44,8 +43,8 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   questionCategory,
   questionText,
   currentTranscript,
-  width = 1280,
-  height = 720,
+  width = 640,
+  height = 360,
   onScore,
   onTogglePause,
   onNext,
@@ -55,27 +54,25 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   startedAt,
   candidateName,
   questionIndex,
-  questionTotal
-  , phase,
+  questionTotal,
+  phase,
   secondsRemaining,
   showCaptions = true,
   showQuestionOverlay = true,
   showBodyBadge = true,
   captureScoreRef
 }) => {
-  // PERFORMANCE FIX: Reduce body language tracking FPS to 15 to minimize lag
+  // PERFORMANCE FIX: Reduce body language tracking FPS to 12 to minimize lag while preserving quality
   const { state, start, stop, startPreview, stopPreview, captureScore, videoRef, canvasRef } = useBodyLanguageTracker({
     width,
     height,
     enableFace: true,
     enableHands: true,
     enablePose: true,
-    maxFPS: 15, // Reduced from 30 to minimize CPU/GPU load
+    maxFPS: 12,
   })
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
-
-  // Expose captureScore to parent via ref
   useEffect(() => {
     if (captureScoreRef) {
       captureScoreRef.current = captureScore
