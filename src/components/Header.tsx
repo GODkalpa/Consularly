@@ -12,12 +12,12 @@ const menuItems = [
     { name: 'Features', href: '#features' },
     { name: 'Testimonials', href: '#testimonials' },
     { name: 'Pricing', href: '#pricing' },
-    { name: 'About', href: '/about' },
 ]
 
 export const HeroHeader = () => {
     const [menuState, setMenuState] = React.useState(false)
     const [isScrolled, setIsScrolled] = React.useState(false)
+    const [hideForScrollAdventure, setHideForScrollAdventure] = React.useState(false)
     const { user, logout, isAdmin, userProfile } = useAuth()
 
     const pathname = usePathname()
@@ -32,7 +32,18 @@ export const HeroHeader = () => {
         return () => window.removeEventListener('scroll', handleScroll)
     }, [isDashboard])
 
-    if (isDashboard) return null
+    // Listen for scroll adventure active event
+    React.useEffect(() => {
+        const handleScrollAdventureActive = (e: CustomEvent) => {
+            setHideForScrollAdventure(e.detail.active)
+        }
+        window.addEventListener('scrollAdventureActive', handleScrollAdventureActive as EventListener)
+        return () => {
+            window.removeEventListener('scrollAdventureActive', handleScrollAdventureActive as EventListener)
+        }
+    }, [])
+
+    if (isDashboard || hideForScrollAdventure) return null
 
     return (
         <header>
@@ -48,10 +59,10 @@ export const HeroHeader = () => {
                                 className="flex items-center space-x-2">
                                 <div className="relative w-20 h-10">
                                     <Image
-                                        src="/logo.png"
+                                        src="/Consularly.png"
                                         alt="Consularly Logo"
                                         fill
-                                        sizes="80px"
+                                        sizes="150px"
                                         className="object-contain"
                                         priority
                                     />
@@ -68,12 +79,12 @@ export const HeroHeader = () => {
                         </div>
 
                         <div className="absolute inset-0 m-auto hidden size-fit lg:block">
-                            <ul className="flex gap-8 text-sm">
+                            <ul className="flex gap-8 text-base font-medium">
                                 {menuItems.map((item, index) => (
                                     <li key={index}>
                                         <Link
                                             href={item.href}
-                                            className="text-muted-foreground hover:text-accent-foreground block duration-150">
+                                            className="text-foreground hover:underline underline-offset-4 decoration-[hsl(var(--secondary))] block duration-150">
                                             <span>{item.name}</span>
                                         </Link>
                                     </li>
@@ -83,12 +94,12 @@ export const HeroHeader = () => {
 
                         <div className="bg-background group-data-[state=active]:block lg:group-data-[state=active]:flex mb-6 hidden w-full flex-wrap items-center justify-end space-y-8 rounded-3xl border p-6 shadow-2xl shadow-zinc-300/20 md:flex-nowrap lg:m-0 lg:flex lg:w-fit lg:gap-6 lg:space-y-0 lg:border-transparent lg:bg-transparent lg:p-0 lg:shadow-none dark:shadow-none dark:lg:bg-transparent">
                             <div className="lg:hidden">
-                                <ul className="space-y-6 text-base">
+                                <ul className="space-y-6 text-base font-medium">
                                     {menuItems.map((item, index) => (
                                         <li key={index}>
                                             <Link
                                                 href={item.href}
-                                                className="text-muted-foreground hover:text-accent-foreground block duration-150">
+                                                className="text-foreground hover:underline underline-offset-4 decoration-[hsl(var(--secondary))] block duration-150">
                                                 <span>{item.name}</span>
                                             </Link>
                                         </li>

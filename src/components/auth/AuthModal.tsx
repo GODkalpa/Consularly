@@ -96,7 +96,7 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[hsl(var(--background)/0.6)] backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-[hsl(var(--background)/0.6)] backdrop-blur-sm">
       <div className="bg-card text-foreground rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-border">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">
@@ -190,7 +190,7 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
                   type="button"
                   onClick={handlePasswordReset}
                   disabled={loading}
-                  className="text-sm text-primary hover:text-primary/90"
+                  className="text-sm text-secondary hover:text-primary"
                 >
                   Forgot your password?
                 </button>
@@ -247,7 +247,7 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
               {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}
               <button
                 onClick={switchMode}
-                className="ml-1 text-primary hover:text-primary/90 font-medium"
+                className="ml-1 text-secondary hover:text-primary font-medium"
               >
                 {mode === 'signin' ? 'Sign up' : 'Sign in'}
               </button>

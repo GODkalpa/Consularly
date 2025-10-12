@@ -203,17 +203,17 @@ export default function SignUpPage() {
         <CardFooter className="flex flex-col space-y-2">
           <div className="text-sm text-center text-muted-foreground">
             Already have an account?{' '}
-            <Link href="/signin" className="text-primary hover:underline font-medium">
+            <Link href="/signin" className="text-secondary hover:text-primary hover:underline font-medium">
               Sign in
             </Link>
           </div>
           <div className="text-xs text-center text-muted-foreground">
             By creating an account, you agree to our{' '}
-            <Link href="/terms" className="hover:underline">
+            <Link href="/terms" className="text-secondary hover:text-primary hover:underline">
               Terms of Service
             </Link>{' '}
             and{' '}
-            <Link href="/privacy" className="hover:underline">
+            <Link href="/privacy" className="text-secondary hover:text-primary hover:underline">
               Privacy Policy
             </Link>
           </div>

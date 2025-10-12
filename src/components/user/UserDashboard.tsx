@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Home,
   BarChart3,
@@ -39,6 +40,7 @@ import {
 import { UserInterviewSimulation } from "./UserInterviewSimulation"
 import { db, firebaseEnabled } from "@/lib/firebase"
 import { collection, onSnapshot, query, where, type DocumentData } from "firebase/firestore"
+import { ResultsTrendChart } from "./ResultsTrendChart"
 
 const menuItems = [
   { title: "Overview", icon: BarChart3, id: "overview" },
@@ -51,6 +53,10 @@ const menuItems = [
 export function UserDashboard() {
   const { user, userProfile } = useAuth()
   const [activeSection, setActiveSection] = useState<(typeof menuItems)[number]["id"]>("overview")
+
+  // Results filters
+  const [timeRange, setTimeRange] = useState<'all' | '90d' | '30d' | '7d'>('90d')
+  const [routeFilter, setRouteFilter] = useState<string>('all')
 
   // User interviews state
   const [resultsLoading, setResultsLoading] = useState<boolean>(true)
@@ -103,18 +109,98 @@ export function UserDashboard() {
   const userName = userProfile?.displayName || user?.email?.split('@')[0] || "User"
   const userInitials = userName.slice(0, 2).toUpperCase()
 
+  // Derived, palette-driven filters + chart series
+  const filteredInterviews = useMemo(() => {
+    if (!interviews.length) return [] as typeof interviews
+    const now = new Date()
+    let cutoff: Date | null = null
+    if (timeRange === '90d') {
+      cutoff = new Date(now)
+      cutoff.setDate(now.getDate() - 90)
+    } else if (timeRange === '30d') {
+      cutoff = new Date(now)
+      cutoff.setDate(now.getDate() - 30)
+    } else if (timeRange === '7d') {
+      cutoff = new Date(now)
+      cutoff.setDate(now.getDate() - 7)
+    }
+    return interviews.filter((iv) => {
+      const passTime = cutoff ? ((iv.startTime?.getTime() || 0) >= cutoff.getTime()) : true
+      const passRoute = routeFilter === 'all' ? true : (iv.route === routeFilter)
+      return passTime && passRoute
+    }).sort((a, b) => (a.startTime?.getTime() || 0) - (b.startTime?.getTime() || 0))
+  }, [interviews, timeRange, routeFilter])
+
+  const scoreSeries = useMemo(() => {
+    // Build chart points with a simple rolling average (window=5)
+    const points = filteredInterviews
+      .filter((iv) => typeof iv.score === 'number' && iv.startTime)
+      .map((iv) => ({ date: (iv.startTime as Date).toISOString(), score: iv.score as number }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    const window = 5
+    const withAvg = points.map((p, idx) => {
+      const start = Math.max(0, idx - window + 1)
+      const windowSlice = points.slice(start, idx + 1)
+      const avg = windowSlice.length ? Math.round(windowSlice.reduce((s, x) => s + x.score, 0) / windowSlice.length) : undefined
+      return { ...p, avg }
+    })
+    return withAvg
+  }, [filteredInterviews])
+
   const renderOverview = () => {
     const quotaLimit = (userProfile as any)?.quotaLimit ?? 0
     const quotaUsed = (userProfile as any)?.quotaUsed ?? 0
     const quotaRemaining = Math.max(0, quotaLimit - quotaUsed)
     const quotaPct = quotaLimit > 0 ? Math.min(100, (quotaUsed / quotaLimit) * 100) : 0
 
+    // Derived stats from interviews
+    const totalInterviews = interviews.length
+    const numericScores = interviews
+      .map((iv) => iv.score)
+      .filter((s): s is number => typeof s === "number")
+    const avgScore = numericScores.length
+      ? Math.round(numericScores.reduce((a, b) => a + b, 0) / numericScores.length)
+      : null
+    const practiceMinutes = interviews.reduce((sum, iv) => {
+      if (iv.startTime && iv.endTime) {
+        return sum + Math.max(0, Math.round((iv.endTime.getTime() - iv.startTime.getTime()) / 60000))
+      }
+      return sum
+    }, 0)
+    const practiceHours = practiceMinutes / 60
+    const completedCount = interviews.filter((iv) => typeof iv.score === 'number').length
+
+    // Quota bar tone using palette
+    const quotaBarClass =
+      quotaLimit === 0
+        ? 'bg-muted'
+        : quotaPct >= 95
+        ? 'bg-destructive'
+        : quotaPct >= 85
+        ? 'bg-accent-500'
+        : 'bg-primary-500'
+
+    const scoreBadge = (s?: number) => {
+      const common = 'rounded-full px-2 py-0.5 text-xs font-medium'
+      if (typeof s !== 'number') return <span className={`${common} bg-muted text-foreground/70`}>—</span>
+      const tone = s >= 90
+        ? 'bg-primary-50 text-primary-700'
+        : s >= 80
+        ? 'bg-accent-100 text-accent-700'
+        : s >= 70
+        ? 'bg-secondary-100 text-secondary-700'
+        : 'bg-destructive/10 text-destructive'
+      return <span className={`${common} ${tone}`}>{s}</span>
+    }
+
+    const recent = interviews.slice(0, 3)
+
     return (
       <div className="space-y-6">
         {/* Welcome Section */}
-        <div className="rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 p-6 text-white">
+        <div className="rounded-xl bg-gradient-to-br from-primary-500 via-primary-600 to-primary-700 p-6 text-primary-foreground">
           <h2 className="text-2xl font-bold mb-2">Welcome back, {userName}!</h2>
-          <p className="text-blue-100">Practice your visa interview with AI-powered real-time feedback</p>
+          <p className="text-primary-foreground/90">Practice your visa interview with AI-powered real-time feedback</p>
         </div>
 
         {/* Quota Card */}
@@ -136,12 +222,9 @@ export function UserDashboard() {
                 </div>
               </div>
               <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                <div 
-                  className="h-full transition-all" 
-                  style={{ 
-                    width: `${Math.min(100, quotaPct)}%`, 
-                    background: quotaPct >= 95 ? '#ef4444' : quotaPct >= 85 ? '#f59e0b' : '#3b82f6'
-                  }} 
+                <div
+                  className={`h-full transition-all rounded-full ${quotaBarClass}`}
+                  style={{ width: `${Math.min(100, quotaPct)}%` }}
                 />
               </div>
               {quotaLimit === 0 && (
@@ -192,11 +275,11 @@ export function UserDashboard() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
+                <div className="p-2 rounded-lg bg-primary-100 text-primary-700">
                   <PlayCircle className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">0</div>
+                  <div className="text-2xl font-bold">{totalInterviews}</div>
                   <p className="text-sm text-muted-foreground">Total Interviews</p>
                 </div>
               </div>
@@ -205,11 +288,11 @@ export function UserDashboard() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-100 text-green-600">
+                <div className="p-2 rounded-lg bg-accent-100 text-accent-700">
                   <Trophy className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">--</div>
+                  <div className="text-2xl font-bold">{avgScore ?? '—'}</div>
                   <p className="text-sm text-muted-foreground">Avg Score</p>
                 </div>
               </div>
@@ -218,11 +301,11 @@ export function UserDashboard() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
+                <div className="p-2 rounded-lg bg-secondary-100 text-secondary-700">
                   <Clock className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">0</div>
+                  <div className="text-2xl font-bold">{practiceHours.toFixed(1)}</div>
                   <p className="text-sm text-muted-foreground">Practice Hours</p>
                 </div>
               </div>
@@ -231,17 +314,44 @@ export function UserDashboard() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
+                <div className="p-2 rounded-lg bg-tertiary-100 text-foreground">
                   <Target className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">0</div>
+                  <div className="text-2xl font-bold">{completedCount}</div>
                   <p className="text-sm text-muted-foreground">Completed</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Recent Results */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Results</CardTitle>
+            <CardDescription>Last 3 interviews</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!recent.length ? (
+              <div className="text-sm text-muted-foreground py-2">No recent results yet. Start your first practice interview.</div>
+            ) : (
+              <div className="divide-y rounded-md border">
+                {recent.map((iv) => (
+                  <div key={iv.id} className="flex items-center justify-between p-3 text-sm">
+                    <div>
+                      <div className="font-medium">{iv.startTime ? iv.startTime.toLocaleString() : '—'}</div>
+                      <div className="text-xs text-muted-foreground">{iv.route || 'visa'} • {iv.status || 'completed'}</div>
+                    </div>
+                    <div>
+                      {scoreBadge(iv.score)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Quick Actions */}
         <Card>
@@ -252,7 +362,7 @@ export function UserDashboard() {
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Button 
               size="lg" 
-              className="h-auto py-4 flex-col gap-2"
+              className="h-auto py-4 flex-col gap-2 bg-gradient-to-br from-primary-500 via-primary-600 to-primary-700 text-primary-foreground hover:from-primary-600 hover:to-primary-700"
               onClick={() => setActiveSection("interview")}
             >
               <PlayCircle className="h-6 w-6" />
@@ -264,7 +374,7 @@ export function UserDashboard() {
             <Button 
               variant="outline" 
               size="lg" 
-              className="h-auto py-4 flex-col gap-2"
+              className="h-auto py-4 flex-col gap-2 border-primary/30 text-primary hover:bg-primary/5"
               onClick={() => setActiveSection("results")}
             >
               <Trophy className="h-6 w-6" />
@@ -285,19 +395,19 @@ export function UserDashboard() {
           <CardContent>
             <ul className="space-y-2 text-sm">
               <li className="flex items-start gap-2">
-                <div className="h-5 w-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold mt-0.5">1</div>
+                <div className="h-5 w-5 rounded-full bg-accent-100 text-accent-700 flex items-center justify-center text-xs font-bold mt-0.5">1</div>
                 <span>Speak clearly and confidently. Take your time to articulate your answers.</span>
               </li>
               <li className="flex items-start gap-2">
-                <div className="h-5 w-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold mt-0.5">2</div>
+                <div className="h-5 w-5 rounded-full bg-accent-100 text-accent-700 flex items-center justify-center text-xs font-bold mt-0.5">2</div>
                 <span>Maintain good eye contact with the camera. This shows confidence and honesty.</span>
               </li>
               <li className="flex items-start gap-2">
-                <div className="h-5 w-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold mt-0.5">3</div>
+                <div className="h-5 w-5 rounded-full bg-accent-100 text-accent-700 flex items-center justify-center text-xs font-bold mt-0.5">3</div>
                 <span>Have all your documents ready before starting the practice session.</span>
               </li>
               <li className="flex items-start gap-2">
-                <div className="h-5 w-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold mt-0.5">4</div>
+                <div className="h-5 w-5 rounded-full bg-accent-100 text-accent-700 flex items-center justify-center text-xs font-bold mt-0.5">4</div>
                 <span>Answer honestly and consistently. Avoid contradicting yourself.</span>
               </li>
             </ul>
@@ -351,37 +461,118 @@ export function UserDashboard() {
       )
     }
 
+    // Compute available routes for filter options
+    const routeOptions = Array.from(new Set(interviews.map((iv) => iv.route).filter(Boolean))) as string[]
+
+    // Helper for score badge tone
+    const scoreTone = (s?: number) => {
+      const common = 'rounded-full px-2 py-0.5 text-xs font-semibold'
+      if (typeof s !== 'number') return <span className={`${common} bg-muted text-foreground/70`}>—</span>
+      const tone = s >= 90
+        ? 'bg-primary-50 text-primary-700'
+        : s >= 80
+        ? 'bg-accent-100 text-accent-700'
+        : s >= 70
+        ? 'bg-secondary-100 text-secondary-700'
+        : 'bg-destructive/10 text-destructive'
+      return <span className={`${common} ${tone}`}>{s}</span>
+    }
+
     return (
       <div className="space-y-6">
+        {/* Toolbar Filters */}
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+              <div className="font-medium text-sm">Filter your results</div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Select value={timeRange} onValueChange={(v: any) => setTimeRange(v)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Time range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All time</SelectItem>
+                    <SelectItem value="90d">Last 90 days</SelectItem>
+                    <SelectItem value="30d">Last 30 days</SelectItem>
+                    <SelectItem value="7d">Last 7 days</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={routeFilter} onValueChange={(v: any) => setRouteFilter(v)}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Interview route" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All routes</SelectItem>
+                    {routeOptions.map((r) => (
+                      <SelectItem key={r} value={r!}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Score Trend */}
+        <ResultsTrendChart
+          data={scoreSeries}
+          title="Score Trend"
+          description="Your performance over time (rolling average shown)"
+        />
+
+        {/* History */}
         <Card>
           <CardHeader>
             <CardTitle>Interview History</CardTitle>
-            <CardDescription>Your past interview sessions and scores</CardDescription>
+            <CardDescription>
+              {filteredInterviews.length} session{filteredInterviews.length === 1 ? '' : 's'}
+              {routeFilter !== 'all' ? ` • ${routeFilter}` : ''}
+              {timeRange !== 'all' ? ` • ${timeRange}` : ''}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="divide-y rounded-md border">
-              {interviews.map((iv) => (
-                <div key={iv.id} className="flex items-center justify-between p-4 text-sm">
-                  <div>
-                    <div className="font-medium">
-                      {iv.startTime ? iv.startTime.toLocaleString() : '—'}
+            {!filteredInterviews.length ? (
+              <div className="text-sm text-muted-foreground py-2">No results for the selected filters.</div>
+            ) : (
+              <div className="divide-y rounded-md border">
+                {filteredInterviews
+                  .slice()
+                  .sort((a, b) => (b.startTime?.getTime() || 0) - (a.startTime?.getTime() || 0))
+                  .map((iv) => (
+                  <div key={iv.id} className="flex items-center justify-between p-4 text-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="h-2 w-2 rounded-full bg-primary-500" />
+                      <div>
+                        <div className="font-medium">
+                          {iv.startTime ? iv.startTime.toLocaleString() : '—'}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <span className="rounded px-1.5 py-0.5 bg-secondary-100 text-secondary-700 font-medium">
+                              {iv.route || 'visa'}
+                            </span>
+                            <span>•</span>
+                            <span className="rounded px-1 py-0.5 bg-accent-100 text-accent-700 font-medium">
+                              {iv.status || 'completed'}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {iv.route || 'visa'} • {iv.status || 'scheduled'}
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="text-xs text-muted-foreground">Score</div>
+                        <div className="text-base font-semibold">{typeof iv.score === 'number' ? `${iv.score}/100` : '—'}</div>
+                      </div>
+                      {scoreTone(iv.score)}
+                      <Button variant="outline" size="sm" onClick={() => setActiveSection('interview')}>
+                        Practice Again
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="text-xs text-muted-foreground">Score</div>
-                      <div className="text-base font-semibold">{typeof iv.score === 'number' ? `${iv.score}/100` : '—'}</div>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => setActiveSection('interview')}>
-                      Practice Again
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -507,7 +698,7 @@ export function UserDashboard() {
       <Sidebar variant="inset" collapsible="icon">
         <SidebarHeader>
           <div className="flex items-center gap-3 rounded-md px-2 py-1.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-blue-700 text-white font-semibold">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-gradient-to-br from-primary-500 to-primary-700 text-primary-foreground font-semibold">
               {userInitials}
             </div>
             <div className="grid leading-tight group-data-[collapsible=icon]:hidden">

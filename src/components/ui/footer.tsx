@@ -39,7 +39,7 @@ const links = [
 
 export default function FooterSection() {
     return (
-        <footer className="py-16 md:py-32" data-animate="up" data-duration="0.7">
+        <footer className="py-16 md:py-32 border-t" data-animate="up" data-duration="0.7">
             <div className="mx-auto max-w-5xl px-6">
                 <Link
                     href="/"
@@ -52,7 +52,7 @@ export default function FooterSection() {
                         <Link
                             key={index}
                             href={link.href}
-                            className="text-muted-foreground hover:text-primary block duration-150">
+                            className="text-foreground hover:underline underline-offset-4 decoration-[hsl(var(--secondary))] block duration-150">
                             <span>{link.title}</span>
                         </Link>
                     ))}
@@ -64,7 +64,7 @@ export default function FooterSection() {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Social Link 1" // Generic label
-                        className="text-muted-foreground hover:text-primary block">
+                        className="text-foreground hover:underline underline-offset-4 decoration-[hsl(var(--secondary))] block">
                         <Share2 className="size-6" /> {/* Generic "Share" icon */}
                     </Link>
                     <Link
@@ -72,7 +72,7 @@ export default function FooterSection() {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Social Link 2"
-                        className="text-muted-foreground hover:text-primary block">
+                        className="text-foreground hover:underline underline-offset-4 decoration-[hsl(var(--secondary))] block">
                         <MessageCircle className="size-6" /> {/* Generic "Message" icon */}
                     </Link>
                     <Link
@@ -80,7 +80,7 @@ export default function FooterSection() {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Social Link 3"
-                        className="text-muted-foreground hover:text-primary block">
+                        className="text-foreground hover:underline underline-offset-4 decoration-[hsl(var(--secondary))] block">
                         <LinkIcon className="size-6" /> {/* Generic "Link" icon */}
                     </Link>
                     <Link
@@ -88,7 +88,7 @@ export default function FooterSection() {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Social Link 4"
-                        className="text-muted-foreground hover:text-primary block">
+                        className="text-foreground hover:underline underline-offset-4 decoration-[hsl(var(--secondary))] block">
                         <Globe className="size-6" /> {/* Generic "Globe" (website/world) icon */}
                     </Link>
                     <Link
@@ -96,7 +96,7 @@ export default function FooterSection() {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Social Link 5"
-                        className="text-muted-foreground hover:text-primary block">
+                        className="text-foreground hover:underline underline-offset-4 decoration-[hsl(var(--secondary))] block">
                         <Send className="size-6" /> {/* Generic "Send" icon */}
                     </Link>
                     <Link
@@ -104,7 +104,7 @@ export default function FooterSection() {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Social Link 6"
-                        className="text-muted-foreground hover:text-primary block">
+                        className="text-foreground hover:underline underline-offset-4 decoration-[hsl(var(--secondary))] block">
                         <Feather className="size-6" /> {/* Generic "Feather" (post/write) icon */}
                     </Link>
                 </div>

@@ -135,12 +135,12 @@ export default function SignInPage() {
         <CardFooter className="flex flex-col space-y-2">
           <div className="text-sm text-center text-muted-foreground">
             Don&apos;t have an account?{' '}
-            <Link href="/signup" className="text-primary hover:underline font-medium">
+            <Link href="/signup" className="text-secondary hover:text-primary hover:underline font-medium">
               Sign up
             </Link>
           </div>
           <div className="text-sm text-center">
-            <Link href="/forgot-password" className="text-muted-foreground hover:text-primary hover:underline">
+            <Link href="/forgot-password" className="text-secondary hover:text-primary hover:underline">
               Forgot your password?
             </Link>
           </div>

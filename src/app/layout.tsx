@@ -10,7 +10,7 @@ import ScrollRevealProvider from '@/components/animations/ScrollRevealProvider'
 
 // ClientAuthProvider is a client component; importing it statically avoids first-load spinners
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], display: 'swap' })
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://consularly.app'),
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
 
 // Move themeColor to viewport per Next.js recommendation to silence warnings
 export const viewport: Viewport = {
-  themeColor: '#121417',
+  themeColor: '#4840A3',
 }
 
 export default function RootLayout({
@@ -41,7 +41,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body className={inter.className}>
         <ClientAuthProvider>
           <ScrollRevealProvider />

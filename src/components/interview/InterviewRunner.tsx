@@ -811,7 +811,7 @@ export default function InterviewRunner() {
                             <span className="text-lg flex-shrink-0">⏱️</span>
                             <div>
                               <span className="font-semibold block text-gray-900 mb-1">Preparation Time</span>
-                              <span className="text-gray-600">You have <span className="font-bold text-blue-600">{secondsRemaining} seconds</span> to review the question silently.</span>
+                              <span className="text-gray-600">You have <span className="font-bold text-primary">{secondsRemaining} seconds</span> to review the question silently.</span>
                             </div>
                           </>
                         ) : (
@@ -819,7 +819,7 @@ export default function InterviewRunner() {
                             <span className="text-lg flex-shrink-0">🎙️</span>
                             <div>
                               <span className="font-semibold block text-gray-900 mb-1">Recording Your Answer</span>
-                              <span className="text-gray-600">Speak clearly. <span className="font-bold text-blue-600">{secondsRemaining} seconds</span> remaining.</span>
+                              <span className="text-gray-600">Speak clearly. <span className="font-bold text-primary">{secondsRemaining} seconds</span> remaining.</span>
                             </div>
                           </>
                         )}
@@ -832,7 +832,7 @@ export default function InterviewRunner() {
                         <span className="text-lg flex-shrink-0">⏱️</span>
                         <div>
                           <span className="font-semibold block text-gray-900 mb-1">Time Remaining</span>
-                          <span className="text-gray-600">You have <span className="font-bold text-blue-600">{Math.max(0, secondsRemaining)} seconds</span>. Click <span className="font-semibold">Next Question</span> when ready.</span>
+                          <span className="text-gray-600">You have <span className="font-bold text-primary">{Math.max(0, secondsRemaining)} seconds</span>. Click <span className="font-semibold">Next Question</span> when ready.</span>
                         </div>
                       </div>
                     </div>
@@ -874,10 +874,10 @@ export default function InterviewRunner() {
           </div>
         </div>
 
-        {/* Right Panel - Video Section with Blue Gradient (70%) */}
-        <div className="lg:w-[70%] bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 relative overflow-hidden flex items-center justify-center p-8">
+        {/* Right Panel - Video Section with Brand Gradient (70%) */}
+        <div className="lg:w-[70%] bg-gradient-to-br from-primary via-primary-700 to-primary-900 relative overflow-hidden flex items-center justify-center p-8">
           {/* Decorative Elements */}
-          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-400/20 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
+          <div className="absolute top-0 right-0 w-96 h-96 bg-secondary/20 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
           <div className="absolute bottom-0 right-8 w-32 h-32 grid grid-cols-8 gap-1 opacity-30">
             {Array.from({ length: 64 }).map((_, i) => (
               <div key={i} className="w-1 h-1 bg-white rounded-full"></div>

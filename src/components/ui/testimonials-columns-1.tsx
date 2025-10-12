@@ -37,7 +37,7 @@ export const TestimonialsColumn = (props: {
                   className="p-10 rounded-3xl border shadow-lg shadow-primary/10 max-w-xs w-full"
                   key={`${index}-${i}`}
                 >
-                  <div>{text}</div>
+                  <div className="text-base md:text-lg leading-[1.55]">{text}</div>
                   <div className="flex items-center gap-2 mt-5">
                     <Image
                       width={40}
@@ -47,8 +47,8 @@ export const TestimonialsColumn = (props: {
                       className="h-10 w-10 rounded-full"
                     />
                     <div className="flex flex-col">
-                      <div className="font-medium tracking-tight leading-5">{name}</div>
-                      <div className="leading-5 opacity-60 tracking-tight">{role}</div>
+                      <div className="text-sm font-medium tracking-[0.01em] leading-[1.4]">{name}</div>
+                      <div className="text-sm leading-[1.4] text-muted-foreground">{role}</div>
                     </div>
                   </div>
                 </div>

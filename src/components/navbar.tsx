@@ -21,11 +21,6 @@ import {
 
 const navigationItems = [
   {
-    name: "Features",
-    href: "#features",
-    description: "Explore our AI-powered features"
-  },
-  {
     name: "How it Works",
     href: "#how-it-works",
     description: "Step-by-step process"
@@ -113,7 +108,7 @@ export function Navbar() {
 
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/50 shadow-sm">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-background text-foreground border-b shadow-sm">
       <div className="container mx-auto max-w-7xl px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -136,10 +131,9 @@ export function Navbar() {
               <Link
                 key={item.name}
                 href={item.href}
-                className="text-muted-foreground hover:text-primary font-medium transition-colors relative group"
+                className="text-foreground font-medium transition-colors underline-offset-4 hover:underline decoration-[hsl(var(--secondary))]"
               >
                 {item.name}
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary group-hover:w-full transition-all duration-300"></span>
               </Link>
             ))}
             
@@ -147,7 +141,7 @@ export function Navbar() {
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setResourcesOpen(!resourcesOpen)}
-                className="flex items-center gap-1 text-muted-foreground hover:text-primary font-medium transition-colors"
+                className="flex items-center gap-1 text-foreground font-medium transition-colors underline-offset-4 hover:underline decoration-[hsl(var(--secondary))]"
               >
                 Resources
                 <ChevronDown className={`w-4 h-4 transition-transform ${resourcesOpen ? 'rotate-180' : ''}`} />
@@ -162,7 +156,7 @@ export function Navbar() {
                       className="flex items-start gap-3 px-4 py-3 hover:bg-muted transition-colors"
                       onClick={() => setResourcesOpen(false)}
                     >
-                      <item.icon className="w-5 h-5 text-primary mt-0.5" />
+                      <item.icon className="w-5 h-5 text-secondary mt-0.5" />
                       <div>
                         <div className="font-medium text-foreground">{item.name}</div>
                         <div className="text-sm text-muted-foreground">{item.description}</div>
@@ -215,10 +209,10 @@ export function Navbar() {
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors"
+                  className="flex items-center gap-2 p-2 rounded-lg hover:bg-secondary/20 transition-colors"
                 >
-                  <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                    <User className="w-4 h-4 text-primary-foreground" />
+                  <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center">
+                    <User className="w-4 h-4 text-accent-foreground" />
                   </div>
                   <span className="text-foreground font-medium">{user.displayName || user.email}</span>
                   <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
@@ -244,19 +238,16 @@ export function Navbar() {
               <>
                 <Link href="/signin">
                   <Button 
-                    variant="ghost" 
-                    className="text-foreground hover:text-primary"
+                    variant="ghost"
                   >
                     Sign In
                   </Button>
                 </Link>
                 <Link href="/signup">
-                  <Button 
-                    className="h-10 rounded-xl px-4 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/30 ring-1 ring-primary/30 hover:shadow-xl hover:from-primary/95 transition-all group"
-                  >
+                  <Button className="h-10 rounded-full px-5 bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:scale-[1.01] transition-transform">
                     <span className="inline-flex items-center">
                       Start Free Trial
-                      <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                      <ArrowRight className="ml-2 w-4 h-4" />
                     </span>
                   </Button>
                 </Link>
@@ -280,16 +271,12 @@ export function Navbar() {
 
       {/* Mobile Menu */}
       {isOpen && (
-        <div className="lg:hidden bg-background border-t border-border">
+        <div className="lg:hidden bg-background text-foreground border-t">
           <div className="container mx-auto px-4 py-4 space-y-4">
             {/* Navigation Links */}
             <div className="space-y-3">
               {isAdmin && (
-                <Link
-                  href="/admin"
-                  className="block"
-                  onClick={() => setIsOpen(false)}
-                >
+                <Link href="/admin" className="block" onClick={() => setIsOpen(false)}>
                   <Button variant="outline" className="w-full justify-start gap-2">
                     <LayoutDashboard className="w-4 h-4" />
                     Dashboard
@@ -297,11 +284,7 @@ export function Navbar() {
                 </Link>
               )}
               {!isAdmin && user && userProfile?.orgId && (
-                <Link
-                  href="/org"
-                  className="block"
-                  onClick={() => setIsOpen(false)}
-                >
+                <Link href="/org" className="block" onClick={() => setIsOpen(false)}>
                   <Button variant="outline" className="w-full justify-start gap-2">
                     <LayoutDashboard className="w-4 h-4" />
                     Org Dashboard
@@ -309,11 +292,7 @@ export function Navbar() {
                 </Link>
               )}
               {!isAdmin && user && userProfile && !(userProfile as any).orgId && (
-                <Link
-                  href="/dashboard"
-                  className="block"
-                  onClick={() => setIsOpen(false)}
-                >
+                <Link href="/dashboard" className="block" onClick={() => setIsOpen(false)}>
                   <Button variant="outline" className="w-full justify-start gap-2">
                     <LayoutDashboard className="w-4 h-4" />
                     Dashboard
@@ -324,7 +303,7 @@ export function Navbar() {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className="block py-2 text-foreground hover:text-primary font-medium transition-colors"
+                  className="block py-2 text-foreground font-medium transition-colors underline-offset-4 hover:underline decoration-[hsl(var(--secondary))]"
                   onClick={() => setIsOpen(false)}
                 >
                   {item.name}
@@ -334,7 +313,7 @@ export function Navbar() {
 
             {/* Resources Section */}
             <div className="pt-3 border-t border-border">
-              <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
+              <h3 className="text-sm font-semibold text-foreground mb-3 uppercase tracking-wide">
                 Resources
               </h3>
               <div className="space-y-3">
@@ -342,13 +321,13 @@ export function Navbar() {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className="flex items-center gap-3 py-2 text-foreground hover:text-primary transition-colors"
+                    className="flex items-center gap-3 py-2 text-foreground transition-colors underline-offset-4 hover:underline decoration-[hsl(var(--secondary))]"
                     onClick={() => setIsOpen(false)}
                   >
                     <item.icon className="w-5 h-5" />
                     <div>
                       <div className="font-medium">{item.name}</div>
-                      <div className="text-sm text-muted-foreground">{item.description}</div>
+                      <div className="text-sm text-foreground/70">{item.description}</div>
                     </div>
                   </Link>
                 ))}
@@ -359,13 +338,13 @@ export function Navbar() {
             <div className="pt-4 border-t border-border space-y-3">
               {user ? (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                    <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                      <User className="w-5 h-5 text-primary-foreground" />
+                  <div className="flex items-center gap-3 p-3 bg-secondary/20 rounded-lg">
+                    <div className="w-10 h-10 bg-accent rounded-full flex items-center justify-center">
+                      <User className="w-5 h-5 text-accent-foreground" />
                     </div>
                     <div>
                       <p className="font-medium text-foreground">{user.displayName}</p>
-                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                      <p className="text-sm text-foreground/70">{user.email}</p>
                     </div>
                   </div>
                   <Button 
@@ -390,12 +369,12 @@ export function Navbar() {
                   </Link>
                   <Link href="/signup">
                     <Button 
-                      className="w-full h-11 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/30 ring-1 ring-primary/30 hover:shadow-xl hover:from-primary/95 transition-all group"
+                      className="w-full h-11 rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:scale-[1.01] transition-transform"
                       onClick={() => setIsOpen(false)}
                     >
                       <span className="inline-flex items-center justify-center w-full">
                         Start Free Trial
-                        <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                        <ArrowRight className="ml-2 w-4 h-4" />
                       </span>
                     </Button>
                   </Link>
