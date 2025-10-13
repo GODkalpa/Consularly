@@ -10,6 +10,7 @@ import { AudioRecorder, AudioChunk } from '@/lib/audio-recorder';
 export interface TranscriptionState {
   isRecording: boolean;
   isConnected: boolean;
+  isConnecting: boolean;
   currentTranscript: string;
   finalTranscripts: TranscriptionResult[];
   error: string | null;
@@ -31,6 +32,7 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
   const [state, setState] = useState<TranscriptionState>({
     isRecording: false,
     isConnected: false,
+    isConnecting: false,
     currentTranscript: '',
     finalTranscripts: [],
     error: null,
@@ -41,7 +43,7 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const isInitializedRef = useRef(false);
 
-  // Initialize services
+  // Initialize services (audio recorder + AssemblyAI service setup)
   const initialize = useCallback(async () => {
     if (isInitializedRef.current) return;
 
@@ -84,17 +86,19 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
 
       // Set up AssemblyAI event handlers
       assemblyAIRef.current.onConnected(() => {
-        setState(prev => ({ ...prev, isConnected: true, error: null }));
+        setState(prev => ({ ...prev, isConnected: true, isConnecting: false, error: null }));
       });
 
       assemblyAIRef.current.onDisconnected(() => {
-        setState(prev => ({ ...prev, isConnected: false, isRecording: false }));
+        setState(prev => ({ ...prev, isConnected: false, isConnecting: false, isRecording: false }));
       });
 
       // Throttle interim transcript updates to reduce UI work
       const lastInterimRef = { ts: 0, text: '' }
       assemblyAIRef.current.onTranscript((result: TranscriptionResult) => {
         if (result.is_final) {
+          // CRITICAL: This is a FINAL transcript segment - must be captured!
+          console.log(`✅ [STT Hook] FINAL transcript segment: "${result.text}" (confidence: ${Math.round(result.confidence * 100)}%)`)
           setState(prev => ({
             ...prev,
             finalTranscripts: [...prev.finalTranscripts, result],
@@ -103,6 +107,7 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
           }));
           options.onTranscriptComplete?.(result);
         } else {
+          // Interim (partial) transcript - throttle to reduce UI work
           const now = performance.now()
           const tooSoon = now - lastInterimRef.ts < 120
           const sameText = result.text === lastInterimRef.text
@@ -118,7 +123,7 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
       });
 
       assemblyAIRef.current.onError((error: TranscriptionError) => {
-        setState(prev => ({ ...prev, error: error.error, isRecording: false }));
+        setState(prev => ({ ...prev, error: error.error, isRecording: false, isConnecting: false }));
         options.onError?.(error);
       });
 
@@ -126,12 +131,43 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Initialization failed';
-      setState(prev => ({ ...prev, error: errorMessage }));
+      setState(prev => ({ ...prev, error: errorMessage, isConnecting: false }));
       console.error('Failed to initialize transcription:', error);
     }
   }, [options]);
 
-  // Start transcription
+  // Connect to AssemblyAI service without starting recording (for pre-connection during prep phase)
+  const connectService = useCallback(async () => {
+    if (!isInitializedRef.current) {
+      await initialize();
+    }
+
+    try {
+      if (!assemblyAIRef.current) {
+        throw new Error('AssemblyAI service not initialized');
+      }
+
+      // Already connected, skip
+      if (assemblyAIRef.current.isActive()) {
+        console.log('[STT] Already connected, skipping connection');
+        return;
+      }
+
+      setState(prev => ({ ...prev, isConnecting: true }));
+      console.log('[STT] Establishing connection (no recording yet)...');
+      
+      // Start AssemblyAI connection only (no audio recording)
+      await assemblyAIRef.current.startTranscription();
+      console.log('[STT] Connection established, ready for recording');
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to connect service';
+      setState(prev => ({ ...prev, error: errorMessage, isConnecting: false }));
+      console.error('Failed to connect AssemblyAI service:', error);
+    }
+  }, [initialize]);
+
+  // Start recording (assumes connection already established or will establish it)
   const startTranscription = useCallback(async () => {
     if (!isInitializedRef.current) {
       await initialize();
@@ -142,15 +178,21 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
         throw new Error('Services not initialized');
       }
 
-      // Start AssemblyAI connection
-      await assemblyAIRef.current.startTranscription();
+      // If not connected yet, connect first
+      if (!assemblyAIRef.current.isActive()) {
+        setState(prev => ({ ...prev, isConnecting: true }));
+        await assemblyAIRef.current.startTranscription();
+      }
       
-      // Start audio recording
-      await audioRecorderRef.current.startRecording();
+      // Start audio recording (connection is now ready)
+      if (!audioRecorderRef.current.isActive()) {
+        console.log('[STT] Starting audio recording...');
+        await audioRecorderRef.current.startRecording();
+      }
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to start transcription';
-      setState(prev => ({ ...prev, error: errorMessage }));
+      setState(prev => ({ ...prev, error: errorMessage, isConnecting: false }));
       console.error('Failed to start transcription:', error);
     }
   }, [initialize]);
@@ -205,6 +247,7 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
 
   return {
     ...state,
+    connectService,
     startTranscription,
     stopTranscription,
     clearTranscripts,

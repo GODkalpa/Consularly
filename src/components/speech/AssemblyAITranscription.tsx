@@ -31,22 +31,27 @@ interface AssemblyAITranscriptionProps {
   showControls?: boolean;
   showTranscripts?: boolean;
   autoStart?: boolean;
-  // If provided, the component will start/stop recording based on this flag
+  // CRITICAL FIX: Separate connection from recording for UK/France prep phase
+  // connected: establish WebSocket connection (prep phase for UK/France)
+  // running: start audio capture and streaming (answer phase for UK/France, active for USA)
+  connected?: boolean;
   running?: boolean;
   // Increment this key to clear transcripts (useful when moving to next question)
   resetKey?: number;
 }
 
-export function AssemblyAITranscription({
+// PERFORMANCE FIX: Memoize component to prevent unnecessary re-renders
+const AssemblyAITranscriptionComponent = ({
   onTranscriptComplete,
   onTranscriptUpdate,
   className = '',
   showControls = true,
   showTranscripts = true,
   autoStart = false,
+  connected,
   running,
   resetKey
-}: AssemblyAITranscriptionProps) {
+}: AssemblyAITranscriptionProps) => {
   const [recordingDuration, setRecordingDuration] = useState(0);
 
   const transcription = useAssemblyAITranscription({
@@ -72,18 +77,42 @@ export function AssemblyAITranscription({
     return () => clearInterval(interval);
   }, [transcription.isRecording]);
 
-  // Parent-controlled running flag
+  // CRITICAL FIX: Separate connection control from recording control
+  // Step 1: Establish connection when connected flag is true (prep phase for UK/France)
+  useEffect(() => {
+    if (connected === undefined) return;
+    const control = async () => {
+      try {
+        if (connected && !transcription.isConnected && !transcription.isConnecting) {
+          console.log('[STT Component] Establishing connection (prep phase)...');
+          await transcription.connectService();
+        } else if (!connected && transcription.isConnected) {
+          console.log('[STT Component] Disconnecting...');
+          await transcription.stopTranscription();
+        }
+      } catch (e) {
+        console.error('[STT Component] Connection control error:', e);
+      }
+    };
+    control();
+    // We intentionally depend only on key flags to avoid re-creating functions
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, transcription.isConnected, transcription.isConnecting]);
+
+  // Step 2: Start/stop recording when running flag changes (answer phase for UK/France)
   useEffect(() => {
     if (running === undefined) return;
     const control = async () => {
       try {
         if (running && !transcription.isRecording) {
+          console.log('[STT Component] Starting recording (answer phase)...');
           await transcription.startTranscription();
         } else if (!running && transcription.isRecording) {
+          console.log('[STT Component] Stopping recording...');
           await transcription.stopTranscription();
         }
       } catch (e) {
-        // no-op; hook already surfaces errors
+        console.error('[STT Component] Recording control error:', e);
       }
     };
     control();
@@ -336,5 +365,17 @@ export function AssemblyAITranscription({
     </div>
   );
 }
+
+// PERFORMANCE FIX: Memoize with custom comparison to prevent re-renders when props haven't changed
+export const AssemblyAITranscription = React.memo(AssemblyAITranscriptionComponent, (prevProps, nextProps) => {
+  // Only re-render if these key props change
+  return (
+    prevProps.connected === nextProps.connected &&
+    prevProps.running === nextProps.running &&
+    prevProps.resetKey === nextProps.resetKey &&
+    prevProps.showControls === nextProps.showControls &&
+    prevProps.showTranscripts === nextProps.showTranscripts
+  )
+})
 
 export default AssemblyAITranscription;

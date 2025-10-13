@@ -2,6 +2,7 @@
 import type { InterviewRoute } from './interview-routes'
 import { UK_QUESTION_POOL } from './uk-questions-data'
 import { F1_VISA_QUESTIONS } from './f1-questions-data'
+import { getRemainingQuestionsForUniversity, FranceUniversity } from './france-questions-data'
 import { SmartQuestionSelector, loadQuestionBank } from './smart-question-selector'
 import type { InterviewRoute as LLMRoute } from './llm-provider-selector'
 
@@ -180,6 +181,7 @@ export class LLMQuestionService {
           askedQuestionIds: askedIds,
           detectedRedFlags: this.detectRedFlags(conversationHistory),
           categoryCoverage,
+          // Context flags and semantic clusters will be built in smart-question-selector
         };
 
         const result = await this.questionSelector.selectNextQuestion(context);
@@ -359,11 +361,35 @@ IMPORTANT: Use the degree level (${studentProfile.degreeLevel || 'not specified'
 - Generate contextual follow-ups based on the student's specific answer (reference details they mentioned or omitted)
 - Do NOT repeat questions already asked
 - Ensure smooth transitions between categories (Study Plans → University → Academic → Financial → Post-grad)`
+    } else if (route === 'france_ema' || route === 'france_icn') {
+      // France: Question 1 is always fixed, provide remaining questions for hybrid selection
+      const university: FranceUniversity = route === 'france_ema' ? 'ema' : 'icn';
+      const remainingPool = getRemainingQuestionsForUniversity(university);
+      const bankLines = remainingPool.map((q, i) => `- [${i + 1}] ${q.question}`).join('\n');
+      
+      const universityName = university === 'ema' ? 'EMA' : 'ICN Business School';
+      prompt += `\n\nFrance ${universityName} Question Bank (Questions 2-${remainingPool.length + 1}):\n${bankLines}`;
+      
+      // For France, include ALL asked questions to prevent ANY repetition
+      if (conversationHistory.length > 0) {
+        const askedQuestions = conversationHistory.map(h => h.question);
+        prompt += `\n\n⚠️ ALREADY ASKED QUESTIONS (DO NOT REPEAT ANY OF THESE):`;
+        askedQuestions.forEach((q, i) => {
+          prompt += `\n${i + 1}. ${q}`;
+        });
+      }
+      
+      prompt += `\n\nInstructions:
+- Question 1 is ALWAYS fixed (already asked)
+- Choose remaining questions that fit the interview flow and student's profile
+- Return selected question EXACTLY as it appears in the bank
+- Focus on course alignment, career goals, and university-specific aspects
+- CRITICAL: Do NOT repeat ANY question from the "ALREADY ASKED QUESTIONS" list above`
     }
 
     // PERFORMANCE FIX: Only include recent conversation history (last 3 exchanges)
     // Full history is unnecessary and slows down LLM processing
-    if (conversationHistory.length > 0) {
+    if (conversationHistory.length > 0 && route !== 'france_ema' && route !== 'france_icn') {
       const recentHistory = conversationHistory.slice(-3); // Last 3 Q&A pairs
       prompt += `\n\nRecent Conversation History (last ${recentHistory.length} exchanges):`;
       recentHistory.forEach((exchange, index) => {

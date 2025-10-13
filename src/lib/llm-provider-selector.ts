@@ -4,7 +4,7 @@
  * Supports: Groq (primary), Claude (UK premium), Gemini (fallback)
  */
 
-export type InterviewRoute = 'usa_f1' | 'uk_student';
+export type InterviewRoute = 'usa_f1' | 'uk_student' | 'france_ema' | 'france_icn';
 export type LLMUseCase = 'question_selection' | 'answer_scoring' | 'final_evaluation';
 
 export interface LLMProviderConfig {
@@ -77,6 +77,29 @@ export function selectLLMProvider(
 
   // USA Scoring/Evaluation: Use Groq Llama 3.3 70B
   if (route === 'usa_f1' && (useCase === 'answer_scoring' || useCase === 'final_evaluation')) {
+    if (process.env.GROQ_API_KEY) {
+      return {
+        provider: 'groq',
+        model: process.env.LLM_MODEL_SCORING || 'llama-3.3-70b-versatile',
+        apiKey: process.env.GROQ_API_KEY,
+        baseUrl: 'https://api.groq.com/openai/v1',
+      };
+    }
+  }
+
+  // France Scoring/Evaluation: Follow UK pattern (can use premium or Groq)
+  if ((route === 'france_ema' || route === 'france_icn') && (useCase === 'answer_scoring' || useCase === 'final_evaluation')) {
+    // Option 1: Claude (if premium enabled)
+    if (process.env.USE_PREMIUM_FRANCE === 'true' && process.env.ANTHROPIC_API_KEY) {
+      return {
+        provider: 'claude',
+        model: 'claude-3-haiku-20240307',
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        baseUrl: 'https://api.anthropic.com/v1',
+      };
+    }
+
+    // Option 2: Groq Llama 3.3 70B (default)
     if (process.env.GROQ_API_KEY) {
       return {
         provider: 'groq',

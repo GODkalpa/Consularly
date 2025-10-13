@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function evaluateWithLLM({ route, studentProfile, conversationHistory, perAnswerScores }: { 
-  route?: 'uk_student' | 'usa_f1'; 
+  route?: InterviewRoute; 
   studentProfile: any; 
   conversationHistory: any[];
   perAnswerScores?: Array<{ overall: number; categories: { content: number; speech: number; bodyLanguage: number } }>;
@@ -85,54 +85,57 @@ async function evaluateWithLLM({ route, studentProfile, conversationHistory, per
   
   logProviderSelection(effectiveRoute, 'final_evaluation', config)
   
-  const system = effectiveRoute === 'uk_student'
-    ? `You are a STRICT UK Home Office credibility evaluator conducting FINAL pre-CAS assessment. Review the ENTIRE interview and make a FINAL DECISION based on real UK visa refusal patterns.
+  // UK and France use similar strict evaluation system
+  const isUKFrance = effectiveRoute === 'uk_student' || effectiveRoute === 'france_ema' || effectiveRoute === 'france_icn'
+  const countryName = effectiveRoute === 'uk_student' ? 'UK' : effectiveRoute.startsWith('france_') ? 'France' : 'UK'
+  
+  const system = isUKFrance
+    ? `You are a STRICT ${countryName} visa credibility evaluator conducting FINAL assessment. Review the ENTIRE interview and make a FINAL DECISION based on real visa refusal patterns.
 
-CRITICAL EVALUATION CRITERIA (UK Pre-CAS Standards):
+CRITICAL EVALUATION CRITERIA (European Student Visa Standards):
 1. **courseAndUniversityFit** (0-100):
-   - Can name 3+ specific modules from chosen course (not generic "business" or "IT")
+   - Can name 3+ specific modules/courses from chosen program (not generic "business" or "IT")
    - Explains why THIS course fits their background/career goals (not just ranking)
    - Shows independent research (faculty, facilities, course structure)
    - RED FLAG: Only knows university reputation, cannot discuss course content
 
 2. **financialRequirement** (0-100):
-   - Knows exact maintenance amount (£18,000+ for London, varies for other cities)
-   - Understands 28-day bank balance rule explicitly
+   - Knows exact financial requirements (${effectiveRoute === 'uk_student' ? '£18,000+ for London' : 'specific amounts in euros'})
+   - ${effectiveRoute === 'uk_student' ? 'Understands 28-day bank balance rule explicitly' : 'Clear documentation of financial support'}
    - Clear tuition + living cost breakdown
-   - RED FLAG: Says "sufficient funds" without specific amounts or 28-day rule
+   - RED FLAG: Says "sufficient funds" without specific amounts
 
 3. **accommodationLogistics** (0-100):
    - Specific plan: location name, cost per week/month, pre-booked or planned
    - RED FLAG: "I'll find somewhere" or completely vague
 
 4. **complianceCredibility** (0-100):
-   - Understands 20 hours/week work limit during term
-   - Knows CAS requirements, attendance monitoring
+   - Understands work regulations for international students
    - Shows independent application process (not agent-led)
-   - RED FLAG: Heavily references agent, doesn't know work rules or compliance basics
+   - RED FLAG: Heavily references agent, doesn't know basic requirements
 
 5. **postStudyIntent** (0-100):
-   - Clear post-study plan (return home OR understands Graduate Route properly)
-   - RED FLAG: Vague about future plans, or shows immigration intent without proper route
+   - Clear post-study plan (return home OR legitimate career path in ${countryName})
+   - RED FLAG: Vague about future plans, or shows unclear immigration intent
 
 6. **communication** (0-100):
    - Natural, confident answers (not scripted/coached)
    - Consistent across all answers (no contradictions)
 
-STRICT DECISION THRESHOLDS (Real UK standards):
+STRICT DECISION THRESHOLDS (Real ${countryName} standards):
 - **accepted**: ALL dimensions ≥75 AND no major red flags (genuine student, likely approved)
 - **borderline**: Any dimension 55-74 OR 1-2 minor red flags (needs improvement, 50/50 chance)
-- **rejected**: ANY dimension <55 OR any major red flag (likely refusal - UK rejects ~35% of student applications)
+- **rejected**: ANY dimension <55 OR any major red flag (likely refusal)
 
 MAJOR RED FLAGS (instant rejection):
-- Cannot name 3+ course modules
-- No understanding of 28-day bank rule
+- Cannot name 3+ course modules/program details
+${effectiveRoute === 'uk_student' ? '- No understanding of 28-day bank rule' : '- No clear financial documentation plan'}
 - Complete accommodation ignorance
-- Work visa rule confusion (20h limit)
+${effectiveRoute === 'uk_student' ? '- Work visa rule confusion (20h limit)' : '- Work permit regulation confusion'}
 - Heavy agent dependency without independent knowledge
 - Financial contradictions or vagueness
 
-BE EXTREMELY HARSH - UK credibility interviews were introduced to catch non-genuine students. Return STRICT JSON only.`
+BE EXTREMELY HARSH - European credibility interviews are designed to identify genuine students. Return STRICT JSON only.`
     : `You are a STRICT US Embassy Nepal F1 visa officer conducting FINAL interview assessment. Review the ENTIRE interview transcript and make a FINAL decision.
 
 EVALUATION CRITERIA (Nepal F1 specific):

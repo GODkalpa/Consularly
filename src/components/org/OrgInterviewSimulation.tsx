@@ -405,6 +405,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       }
       const created = await createRes.json()
       setFirestoreInterviewId(created.id as string)
+      console.log('[Org Interview] Created interview:', created.id)
 
       // Start LLM session
       // Build enriched student profile for personalized question selection
@@ -471,7 +472,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       })
       
       localStorage.setItem(key, payload)
-      console.log('[Interview] Session data stored in localStorage:', key)
+      console.log('[Org Interview] Session data stored in localStorage:', key, 'firestoreInterviewId:', created.id)
 
       // Build URL with session ID
       const url = `${window.location.origin}/interview/${apiSess.id}`
@@ -834,6 +835,8 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
                 <SelectContent>
                   <SelectItem value='usa_f1'>{routeDisplayName.usa_f1}</SelectItem>
                   <SelectItem value='uk_student'>{routeDisplayName.uk_student}</SelectItem>
+                  <SelectItem value='france_ema'>{routeDisplayName.france_ema}</SelectItem>
+                  <SelectItem value='france_icn'>{routeDisplayName.france_icn}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -62,6 +62,8 @@ export interface Interview {
   score: number; // 0-100
   scoreDetails: ScoreDetails;
   interviewType: InterviewType;
+  route?: string; // 'usa_f1' | 'uk_student' | 'france_ema' | 'france_icn'
+  university?: string; // 'ema' | 'icn' for France interviews
   duration: number; // minutes
   createdAt: Timestamp;
   updatedAt: Timestamp;

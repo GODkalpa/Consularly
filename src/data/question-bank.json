@@ -386,22 +386,6 @@
       "followUpTriggers": []
     },
     {
-      "id": "USA_030",
-      "route": "usa_f1",
-      "category": "academic",
-      "difficulty": "medium",
-      "question": "Why did you choose XYZ University?",
-      "keywords": [
-        "university",
-        "school"
-      ],
-      "followUpTriggers": [
-        "ranked",
-        "best",
-        "reputation"
-      ]
-    },
-    {
       "id": "USA_031",
       "route": "usa_f1",
       "category": "academic",
@@ -683,7 +667,8 @@
       "keywords": [
         "general"
       ],
-      "followUpTriggers": []
+      "followUpTriggers": [],
+      "requiresContext": ["has_failures", "low_gpa"]
     },
     {
       "id": "USA_054",
@@ -694,7 +679,8 @@
       "keywords": [
         "general"
       ],
-      "followUpTriggers": []
+      "followUpTriggers": [],
+      "requiresContext": ["has_failures", "low_gpa"]
     },
     {
       "id": "USA_055",
@@ -705,7 +691,8 @@
       "keywords": [
         "general"
       ],
-      "followUpTriggers": []
+      "followUpTriggers": [],
+      "requiresContext": ["has_failures", "low_gpa"]
     },
     {
       "id": "USA_056",
@@ -1284,23 +1271,6 @@
         "future"
       ],
       "followUpTriggers": []
-    },
-    {
-      "id": "USA_098",
-      "route": "usa_f1",
-      "category": "post_study",
-      "difficulty": "medium",
-      "question": "Do you plan to return to your home country after completing your studies?",
-      "keywords": [
-        "return",
-        "plans",
-        "future"
-      ],
-      "followUpTriggers": [
-        "maybe",
-        "thinking",
-        "probably"
-      ]
     },
     {
       "id": "USA_099",

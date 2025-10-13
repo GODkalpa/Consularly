@@ -251,12 +251,12 @@ A: ${answer}${contradictionWarning}
 
 SCORING RUBRIC (Score 0-100 for each dimension):
 
-UK-SPECIFIC RUBRIC ADJUSTMENTS:
+UK/FRANCE-SPECIFIC RUBRIC ADJUSTMENTS:
 - Replace academicPreparedness → courseAndUniversityFit (must name modules, explain fit)
-- Replace financialCapability → financialRequirement (£18k+ maintenance, 28-day rule)
+- Replace financialCapability → financialRequirement (£/€ amount, financial evidence)
 - Replace intentToReturn → complianceAndIntent (work rules + post-study plans)
 
-FOR UK STUDENT VISA (uk_student route):
+FOR UK STUDENT VISA (uk_student route) AND FRANCE STUDENT VISA (france_ema, france_icn routes):
 1. **communication** (0-100): 
    - Structure, clarity, coherence, confidence (not scripted/coached)
    - Penalty: -30 for rambling, -25 for heavy agent-scripted language, -40 for incoherent
@@ -331,7 +331,7 @@ FOR USA F1 VISA (usa_f1 route):
 
 COMPUTE contentScore (0-100):
 
-FOR UK STUDENT VISA (uk_student route):
+FOR UK STUDENT VISA (uk_student route) AND FRANCE STUDENT VISA (france_ema, france_icn routes):
 contentScore = (0.20 × communication) + (0.15 × relevance) + (0.25 × specificity) + (0.15 × consistency) + (0.15 × courseAndUniversityFit) + (0.10 × financialRequirement)
 
 Note: complianceAndIntent affects the rubric but has reduced weight in contentScore (evaluated more heavily in final decision).
@@ -345,7 +345,7 @@ Note: intentToReturn affects the rubric but has 0% weight in contentScore (only 
 
 OUTPUT FORMAT (STRICT JSON - no markdown, no extra text):
 
-FOR UK STUDENT VISA (uk_student route):
+FOR UK STUDENT VISA (uk_student route) AND FRANCE STUDENT VISA (france_ema, france_icn routes):
 {
   "rubric": {
     "communication": <number 0-100>,

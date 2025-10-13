@@ -37,7 +37,8 @@ export interface InterviewStageProps {
   captureScoreRef?: React.MutableRefObject<(() => BodyLanguageScore | null) | null>
 }
 
-export const InterviewStage: React.FC<InterviewStageProps> = ({
+// PERFORMANCE FIX: Memoized component to prevent unnecessary re-renders
+const InterviewStageComponent: React.FC<InterviewStageProps> = ({
   running,
   preview = false,
   questionCategory,
@@ -62,14 +63,14 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
   showBodyBadge = true,
   captureScoreRef
 }) => {
-  // PERFORMANCE FIX: Reduce body language tracking FPS to 12 to minimize lag while preserving quality
+  // PERFORMANCE FIX: Reduce body language tracking FPS to 6 to minimize lag (staggered execution means effective rate is lower)
   const { state, start, stop, startPreview, stopPreview, captureScore, videoRef, canvasRef } = useBodyLanguageTracker({
     width,
     height,
-    enableFace: true,
-    enableHands: true,
+    enableFace: false, // posture-only
+    enableHands: false, // posture-only
     enablePose: true,
-    maxFPS: 12,
+    maxFPS: 6, // Reduced from 12 to 6 FPS for main loop (actual detection rates are lower due to staggering)
   })
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -310,6 +311,56 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
         </div>
       )}
 
+      {/* Real-time Performance Feedback Panel (hidden when showBodyBadge=false) */}
+      {showBodyBadge && (running || preview) && state.score && (
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="absolute bottom-4 left-4 z-30 space-y-2"
+        >
+          <div className="bg-background/90 backdrop-blur-xl rounded-xl shadow-2xl border border-border/50 p-3 space-y-2 min-w-[200px]">
+            <div className="text-xs font-semibold text-muted-foreground mb-2">Live Feedback</div>
+            
+            {/* Eye Contact and Expression removed - posture only */}
+
+            {/* Posture - Show numeric score */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🪑</span>
+                <span className="text-xs font-medium">Posture</span>
+              </div>
+              <Badge 
+                variant={
+                  state.score.posture.score >= 70 ? 'default' : 
+                  state.score.posture.score >= 50 ? 'secondary' : 
+                  'destructive'
+                }
+                className="text-xs px-2 py-0 font-semibold"
+              >
+                {state.score.posture.score}/100
+              </Badge>
+            </div>
+
+            {/* Overall Body Language Score */}
+            <div className="pt-2 border-t border-border/50">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold">Overall</span>
+                <Badge 
+                  variant={
+                    state.score.overallScore >= 70 ? 'default' : 
+                    state.score.overallScore >= 50 ? 'secondary' : 
+                    'destructive'
+                  }
+                  className="text-xs px-2 py-0 font-bold"
+                >
+                  {Math.round(state.score.overallScore)}/100
+                </Badge>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Live captions - Enhanced glassmorphism */}
       {showCaptions && (
         <div className="absolute bottom-20 left-6 right-6 flex justify-center z-30">
@@ -362,5 +413,18 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({
     </div>
   )
 }
+
+// PERFORMANCE FIX: Memoize with custom comparison function
+export const InterviewStage = React.memo(InterviewStageComponent, (prevProps, nextProps) => {
+  // Only re-render if these critical props change
+  return (
+    prevProps.running === nextProps.running &&
+    prevProps.preview === nextProps.preview &&
+    prevProps.phase === nextProps.phase &&
+    prevProps.secondsRemaining === nextProps.secondsRemaining &&
+    prevProps.questionIndex === nextProps.questionIndex &&
+    prevProps.currentTranscript === nextProps.currentTranscript
+  )
+})
 
 export default InterviewStage

@@ -36,8 +36,8 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     width: config?.width ?? 640,
     height: config?.height ?? 480,
     enablePose: config?.enablePose ?? true,
-    enableHands: config?.enableHands ?? true,
-    enableFace: config?.enableFace ?? true,
+    enableHands: config?.enableHands ?? false, // posture-only by default
+    enableFace: config?.enableFace ?? false, // posture-only by default
     maxFPS: config?.maxFPS ?? 30,
     deviceId: config?.deviceId ?? '',
   }), [config])
@@ -52,6 +52,9 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     face?: faceLandmarksDetection.FaceLandmarksDetector
   }>({})
   const lastTimesRef = useRef<{ pose: number; hands: number; face: number }>({ pose: 0, hands: 0, face: 0 })
+  // PERFORMANCE FIX: Frame skipping for UI updates (update every 4th frame = 3 FPS instead of 12 FPS)
+  const frameCountRef = useRef<number>(0)
+  const lastStateUpdateRef = useRef<number>(0)
 
   const drawCtxRef = useRef<CanvasRenderingContext2D | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -244,6 +247,7 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
           detectorsRef.current.pose = detector
         })())
       }
+      // Hands and face disabled in posture-only mode unless explicitly enabled via config
       if (cfg.enableHands) {
         tasks.push((async () => {
           const handMod = await import('@tensorflow-models/hand-pose-detection')
@@ -258,7 +262,6 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
         tasks.push((async () => {
           const faceMod = await import('@tensorflow-models/face-landmarks-detection')
           let detector: faceLandmarksDetection.FaceLandmarksDetector | undefined
-          // Try mediapipe runtime first to get annotations for easier scoring
           try {
             detector = await faceMod.createDetector(faceMod.SupportedModels.MediaPipeFaceMesh, {
               runtime: 'mediapipe',
@@ -266,7 +269,6 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
               solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
             } as any)
           } catch (e) {
-            // Fallback to tfjs runtime
             detector = await faceMod.createDetector(faceMod.SupportedModels.MediaPipeFaceMesh, {
               runtime: 'tfjs',
               refineLandmarks: false,
@@ -372,10 +374,11 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     }
     const now = performance.now()
 
-    // PERFORMANCE FIX: Throttle detectors more aggressively to reduce lag
-    const poseDue = now - lastTimesRef.current.pose > 1000 / cfg.maxFPS
-    const handsDue = now - lastTimesRef.current.hands > 1000 / Math.min(6, cfg.maxFPS) // Reduced further from 10
-    const faceDue = now - lastTimesRef.current.face > 1000 / Math.min(6, cfg.maxFPS) // Reduced further from 10
+    // PERFORMANCE FIX: Dramatically reduced detection frequency and staggered execution
+    // Pose: 3 FPS, Hands: 2 FPS, Face: 2 FPS (reduces blocking by 50-70%)
+    const poseDue = now - lastTimesRef.current.pose > 333 // 3 FPS (was 83ms = 12 FPS)
+    const handsDue = now - lastTimesRef.current.hands > 500 // 2 FPS (was 166ms = 6 FPS)
+    const faceDue = now - lastTimesRef.current.face > 500 // 2 FPS (was 166ms = 6 FPS)
 
     try {
       const v = videoRef.current
@@ -385,27 +388,65 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
         return
       }
 
-      let pose: any = state.pose
-      let hands: any[] = state.hands || []
-      let face: any = state.face
+      // PERFORMANCE FIX: Use local variables instead of reading from state to avoid re-creating callback
+      let pose: any = null
+      let hands: any[] = []
+      let face: any = null
+      let detectionRan = false
 
+      // PERFORMANCE FIX: Stagger model executions to prevent blocking spikes
+      // Don't run all three in the same frame
       if (cfg.enablePose && detectorsRef.current.pose && poseDue) {
         pose = (await detectorsRef.current.pose!.estimatePoses(videoRef.current))[0]
         lastTimesRef.current.pose = now
-      }
-      if (cfg.enableHands && detectorsRef.current.hands && handsDue) {
+        detectionRan = true
+        
+        // Debug pose detection
+        if (pose?.keypoints?.length) {
+          const confidence = pose.keypoints.reduce((sum: number, kp: any) => sum + (kp.score || 0), 0) / pose.keypoints.length
+          if (Math.random() < 0.1) { // Log 10% of frames to avoid spam
+            console.log('🏃 [Pose Detection]:', {
+              keypoints: pose.keypoints.length,
+              avgConfidence: confidence.toFixed(2)
+            })
+          }
+        }
+      } else if (cfg.enableHands && detectorsRef.current.hands && handsDue) {
         hands = await detectorsRef.current.hands!.estimateHands(videoRef.current)
         lastTimesRef.current.hands = now
-      }
-      if (cfg.enableFace && detectorsRef.current.face && faceDue) {
+        detectionRan = true
+      } else if (cfg.enableFace && detectorsRef.current.face && faceDue) {
         const faces = await detectorsRef.current.face!.estimateFaces(videoRef.current!)
         face = faces[0]
         lastTimesRef.current.face = now
+        detectionRan = true
+        
+        // Debug face detection - log structure to help diagnose landmark extraction issues
+        if (face) {
+          if (Math.random() < 0.1) { // Log 10% of frames to avoid spam
+            console.log('👤 [Face Detection]:', {
+              hasKeypoints: !!face.keypoints,
+              keypointsCount: face.keypoints?.length || 0,
+              hasScaledMesh: !!face.scaledMesh,
+              scaledMeshCount: face.scaledMesh?.length || 0,
+              hasAnnotations: !!face.annotations,
+              annotationKeys: face.annotations ? Object.keys(face.annotations).slice(0, 5) : [],
+              sampleKeypoint: face.keypoints?.[0] ? {
+                hasName: 'name' in face.keypoints[0],
+                hasX: 'x' in face.keypoints[0],
+                hasY: 'y' in face.keypoints[0]
+              } : 'none'
+            })
+          }
+        } else {
+          if (Math.random() < 0.05) { // Log 5% when no face detected
+            console.log('⚠️ [Face Detection]: No face detected in frame')
+          }
+        }
       }
 
-      // If none of the detectors ran this frame, skip scoring/state update
-      const anyUpdated = (cfg.enablePose && poseDue) || (cfg.enableHands && handsDue) || (cfg.enableFace && faceDue)
-      if (!anyUpdated && state.score) {
+      // If no detector ran this frame, skip to next frame
+      if (!detectionRan) {
         rafRef.current = requestAnimationFrame(step)
         return
       }
@@ -416,23 +457,30 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
       const raw = evaluateBodyLanguage({ pose, hands, face })
       const blend = (prev: number | undefined, curr: number) => (typeof prev === 'number' ? (prev * (1 - SMOOTH) + curr * SMOOTH) : curr)
       
-      // PERFORMANCE FIX: Use batch state update to reduce re-renders
-      setState((s) => {
-        const prev = s.score
-        const smoothed = prev ? {
-          ...raw,
-          posture: { ...raw.posture, score: blend(prev.posture?.score, raw.posture.score) },
-          gestures: { ...raw.gestures, score: blend(prev.gestures?.score, raw.gestures.score) },
-          expressions: {
-            ...raw.expressions,
-            eyeContactScore: blend(prev.expressions?.eyeContactScore, raw.expressions.eyeContactScore),
-            smileScore: blend(prev.expressions?.smileScore, raw.expressions.smileScore),
-            score: blend(prev.expressions?.score, raw.expressions.score),
-          },
-          overallScore: blend(prev.overallScore, raw.overallScore),
-        } as typeof raw : raw
-        return { ...s, pose, hands, face, score: smoothed }
-      })
+      // PERFORMANCE FIX: Frame skipping for UI updates - only update state every 4th frame (3 FPS UI updates)
+      frameCountRef.current++
+      const shouldUpdateUI = frameCountRef.current % 4 === 0 || (now - lastStateUpdateRef.current > 500)
+      
+      if (shouldUpdateUI) {
+        lastStateUpdateRef.current = now
+        // PERFORMANCE FIX: Use batch state update to reduce re-renders
+        setState((s) => {
+          const prev = s.score
+          const smoothed = prev ? {
+            ...raw,
+            posture: { ...raw.posture, score: blend(prev.posture?.score, raw.posture.score) },
+            gestures: { ...raw.gestures, score: blend(prev.gestures?.score, raw.gestures.score) },
+            expressions: {
+              ...raw.expressions,
+              eyeContactScore: 0,
+              smileScore: 0,
+              score: 0,
+            },
+            overallScore: blend(prev.overallScore, raw.overallScore),
+          } as typeof raw : raw
+          return { ...s, pose, hands, face, score: smoothed }
+        })
+      }
     } catch (e) {
       const msg = (e as any)?.message || String(e)
       const nowTs = performance.now()
@@ -448,7 +496,7 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
     }
 
     rafRef.current = requestAnimationFrame(step)
-  }, [cfg.enableFace, cfg.enableHands, cfg.enablePose, cfg.maxFPS, drawOverlay, state.face, state.hands, state.pose])
+  }, [cfg.enableFace, cfg.enableHands, cfg.enablePose]) // PERFORMANCE FIX: Removed state dependencies
 
   const start = useCallback(async () => {
     if (state.running) return
@@ -487,26 +535,89 @@ export function useBodyLanguageTracker(config?: TrackerConfig) {
   }, [loadDetectors, setupCamera, state.running, step])
 
   const disposeDetectors = useCallback(async () => {
-    try { detectorsRef.current.pose?.dispose?.() } catch {}
-    try { detectorsRef.current.hands?.dispose?.() } catch {}
-    try { detectorsRef.current.face?.dispose?.() } catch {}
+    console.log('🧹 Starting detector disposal...')
+    
+    // Dispose detectors first
+    try { 
+      await detectorsRef.current.pose?.dispose?.() 
+      console.log('✅ Pose detector disposed')
+    } catch (e) { 
+      console.warn('Pose disposal error:', e) 
+    }
+    try { 
+      await detectorsRef.current.hands?.dispose?.() 
+      console.log('✅ Hands detector disposed')
+    } catch (e) { 
+      console.warn('Hands disposal error:', e) 
+    }
+    try { 
+      await detectorsRef.current.face?.dispose?.() 
+      console.log('✅ Face detector disposed')
+    } catch (e) { 
+      console.warn('Face disposal error:', e) 
+    }
     detectorsRef.current = {}
     
-    // Dispose TensorFlow.js backend to free WebGL contexts
+    // FIXED: Robust TensorFlow backend cleanup with proper error handling
     try {
       const tfMod = await import('@tensorflow/tfjs-core')
-      const backend = tfMod.getBackend()
-      if (backend === 'webgl') {
-        const webglBackend = tfMod.backend()
-        if (webglBackend && typeof webglBackend.dispose === 'function') {
-          webglBackend.dispose()
-          console.log('🧹 Disposed WebGL backend')
+      
+      // Check if TensorFlow is actually initialized before trying cleanup
+      let currentBackend: string | null = null
+      try {
+        currentBackend = tfMod.getBackend()
+      } catch (e) {
+        console.log('⚠️ No TensorFlow backend registered (not initialized or already disposed)')
+        return // Exit early if backend not found
+      }
+      
+      if (!currentBackend) {
+        console.log('⚠️ TensorFlow backend is null, skipping cleanup')
+        return
+      }
+      
+      console.log(`🧹 Current backend: ${currentBackend}`)
+      
+      // Dispose all tensors being tracked
+      try {
+        const numTensors = tfMod.memory().numTensors
+        console.log(`🧹 Disposing ${numTensors} tensors...`)
+        tfMod.disposeVariables()
+      } catch (e) {
+        console.warn('Failed to dispose TensorFlow variables:', e)
+      }
+      
+      // Backend-specific cleanup (only if backend is WebGL)
+      if (currentBackend === 'webgl') {
+        try {
+          const webglBackend = tfMod.backend() as any
+          if (webglBackend && typeof webglBackend.dispose === 'function') {
+            // Note: We don't call dispose() because it removes the backend from registry
+            // causing "No backend found in registry" errors on next use
+            // Instead, just log the status
+            if (webglBackend?.numDataIds) {
+              console.log(`🧹 WebGL data IDs: ${webglBackend.numDataIds()}`)
+            }
+            console.log('✅ WebGL backend cleanup completed (kept in registry for reuse)')
+          }
+        } catch (e) {
+          console.warn('WebGL backend cleanup warning (non-critical):', e)
         }
       }
-      // Dispose all memory tensors
-      tfMod.disposeVariables()
+      
+      // Log final memory state
+      try {
+        const memoryAfter = tfMod.memory()
+        console.log('📊 Memory after cleanup:', {
+          numTensors: memoryAfter.numTensors,
+          numDataBuffers: memoryAfter.numDataBuffers,
+          numBytes: memoryAfter.numBytes,
+        })
+      } catch (e) {
+        console.warn('Could not read memory stats:', e)
+      }
     } catch (e) {
-      console.warn('Failed to dispose TensorFlow backend:', e)
+      console.warn('TensorFlow cleanup warning (non-critical):', e)
     }
   }, [])
 

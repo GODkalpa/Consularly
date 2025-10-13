@@ -113,6 +113,7 @@ export function InterviewSimulation() {
   const [quotaMessage, setQuotaMessage] = useState('');
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [firestoreInterviewId, setFirestoreInterviewId] = useState<string | null>(null);
 
   // Timers and activity tracking
   const questionTimerRef = useRef<number | null>(null);
@@ -462,6 +463,13 @@ export function InterviewSimulation() {
       const data = await res.json();
       const apiSess: ApiInterviewSession = data.session;
       const firstQ: QuestionGenerationResponse = data.question;
+      const interviewId: string | undefined = data.interviewId;
+
+      // Store Firestore interview ID if returned
+      if (interviewId) {
+        setFirestoreInterviewId(interviewId);
+        console.log('[Admin Interview] Firestore interview created:', interviewId);
+      }
 
       // Seed the API session with the first question so answers attach correctly
       const seededApiSession: ApiInterviewSession = {
@@ -487,11 +495,13 @@ export function InterviewSimulation() {
         firstQuestion: firstQ,
         route,
         studentName: studentName.trim(),
+        firestoreInterviewId: firestoreInterviewId || null,
+        scope: 'user', // Admins create interviews as regular users for testing
       });
       
       // Store in localStorage (works cross-tab)
       localStorage.setItem(key, payload);
-      console.log('[Interview] Session data stored in localStorage:', key);
+      console.log('[Admin Interview] Session data stored in localStorage:', key, 'firestoreInterviewId:', firestoreInterviewId);
 
       // Build URL with session ID
       const url = `${window.location.origin}/interview/${apiSess.id}`;
@@ -846,6 +856,50 @@ export function InterviewSimulation() {
     };
   }, [session]);
 
+  // Update Firestore interview record when completed
+  useEffect(() => {
+    if (!firestoreInterviewId) return;
+    if (session?.status === 'completed' && finalAggregate) {
+      // Map our categories into the generic ScoreDetails
+      const scoreDetails = {
+        communication: finalAggregate.content,
+        technical: finalAggregate.speech,
+        confidence: finalAggregate.body,
+        overall: finalAggregate.overall,
+      };
+
+      (async () => {
+        try {
+          const token = await auth.currentUser?.getIdToken();
+          if (!token) return;
+
+          // Use the general /api/interviews endpoint for admin users
+          const res = await fetch(`/api/interviews/${firestoreInterviewId}`, {
+            method: 'PATCH',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({
+              status: 'completed',
+              endTime: new Date().toISOString(),
+              score: finalAggregate.overall,
+              scoreDetails,
+            })
+          });
+
+          if (res.ok) {
+            console.log('[Admin Interview] Firestore record updated with final scores');
+          } else {
+            console.error('[Admin Interview] Failed to update Firestore record:', await res.text());
+          }
+        } catch (e) {
+          console.error('[Admin Interview] Error updating Firestore:', e);
+        }
+      })();
+    }
+  }, [session?.status, finalAggregate, firestoreInterviewId]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -896,6 +950,8 @@ export function InterviewSimulation() {
                   <SelectContent>
                     <SelectItem value='usa_f1'>{routeDisplayName.usa_f1}</SelectItem>
                     <SelectItem value='uk_student'>{routeDisplayName.uk_student}</SelectItem>
+                    <SelectItem value='france_ema'>{routeDisplayName.france_ema}</SelectItem>
+                    <SelectItem value='france_icn'>{routeDisplayName.france_icn}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

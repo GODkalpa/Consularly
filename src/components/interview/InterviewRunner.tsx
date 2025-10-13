@@ -8,13 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { CheckCircle2, ChevronRight, Loader2, Play, Square } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Loader2, Play, Square, Award, TrendingUp, Target, Lightbulb, MessageSquare } from 'lucide-react'
 import { AssemblyAITranscription } from '@/components/speech/AssemblyAITranscription'
 import { useMicLevel } from '@/hooks/use-mic-level'
 import type { TranscriptionResult } from '@/lib/assemblyai-service'
 import { mapQuestionTypeToCategory, type InterviewRoute } from '@/lib/interview-routes'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'motion/react'
 import { auth } from '@/lib/firebase'
 
 // Dynamically import the heavy InterviewStage (TensorFlow/MediaPipe) client-only to reduce initial bundle size
@@ -35,6 +35,27 @@ interface UISession {
   status: 'preparing' | 'active' | 'completed'
 }
 
+// Helper function to get interview display title
+const getInterviewTitle = (route: InterviewRoute): string => {
+  switch (route) {
+    case 'usa_f1':
+      return 'USA F1 Interview'
+    case 'uk_student':
+      return 'UK Pre-CAS Interview'
+    case 'france_ema':
+      return 'France EMA Interview'
+    case 'france_icn':
+      return 'France ICN Interview'
+    default:
+      return 'Interview'
+  }
+}
+
+// Helper function to check if route uses UK-style prep/answer phases
+const usesPhaseSystem = (route: InterviewRoute): boolean => {
+  return route === 'uk_student' || route === 'france_ema' || route === 'france_icn'
+}
+
 export default function InterviewRunner() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
@@ -50,16 +71,20 @@ export default function InterviewRunner() {
   const phaseTimerRef = useRef<number | null>(null)
   const countdownTimerRef = useRef<number | null>(null)
   const processingRef = useRef<boolean>(false)
+  const [isProcessingTranscript, setIsProcessingTranscript] = useState(false)
   const [resetKey, setResetKey] = useState(0)
   const answerBufferRef = useRef<string>('')
   // Track ASR confidence from transcript segments (per-segment and aggregated)
   const asrConfidencesRef = useRef<number[]>([])
+  const [latestAsrConfidence, setLatestAsrConfidence] = useState<number | null>(null)
   const captureBodyScoreRef = useRef<(() => BodyLanguageScore | null) | null>(null)
   // Persist targets
   const firestoreInterviewIdRef = useRef<string | null>(null)
   const scopeRef = useRef<'org'|'user'|null>(null)
-  // PERFORMANCE FIX: Debounce transcript updates to reduce re-renders
+  // PERFORMANCE FIX: Debounce transcript updates to reduce re-renders (increased to 300ms)
   const transcriptDebounceRef = useRef<number | null>(null)
+  // PERFORMANCE FIX: Use ref for phase to avoid timer callback recreation
+  const phaseRef = useRef<'prep' | 'answer' | null>(null)
   // Per-answer combined performance results (includes body language)
   const [perfList, setPerfList] = useState<Array<{ overall: number; categories: { content: number; speech: number; bodyLanguage: number } }>>([])
   const [finalReport, setFinalReport] = useState<null | {
@@ -142,13 +167,17 @@ export default function InterviewRunner() {
         // Persist context
         if (init.firestoreInterviewId) {
           firestoreInterviewIdRef.current = String(init.firestoreInterviewId)
+          console.log('[InterviewRunner] Set firestoreInterviewId:', firestoreInterviewIdRef.current)
         } else {
           firestoreInterviewIdRef.current = null
+          console.warn('[InterviewRunner] No firestoreInterviewId in init data!')
         }
         if (init.scope === 'org' || init.scope === 'user') {
           scopeRef.current = init.scope
+          console.log('[InterviewRunner] Set scope:', scopeRef.current)
         } else {
           scopeRef.current = null
+          console.warn('[InterviewRunner] Invalid or missing scope!', init.scope)
         }
         console.log('[InterviewRunner] Session loaded successfully:', s.id)
         setLoading(false)
@@ -235,7 +264,9 @@ export default function InterviewRunner() {
   const timerDurationRef = useRef<number>(0)
   const timerRafRef = useRef<number | null>(null)
   const lastSecondsSentRef = useRef<number>(-1)
+  const finalizeAnswerRef = useRef<(() => void) | null>(null)
   
+  // PERFORMANCE FIX: Stable timer callback with NO dependencies to prevent recreation
   const updateTimer = useCallback(() => {
     const elapsed = (performance.now() - timerStartTimeRef.current) / 1000
     const remaining = Math.max(0, timerDurationRef.current - elapsed)
@@ -250,8 +281,9 @@ export default function InterviewRunner() {
       // Continue timer updates
       timerRafRef.current = requestAnimationFrame(updateTimer)
     } else {
-      // Timer completed
-      if (phase === 'prep') {
+      // Timer completed - use ref-based phase to avoid callback recreation
+      if (phaseRef.current === 'prep') {
+        phaseRef.current = 'answer'
         setPhase('answer')
         timerStartTimeRef.current = performance.now()
         timerDurationRef.current = 30
@@ -260,10 +292,11 @@ export default function InterviewRunner() {
         setCurrentTranscript('')
         timerRafRef.current = requestAnimationFrame(updateTimer)
       } else {
-        finalizeAnswer()
+        // Use ref to call finalizeAnswer to avoid dependency
+        finalizeAnswerRef.current?.()
       }
     }
-  }, [phase])
+  }, []) // NO dependencies - timer stays stable!
 
   const startPhase = useCallback((p: 'prep' | 'answer', durationSec: number) => {
     // Clear old timers
@@ -271,19 +304,26 @@ export default function InterviewRunner() {
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
     if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
     
+    // PERFORMANCE FIX: Update both state and ref to keep them in sync
+    phaseRef.current = p
     setPhase(p)
     setSecondsRemaining(durationSec)
-    if (p === 'prep') setCurrentTranscript('')
+    if (p === 'prep') {
+      setCurrentTranscript('')
+      setLatestAsrConfidence(null) // Reset audio quality indicator
+    }
     if (p === 'answer') {
       answerBufferRef.current = ''
       setCurrentTranscript('')
       // Clear ASR confidence buffer for new answer
       asrConfidencesRef.current = []
+      setLatestAsrConfidence(null) // Reset audio quality indicator
     }
     
     // Start smooth RAF-based timer
     timerStartTimeRef.current = performance.now()
     timerDurationRef.current = durationSec
+    lastSecondsSentRef.current = -1 // Reset to force immediate UI update
     timerRafRef.current = requestAnimationFrame(updateTimer)
   }, [updateTimer])
 
@@ -308,7 +348,7 @@ export default function InterviewRunner() {
         await fetch(url, { method: 'PATCH', headers, body: JSON.stringify({ status: 'in_progress' }) })
       }
     } catch {}
-    if (session.route === 'uk_student') {
+    if (session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') {
       startPhase('prep', 30)
     } else if (session.route === 'usa_f1') {
       // USA F1: 40s soft cap per question with 30s warning
@@ -320,6 +360,10 @@ export default function InterviewRunner() {
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
     if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
     
+    // Clear ASR confidence for new question
+    asrConfidencesRef.current = []
+    setLatestAsrConfidence(null)
+    
     // Use RAF-based timer for USA F1 as well
     timerStartTimeRef.current = performance.now()
     timerDurationRef.current = 40
@@ -328,7 +372,8 @@ export default function InterviewRunner() {
   }, [updateTimer])
 
   const startAnswerNow = useCallback(() => {
-    if (session?.route !== 'uk_student') return
+    const isUKorFrance = session?.route === 'uk_student' || session?.route === 'france_ema' || session?.route === 'france_icn'
+    if (!isUKorFrance) return
     if (phaseTimerRef.current) window.clearTimeout(phaseTimerRef.current)
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
     if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
@@ -529,8 +574,8 @@ export default function InterviewRunner() {
       // Clear ASR confidence buffer for next answer
       asrConfidencesRef.current = []
       
-      // UK flow: new question => 30s prep again
-      if (session.route === 'uk_student') {
+      // UK/France flow: new question => 30s prep again
+      if (session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') {
         startPhase('prep', 30)
       } else if (session.route === 'usa_f1') {
         // USA F1: restart 40s timer for next question
@@ -548,14 +593,36 @@ export default function InterviewRunner() {
   }, [session, apiSession, startPhase, startUSF1QuestionTimer, computeFinalReport])
 
   const finalizeAnswer = useCallback(async () => {
-    if (processingRef.current) return
+    if (processingRef.current || isProcessingTranscript) return
     processingRef.current = true
+    setIsProcessingTranscript(true)
+    
+    console.log('🎙️ [STT] Finalizing answer - starting 2.5s grace period for final transcript segments...')
+    
     if (phaseTimerRef.current) window.clearTimeout(phaseTimerRef.current)
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
     if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
-    const text = currentTranscript.trim()
-    await processAnswer(text.length >= 1 ? text : '[No response]')
-  }, [currentTranscript, processAnswer])
+    
+    // CRITICAL FIX: Wait 2.5 seconds to allow AssemblyAI to finalize ALL transcript segments
+    // This ensures we capture every single word spoken by the user
+    const currentBufferBefore = answerBufferRef.current
+    console.log(`🎙️ [STT] Buffer before grace period: "${currentBufferBefore}" (${currentBufferBefore.length} chars)`)
+    
+    await new Promise(resolve => setTimeout(resolve, 2500))
+    
+    // After grace period, capture the complete accumulated transcript
+    const finalText = answerBufferRef.current.trim()
+    console.log(`🎙️ [STT] Buffer after grace period: "${finalText}" (${finalText.length} chars)`)
+    console.log(`🎙️ [STT] Words captured: ${finalText.split(/\s+/).filter(w => w.length > 0).length}`)
+    
+    setIsProcessingTranscript(false)
+    await processAnswer(finalText.length >= 1 ? finalText : '[No response]')
+  }, [isProcessingTranscript, processAnswer])
+  
+  // PERFORMANCE FIX: Keep finalizeAnswerRef in sync with finalizeAnswer
+  useEffect(() => {
+    finalizeAnswerRef.current = finalizeAnswer
+  }, [finalizeAnswer])
 
   const handleTranscriptComplete = async (t: TranscriptionResult) => {
     if (!session || session.status !== 'active') return
@@ -563,43 +630,53 @@ export default function InterviewRunner() {
     // CRITICAL FIX: Track ASR confidence for ALL segments (accumulate for averaging)
     if (typeof t.confidence === 'number' && t.confidence > 0) {
       asrConfidencesRef.current.push(t.confidence)
-      console.log('🎤 ASR confidence:', Math.round(t.confidence * 100) + '%', `(${asrConfidencesRef.current.length} segments)`)
+      setLatestAsrConfidence(t.confidence) // Update real-time audio quality indicator
+      console.log('🎤 [STT] ASR confidence:', Math.round(t.confidence * 100) + '%', `(${asrConfidencesRef.current.length} segments)`)
     }
     
-    // UK: Do NOT auto-finalize on a transcript segment.
-    // Accumulate text only during the answer window; finalize via timer or Stop & Next.
-    if (session.route === 'uk_student') {
+    const text = t.text.trim()
+    if (!text) return
+    
+    // CRITICAL FIX: Accumulate ALL final transcript segments for ALL routes
+    // This ensures we capture every single word spoken by the user
+    console.log(`🎙️ [STT] Final segment received: "${text}" (${text.split(/\s+/).length} words)`)
+    
+    // Append to buffer (add space if buffer already has content)
+    const newBuffer = answerBufferRef.current ? `${answerBufferRef.current} ${text}` : text
+    answerBufferRef.current = newBuffer
+    console.log(`🎙️ [STT] Buffer updated: "${newBuffer}" (${newBuffer.length} chars total)`)
+    
+    // UK/France: Only show transcript during answer phase
+    if (session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') {
       if (phase !== 'answer') return
-      const text = t.text.trim()
-      if (text) {
-        answerBufferRef.current = answerBufferRef.current ? `${answerBufferRef.current} ${text}` : text
-        // Keep UI showing buffered + live partials (handled in onTranscriptUpdate)
-        setCurrentTranscript(answerBufferRef.current)
-      }
+      setCurrentTranscript(answerBufferRef.current)
       return
     }
-    // USA F1: Accumulate transcript but don't auto-finalize (wait for manual Next or timer)
+    
+    // USA F1: Accumulate transcript and show immediately
     if (session.route === 'usa_f1') {
-      const text = t.text.trim()
-      if (text) {
-        answerBufferRef.current = answerBufferRef.current ? `${answerBufferRef.current} ${text}` : text
-        setCurrentTranscript(answerBufferRef.current)
-      }
+      setCurrentTranscript(answerBufferRef.current)
       return
     }
-    // Other routes: finalize immediately on a completed segment (legacy behavior)
-    processingRef.current = true
-    await processAnswer(t.text.trim())
+    
+    // Other routes: legacy behavior (if any)
+    setCurrentTranscript(answerBufferRef.current)
   }
 
-  const currentQuestion = session?.questions[session.currentQuestionIndex]
+  // PERFORMANCE FIX: Memoize expensive computations to prevent recalculation on every render
+  const currentQuestion = useMemo(() => session?.questions[session.currentQuestionIndex], [session?.questions, session?.currentQuestionIndex])
+  
   const progressPct = useMemo(() => {
     if (!session) return 0
     if (session.status === 'preparing') return 0
-    const total = session.route === 'uk_student' ? 16 : session.questions.length
+    const total = session.route === 'uk_student' ? 16 : (session.route === 'france_ema' || session.route === 'france_icn') ? 10 : session.questions.length
     return Math.round(((session.currentQuestionIndex + 1) / total) * 100)
   }, [session])
-  const phaseLabel = phase ? (phase === 'prep' ? 'Prep' : 'Answer') : null
+  
+  const phaseLabel = useMemo(() => phase ? (phase === 'prep' ? 'Prep' : 'Answer') : null, [phase])
+  
+  // PERFORMANCE FIX: Memoize interview title to avoid recalculation
+  const interviewTitle = useMemo(() => getInterviewTitle(session?.route || 'usa_f1'), [session?.route])
 
   // Aggregate combined performance across answers (shown on completion)
   const combinedAggregate = useMemo(() => {
@@ -626,8 +703,23 @@ export default function InterviewRunner() {
   useEffect(() => {
     const interviewId = firestoreInterviewIdRef.current
     const scope = scopeRef.current
-    if (!interviewId || !scope) return
-    if (!session || session.status !== 'completed') return
+    
+    console.log('[Finalize] useEffect triggered', { 
+      interviewId, 
+      scope, 
+      sessionStatus: session?.status,
+      hasScore: typeof finalReport?.overall === 'number',
+      hasCombinedAggregate: !!combinedAggregate
+    })
+    
+    if (!interviewId || !scope) {
+      console.warn('[Finalize] Skipping - missing interviewId or scope', { interviewId, scope })
+      return
+    }
+    if (!session || session.status !== 'completed') {
+      console.log('[Finalize] Skipping - session not completed', { status: session?.status })
+      return
+    }
 
     const score = typeof finalReport?.overall === 'number' ? Math.round(finalReport.overall)
       : (combinedAggregate ? combinedAggregate.overall : undefined)
@@ -641,7 +733,8 @@ export default function InterviewRunner() {
 
     ;(async () => {
       try {
-        const token = await auth.currentUser?.getIdToken()
+        // Force refresh token to prevent expiration issues
+        const token = await auth.currentUser?.getIdToken(true)
         const headers: Record<string, string> = { 'Content-Type': 'application/json' }
         if (token) headers['Authorization'] = `Bearer ${token}`
         const url = scope === 'org'
@@ -653,10 +746,20 @@ export default function InterviewRunner() {
         }
         if (typeof score === 'number') body.score = score
         if (scoreDetails) body.scoreDetails = scoreDetails
-        await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) })
+        
+        console.log('[Finalize] Sending PATCH', { url, body })
+        const res = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) })
+        
+        if (!res.ok) {
+          const errorText = await res.text()
+          console.error('[Finalize] PATCH failed', { status: res.status, error: errorText })
+          throw new Error(`PATCH failed: ${res.status} - ${errorText}`)
+        }
+        
+        console.log('[Finalize] Successfully updated interview to completed')
       } catch (e) {
         // eslint-disable-next-line no-console
-        console.warn('[InterviewRunner] Finalize interview patch failed', e)
+        console.error('[InterviewRunner] Finalize interview patch failed', e)
       }
     })()
   }, [session?.status, combinedAggregate, finalReport])
@@ -682,65 +785,284 @@ export default function InterviewRunner() {
     )
   }
 
-  if (session.status === 'completed') {
+  // Animated Score Card Component
+  const ScoreCard: React.FC<{
+    title: string
+    score: number
+    maxScore: number
+    status: string
+    icon: React.ReactNode
+    delay?: number
+    color: string
+  }> = ({ title, score, maxScore, status, icon, delay = 0, color }) => {
+    const count = useMotionValue(0)
+    const rounded = useTransform(count, (latest) => Math.round(latest))
+    const progressValue = useMotionValue(0)
+
+    React.useEffect(() => {
+      const valueAnimation = animate(count, score, {
+        duration: 1.5,
+        delay,
+        ease: [0.43, 0.13, 0.23, 0.96],
+      })
+
+      const progressAnimation = animate(progressValue, (score / maxScore) * 100, {
+        duration: 1.5,
+        delay,
+        ease: [0.43, 0.13, 0.23, 0.96],
+      })
+
+      return () => {
+        valueAnimation.stop()
+        progressAnimation.stop()
+      }
+    }, [score, maxScore, delay])
+
+    const radius = 70
+    const circumference = 2 * Math.PI * radius
+    const strokeDashoffset = useTransform(
+      progressValue,
+      (v) => circumference - (v / 100) * circumference
+    )
+
     return (
-      <div className="container py-6 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-500" /> Interview Completed
-            </CardTitle>
+      <motion.div
+        initial={{ opacity: 0, y: 30, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: "spring", stiffness: 100, damping: 15, delay }}
+      >
+        <Card className="relative overflow-hidden border-2 hover:shadow-xl transition-shadow">
+          <div className="absolute top-0 right-0 w-32 h-32 opacity-10 blur-2xl rounded-full" style={{ backgroundColor: color }}></div>
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">{title}</CardTitle>
+            <div style={{ color }}>{icon}</div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {finalReport ? (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <Badge variant={finalReport.decision === 'accepted' ? 'default' : finalReport.decision === 'rejected' ? 'destructive' : 'secondary'}>
-                    Decision: {finalReport.decision}
-                  </Badge>
-                  <Badge variant="outline">Overall {finalReport.overall}/100</Badge>
-                </div>
-                {combinedAggregate && (
-                  <div className="rounded-md border p-3">
-                    <div className="text-sm font-medium mb-2">Combined Performance (content + speech + body)</div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">Overall {combinedAggregate.overall}/100</Badge>
-                      <Badge variant="secondary">Content {combinedAggregate.categories.content}/100</Badge>
-                      <Badge variant="secondary">Speech {combinedAggregate.categories.speech}/100</Badge>
-                      <Badge variant="secondary">Body {combinedAggregate.categories.bodyLanguage}/100</Badge>
-                    </div>
-                  </div>
-                )}
-                <p className="text-sm text-muted-foreground">{finalReport.summary}</p>
-                {Object.keys(finalReport.dimensions).length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {Object.entries(finalReport.dimensions).map(([k, v]) => (
-                      <div key={k} className="rounded-md border p-3">
-                        <div className="text-xs text-muted-foreground">{k}</div>
-                        <div className="text-lg font-medium">{Math.round(v as number)}/100</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {finalReport.recommendations?.length > 0 && (
-                  <div>
-                    <div className="text-sm font-medium mb-2">Recommendations</div>
-                    <ul className="text-sm text-muted-foreground space-y-1">
-                      {finalReport.recommendations.map((r, i) => (
-                        <li key={i} className="flex items-start gap-2"><span>•</span><span>{r}</span></li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                <div className="pt-2">
-                  <Button onClick={() => router.push('/admin')}>Back to Dashboard</Button>
-                </div>
+            <div className="relative flex items-center justify-center">
+              <svg width="180" height="180" viewBox="0 0 180 180" className="-rotate-90">
+                <circle cx="90" cy="90" r={radius} strokeWidth="10" fill="transparent" className="stroke-muted/20" strokeDasharray="6 10" strokeLinecap="round" />
+                <motion.circle cx="90" cy="90" r={radius} strokeWidth="10" fill="transparent" stroke={color} strokeDasharray={`${circumference} ${circumference}`} strokeLinecap="round" style={{ strokeDashoffset }} />
+              </svg>
+              <div className="absolute flex flex-col items-center justify-center">
+                <motion.span className="text-5xl font-bold tracking-tighter">{rounded}</motion.span>
+                <p className="text-lg font-medium text-muted-foreground">/ {maxScore}</p>
               </div>
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Generating final report…</div>
-            )}
+            </div>
+            <div className="text-center">
+              <span className="inline-block px-3 py-1 rounded-full text-sm font-semibold" style={{ backgroundColor: `${color}20`, color }}>{status}</span>
+            </div>
           </CardContent>
         </Card>
+      </motion.div>
+    )
+  }
+
+  if (session.status === 'completed') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-muted/20 to-muted/40 p-6">
+        <div className="max-w-7xl mx-auto space-y-8">
+          {/* Hero Header */}
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="text-center space-y-3"
+          >
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.2 }}
+              className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 border-2 border-primary/20 mb-4"
+            >
+              <CheckCircle2 className="h-10 w-10 text-primary" />
+            </motion.div>
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
+              Interview Complete!
+            </h1>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Great work, {session.studentName}! Here&apos;s your comprehensive performance analysis
+            </p>
+            {finalReport && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.3 }}
+                className="inline-flex items-center gap-3 bg-card rounded-full px-6 py-3 border-2 shadow-lg"
+              >
+                <Badge className={`text-sm px-3 py-1 ${finalReport.decision === 'accepted' ? 'bg-green-500 hover:bg-green-600' : finalReport.decision === 'rejected' ? 'bg-red-500 hover:bg-red-600' : 'bg-yellow-500 hover:bg-yellow-600'} text-white`}>
+                  {finalReport.decision.charAt(0).toUpperCase() + finalReport.decision.slice(1)}
+                </Badge>
+                <Separator orientation="vertical" className="h-6" />
+                <div className="text-xl font-bold">{finalReport.overall}<span className="text-sm text-muted-foreground">/100</span></div>
+              </motion.div>
+            )}
+          </motion.div>
+
+
+          {/* Animated Score Cards with Circular Progress */}
+          {finalReport && combinedAggregate ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <ScoreCard
+                  title="Overall Performance"
+                  score={combinedAggregate.overall}
+                  maxScore={100}
+                  status={combinedAggregate.overall >= 80 ? "Excellent" : combinedAggregate.overall >= 60 ? "Good" : "Needs Improvement"}
+                  icon={<Award className="h-5 w-5" />}
+                  delay={0.4}
+                  color="#4840A3"
+                />
+                <ScoreCard
+                  title="Content Quality"
+                  score={combinedAggregate.categories.content}
+                  maxScore={100}
+                  status={combinedAggregate.categories.content >= 80 ? "Strong" : combinedAggregate.categories.content >= 60 ? "Adequate" : "Developing"}
+                  icon={<Target className="h-5 w-5" />}
+                  delay={0.5}
+                  color="#F9CD6A"
+                />
+                <ScoreCard
+                  title="Communication"
+                  score={Math.round((combinedAggregate.categories.speech + combinedAggregate.categories.bodyLanguage) / 2)}
+                  maxScore={100}
+                  status={Math.round((combinedAggregate.categories.speech + combinedAggregate.categories.bodyLanguage) / 2) >= 80 ? "Outstanding" : "Proficient"}
+                  icon={<TrendingUp className="h-5 w-5" />}
+                  delay={0.6}
+                  color="#9CBBFC"
+                />
+              </div>
+
+              {/* AI Summary */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.7 }}
+              >
+                <Card className="border-2 shadow-lg">
+                  <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent">
+                    <CardTitle className="flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5 text-primary" />
+                      AI Analysis Summary
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <p className="text-base leading-relaxed text-foreground">{finalReport.summary}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Detailed Dimensions */}
+              {Object.keys(finalReport.dimensions).length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8 }}
+                >
+                  <Card className="border-2 shadow-lg">
+                    <CardHeader className="bg-gradient-to-r from-accent/5 to-transparent">
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-accent" />
+                        Detailed Dimension Scores
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Object.entries(finalReport.dimensions).map(([k, v], idx) => (
+                          <motion.div
+                            key={k}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.9 + idx * 0.1 }}
+                            className="bg-gradient-to-br from-muted/50 to-transparent rounded-xl p-5 border hover:border-primary/30 transition-colors"
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="text-sm font-semibold capitalize text-foreground">{k}</div>
+                              <Badge variant="outline" className="text-base font-bold">
+                                {Math.round(v as number)}
+                              </Badge>
+                            </div>
+                            <div className="h-3 bg-muted rounded-full overflow-hidden">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${Math.round(v as number)}%` }}
+                                transition={{ duration: 0.8, delay: 1.0 + idx * 0.1 }}
+                                className={`h-full rounded-full ${
+                                  Math.round(v as number) >= 75 
+                                    ? 'bg-gradient-to-r from-green-500 to-green-600' 
+                                    : Math.round(v as number) >= 50 
+                                    ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' 
+                                    : 'bg-gradient-to-r from-red-500 to-red-600'
+                                }`}
+                              />
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* Recommendations */}
+              {finalReport.recommendations?.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.9 }}
+                >
+                  <Card className="border-2 shadow-lg border-secondary/20">
+                    <CardHeader className="bg-gradient-to-r from-secondary/10 to-transparent">
+                      <CardTitle className="flex items-center gap-2">
+                        <Lightbulb className="h-5 w-5 text-accent" />
+                        AI-Powered Insights
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      <div className="space-y-3">
+                        {finalReport.recommendations.map((r, i) => (
+                          <motion.div
+                            key={i}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 1.0 + i * 0.1 }}
+                            className="flex items-start gap-3 p-4 rounded-lg bg-gradient-to-r from-secondary/5 to-transparent hover:from-secondary/10 transition-colors border border-transparent hover:border-secondary/20"
+                          >
+                            <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                            <p className="text-base leading-relaxed text-foreground">{r}</p>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* Action Buttons */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.0 }}
+                className="flex justify-center gap-4 pt-6"
+              >
+                <Button size="lg" onClick={() => router.push('/admin')} className="px-8 text-base">
+                  Back to Dashboard
+                </Button>
+              </motion.div>
+            </>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center py-20 space-y-6"
+            >
+              <Loader2 className="h-16 w-16 animate-spin text-primary" />
+              <div className="text-center space-y-2">
+                <h3 className="text-2xl font-semibold">Generating Your Final Report</h3>
+                <p className="text-muted-foreground">Our AI is analyzing your performance...</p>
+              </div>
+            </motion.div>
+          )}
+        </div>
       </div>
     )
   }
@@ -798,12 +1120,12 @@ export default function InterviewRunner() {
                   className="space-y-4"
                 >
                   <div className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider font-medium mb-2">
-                    {session.route === 'uk_student' ? 'UK Pre-CAS Interview' : 'USA F1 Interview'} • Question {session.currentQuestionIndex + 1}{session.route === 'uk_student' ? ' of 16' : ''}
+                    {interviewTitle} • Question {session.currentQuestionIndex + 1}{session.route === 'uk_student' ? ' of 16' : (session.route === 'france_ema' || session.route === 'france_icn') ? ' of 10' : ''}
                   </div>
                   <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-900 leading-snug">
                     {currentQuestion?.question}
                   </h1>
-                  {session.route === 'uk_student' && phase && (
+                  {(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase && (
                     <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-100 rounded-lg border border-gray-200">
                       <div className="text-sm text-gray-700 dark:text-gray-800 leading-relaxed flex items-start gap-2">
                         {phase === 'prep' ? (
@@ -842,7 +1164,7 @@ export default function InterviewRunner() {
             ) : (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
                 <div className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider font-medium mb-2">
-                  {session.route === 'uk_student' ? 'UK Pre-CAS Interview' : 'USA F1 Interview'}
+                  {interviewTitle}
                 </div>
                 <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-900 leading-snug">
                   Welcome, {session.studentName}
@@ -883,6 +1205,36 @@ export default function InterviewRunner() {
               <div key={i} className="w-1 h-1 bg-white rounded-full"></div>
             ))}
           </div>
+
+          {/* Audio Quality Indicator */}
+          {session.status === 'active' && latestAsrConfidence !== null && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute top-4 right-4 z-20"
+            >
+              <div className="bg-white/90 backdrop-blur-md rounded-lg shadow-lg px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">🎤</span>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-600 font-medium">Audio Quality</span>
+                    <Badge 
+                      variant={
+                        latestAsrConfidence >= 0.7 ? 'default' : 
+                        latestAsrConfidence >= 0.5 ? 'secondary' : 
+                        'destructive'
+                      }
+                      className="text-xs px-2 py-0 mt-0.5"
+                    >
+                      {latestAsrConfidence >= 0.7 ? 'Excellent' : 
+                       latestAsrConfidence >= 0.5 ? 'Good' : 
+                       'Poor'} ({Math.round(latestAsrConfidence * 100)}%)
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
           
           <div className="relative z-10 w-full max-w-3xl aspect-video">
             <InterviewStage
@@ -897,15 +1249,12 @@ export default function InterviewRunner() {
               statusBadge={session.status === 'active' ? 'Live' : 'Preparing'}
               candidateName={session.studentName}
               questionIndex={session.currentQuestionIndex}
-              questionTotal={session.route === 'uk_student' ? 16 : session.questions.length}
+              questionTotal={session.route === 'uk_student' ? 16 : (session.route === 'france_ema' || session.route === 'france_icn') ? 10 : session.questions.length}
               phase={phase ?? undefined}
               secondsRemaining={session.route === 'usa_f1' || phase ? secondsRemaining : undefined}
-              onStartAnswer={session.route === 'uk_student' ? startAnswerNow : undefined}
-              onStopAndNext={session.route === 'uk_student' ? finalizeAnswer : undefined}
-              onNext={session.route === 'usa_f1' && session.status === 'active' ? (() => {
-                const text = currentTranscript.trim()
-                processAnswer(text.length >= 1 ? text : '[No response]')
-              }) : undefined}
+              onStartAnswer={(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') ? startAnswerNow : undefined}
+              onStopAndNext={(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') ? finalizeAnswer : undefined}
+              onNext={session.route === 'usa_f1' && session.status === 'active' ? finalizeAnswer : undefined}
               showCaptions={false}
               showQuestionOverlay={false}
               showBodyBadge={false}
@@ -935,27 +1284,35 @@ export default function InterviewRunner() {
                 <Play className="h-5 w-5 mr-2" /> Start Interview
               </Button>
             )}
-            {session.route === 'uk_student' && phase === 'prep' && (
+            {(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'prep' && (
               <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={startAnswerNow}>
                 <Play className="h-5 w-5 mr-2" /> Start Answer
               </Button>
             )}
-            {session.route === 'uk_student' && phase === 'answer' && (
-              <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={finalizeAnswer}>
-                <Square className="h-4 w-4 mr-2" /> Stop & Next <ChevronRight className="h-4 w-4 ml-1" />
+            {(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'answer' && (
+              <Button 
+                size="lg" 
+                className="px-8 h-12 text-base font-semibold" 
+                onClick={finalizeAnswer}
+                disabled={isProcessingTranscript}
+              >
+                {isProcessingTranscript ? (
+                  <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing transcription...</>
+                ) : (
+                  <><Square className="h-4 w-4 mr-2" /> Stop & Next <ChevronRight className="h-4 w-4 ml-1" /></>
+                )}
               </Button>
             )}
             {session.route === 'usa_f1' && session.status === 'active' && (
               <Button 
                 size="lg" 
                 className="px-8 h-12 text-base font-semibold" 
-                onClick={() => {
-                  const text = currentTranscript.trim()
-                  processAnswer(text.length >= 1 ? text : '[No response]')
-                }} 
-                disabled={processingRef.current}
+                onClick={finalizeAnswer}
+                disabled={processingRef.current || isProcessingTranscript}
               >
-                {processingRef.current ? (
+                {isProcessingTranscript ? (
+                  <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing transcription...</>
+                ) : processingRef.current ? (
                   <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing...</>
                 ) : (
                   <>Next Question <ChevronRight className="h-4 w-4 ml-1" /></>
@@ -967,12 +1324,22 @@ export default function InterviewRunner() {
       </div>
 
       <div className="hidden">
+        {/* CRITICAL FIX: Separate connection from recording to eliminate STT startup delay
+            UK/France Routes:
+            - connected={true} during BOTH prep AND answer phases → WebSocket ready
+            - running={true} ONLY during answer phase → Audio capture starts immediately
+            
+            USA F1 Route:
+            - Both connected AND running when status is active
+            
+            This ensures UK/France capture the first word when user starts speaking
+        */}
         <AssemblyAITranscription
           onTranscriptComplete={handleTranscriptComplete}
           onTranscriptUpdate={(t) => {
             if (session.status !== 'active') return
             
-            // PERFORMANCE FIX: Debounce transcript updates to 100ms to reduce re-renders
+            // PERFORMANCE FIX: Debounce transcript updates to 300ms to reduce re-renders (70% reduction)
             if (transcriptDebounceRef.current) {
               window.clearTimeout(transcriptDebounceRef.current)
             }
@@ -985,11 +1352,22 @@ export default function InterviewRunner() {
               } else {
                 setCurrentTranscript(t)
               }
-            }, 100)
+            }, 300)
           }}
           showControls={false}
           showTranscripts={false}
-          running={session.status === 'active' && (session.route === 'usa_f1' || (session.route === 'uk_student' && phase === 'answer'))}
+          connected={
+            session.status === 'active' && 
+            (session.route === 'usa_f1' || 
+             session.route === 'uk_student' || 
+             session.route === 'france_ema' || 
+             session.route === 'france_icn')
+          }
+          running={
+            session.status === 'active' && 
+            (session.route === 'usa_f1' || 
+             ((session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'answer'))
+          }
           resetKey={resetKey}
         />
       </div>

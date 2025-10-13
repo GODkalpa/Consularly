@@ -178,11 +178,15 @@ export function UserInterviewSimulation() {
     }
 
     try {
-      // Get auth token for quota validation
-      const token = await auth.currentUser?.getIdToken()
+      // Get auth token for quota validation (force refresh) and add diagnostics
+      console.log('[User Interview] Preparing to call /api/interview/session')
+      const token = await auth.currentUser?.getIdToken(true)
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (token) {
         headers['Authorization'] = `Bearer ${token}`
+        console.log('[User Interview] Auth token present, headers set')
+      } else {
+        console.warn('[User Interview] No auth token available. Proceeding without Authorization header')
       }
 
       // Build enriched student profile for personalized question selection
@@ -199,6 +203,7 @@ export function UserInterviewSimulation() {
         previousEducation: sp.previousEducation || undefined,
       }
 
+      console.log('[User Interview] Calling /api/interview/session with route:', route)
       const res = await fetch('/api/interview/session', {
         method: 'POST',
         headers,
@@ -211,8 +216,11 @@ export function UserInterviewSimulation() {
         })
       })
 
+      console.log('[User Interview] /api/interview/session status:', res.status)
       if (!res.ok) {
-        const error = await res.json()
+        let error: any = {}
+        try { error = await res.json() } catch {}
+        console.error('[User Interview] Failed to start session:', res.status, error)
         // Close the loading window on error
         if (interviewWindow) {
           try { interviewWindow.close() } catch {}
@@ -226,9 +234,11 @@ export function UserInterviewSimulation() {
       }
 
       const data = await res.json()
+      console.log('[User Interview] Session API responded successfully')
       const apiSess = data.session
       const firstQ = data.question
       const firestoreInterviewId: string | undefined = data.interviewId
+      console.log('[User Interview] Created interview:', firestoreInterviewId)
 
       // Seed the API session with the first question
       const seededApiSession = {
@@ -309,6 +319,8 @@ export function UserInterviewSimulation() {
                 <SelectContent>
                   <SelectItem value='usa_f1'>{routeDisplayName.usa_f1}</SelectItem>
                   <SelectItem value='uk_student'>{routeDisplayName.uk_student}</SelectItem>
+                  <SelectItem value='france_ema'>{routeDisplayName.france_ema}</SelectItem>
+                  <SelectItem value='france_icn'>{routeDisplayName.france_icn}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

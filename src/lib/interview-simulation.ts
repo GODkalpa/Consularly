@@ -3,12 +3,14 @@ import type { InterviewRoute } from './interview-routes'
 import { UK_QUESTION_POOL, ukFallbackQuestionByIndex } from './uk-questions-data'
 import { F1_VISA_QUESTIONS, mapQuestionTypeToF1Category } from './f1-questions-data'
 import { F1SessionMemory, updateMemory } from './f1-mvp-session-memory'
+import { FranceUniversity, getFirstQuestionForUniversity, getRemainingQuestionsForUniversity, franceFallbackQuestionByIndex } from './france-questions-data'
 
 export interface InterviewSession {
   id: string;
   userId: string;
   visaType: 'F1' | 'B1/B2' | 'H1B' | 'other';
-  route?: InterviewRoute; // usa_f1 | uk_student
+  route?: InterviewRoute; // usa_f1 | uk_student | france_ema | france_icn
+  university?: FranceUniversity; // For France routes only
   studentProfile: {
     name: string;
     country: string;
@@ -66,11 +68,18 @@ export class InterviewSimulationService {
     // Enable session memory tracking for usa_f1 (for LLM self-consistency)
     const useMVPFlow = route === 'usa_f1';
     
+    // Extract university for France routes
+    const university: FranceUniversity | undefined = 
+      route === 'france_ema' ? 'ema' : 
+      route === 'france_icn' ? 'icn' : 
+      undefined;
+    
     const session: InterviewSession = {
       id: sessionId,
       userId,
       visaType,
       route,
+      university,
       studentProfile,
       conversationHistory: [],
       currentQuestionNumber: 1,
@@ -217,10 +226,10 @@ export class InterviewSimulationService {
       const candNorm = normalize(next.question)
       const candToks = tokens(next.question)
 
-      // Enforce UK strict bank + no duplicates
+      // Enforce UK strict bank + no duplicates (lowered threshold for better semantic dedup)
       if (session.route === 'uk_student') {
         const bank = new Set(UK_QUESTION_POOL.map(q => normalize(q.question)))
-        const isDuplicate = askedNorm.some(a => a.norm === candNorm || jaccard(a.toks, candToks) >= 0.82)
+        const isDuplicate = askedNorm.some(a => a.norm === candNorm || jaccard(a.toks, candToks) >= 0.70)
         if (!bank.has(candNorm) || isDuplicate) {
           const askedSet = new Set(askedNorm.map(a => a.norm))
           return this.getUniqueFallbackQuestion(session.currentQuestionNumber, askedSet, session.route)
@@ -228,8 +237,52 @@ export class InterviewSimulationService {
         return next
       }
 
-      // USA F1: apply fuzzy de-duplication and category gating by question number
-      const isNearDuplicate = askedNorm.some(a => a.norm === candNorm || jaccard(a.toks, candToks) >= 0.82)
+      // France: Q1 is always fixed, Q2-10 use hybrid LLM selection from remaining questions
+      if ((session.route === 'france_ema' || session.route === 'france_icn') && session.university) {
+        // Question 1: Always use the fixed first question
+        if (session.currentQuestionNumber === 1) {
+          const firstQ = getFirstQuestionForUniversity(session.university)
+          return {
+            question: firstQ.question,
+            questionType: firstQ.questionType,
+            difficulty: firstQ.difficulty || 'medium',
+            expectedAnswerLength: firstQ.expectedAnswerLength || 'medium',
+          }
+        }
+
+        // Questions 2-10: Use LLM selection from remaining questions with STRICT de-duplication (lowered threshold)
+        const remainingPool = getRemainingQuestionsForUniversity(session.university)
+        const bank = new Set(remainingPool.map(q => normalize(q.question)))
+        const isDuplicate = askedNorm.some(a => a.norm === candNorm || jaccard(a.toks, candToks) >= 0.70)
+        
+        // Log if duplicate detected for debugging
+        if (isDuplicate) {
+          console.warn(`[France Interview] Duplicate question detected: "${next.question}". Using fallback.`)
+        }
+        if (!bank.has(candNorm)) {
+          console.warn(`[France Interview] Question not in bank: "${next.question}". Using fallback.`)
+        }
+        
+        if (!bank.has(candNorm) || isDuplicate) {
+          const askedSet = new Set(askedNorm.map(a => a.norm))
+          const fallback = this.getUniqueFallbackQuestion(session.currentQuestionNumber, askedSet, session.route, session.university)
+          console.log(`[France Interview] Using fallback question: "${fallback.question}"`)
+          return fallback
+        }
+        
+        // Additional safety check: ensure this exact question hasn't been asked
+        const exactMatch = session.conversationHistory.some(h => h.question === next.question)
+        if (exactMatch) {
+          console.warn(`[France Interview] EXACT match detected for: "${next.question}". Using fallback.`)
+          const askedSet = new Set(askedNorm.map(a => a.norm))
+          return this.getUniqueFallbackQuestion(session.currentQuestionNumber, askedSet, session.route, session.university)
+        }
+        
+        return next
+      }
+
+      // USA F1: apply fuzzy de-duplication and category gating by question number (lowered threshold for better semantic dedup)
+      const isNearDuplicate = askedNorm.some(a => a.norm === candNorm || jaccard(a.toks, candToks) >= 0.70)
 
       // Allowed flow by question number (Nepal F1 realistic pattern)
       const allowedTypesByIndex = (n: number): Array<'background'|'academic'|'financial'|'intent'|'follow-up'> => {
@@ -261,20 +314,27 @@ export class InterviewSimulationService {
           cat.questions.forEach(q => candidates.push(q))
         }
       })
-      // Filter out duplicates
+      // Filter out duplicates (lowered threshold for better semantic dedup)
       const remaining = candidates.filter(q => {
         const n = normalize(q)
         if (askedSet.has(n)) return false
         const t = tokens(q)
-        return !askedNorm.some(a => jaccard(a.toks, t) >= 0.82)
+        return !askedNorm.some(a => jaccard(a.toks, t) >= 0.70)
       })
       if (remaining.length > 0) {
-        // Choose by simple rotation based on question number to keep semi-random but patterned
-        const idx = (session.currentQuestionNumber - 1) % remaining.length
+        // Choose by session-seeded index to vary across sessions but stay stable within a session
+        const hashString = (s: string): number => {
+          let h = 0
+          for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+          return Math.abs(h)
+        }
+        const seed = `${session.id}:${session.currentQuestionNumber}`
+        const idx = hashString(seed) % remaining.length
         const q = remaining[idx]
         // Map back to type: prefer the first allowed non-follow-up type for UI badge
         const preferred = allowed.find(t => t !== 'follow-up') || 'background'
         const qType: QuestionGenerationResponse['questionType'] = preferred as any
+        console.log(`[InterviewSim] path=fallback route=${session.route || 'usa_f1'} step=${session.currentQuestionNumber} sel=session_seed idx=${idx}`)
         return {
           question: q,
           questionType: qType,
@@ -284,28 +344,30 @@ export class InterviewSimulationService {
       }
 
       // As last resort, fall back to generic rotation while avoiding exact repeats
-      return this.getFallbackQuestion(session.currentQuestionNumber, session.route)
+      const fb = this.getFallbackQuestion(session.currentQuestionNumber, session.route, session.university)
+      console.log(`[InterviewSim] path=fallback-generic route=${session.route || 'usa_f1'} step=${session.currentQuestionNumber} text=${fb.question.slice(0,60)}`)
+      return fb
     } catch (error) {
       console.error('Error generating question:', error);
-      // If API fails, pick a unique question from the UK bank when on UK route
-      if (session.route === 'uk_student') {
+      // If API fails, pick a unique question from the UK/France bank when on those routes
+      if (session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') {
         const normalize = (s: string) => s
           .toLowerCase()
           .replace(/[^a-z0-9\s]/g, ' ')
           .replace(/\s+/g, ' ')
           .trim();
         const asked = new Set(session.conversationHistory.map(h => normalize(h.question)));
-        return this.getUniqueFallbackQuestion(session.currentQuestionNumber, asked, session.route);
+        return this.getUniqueFallbackQuestion(session.currentQuestionNumber, asked, session.route, session.university);
       }
       // Otherwise, use generic fallback rotation
-      return this.getFallbackQuestion(session.currentQuestionNumber, session.route);
+      return this.getFallbackQuestion(session.currentQuestionNumber, session.route, session.university);
     }
   }
 
   /**
    * Get a fallback question if the API fails
    */
-  private getFallbackQuestion(questionNumber: number, route?: InterviewRoute): QuestionGenerationResponse {
+  private getFallbackQuestion(questionNumber: number, route?: InterviewRoute, university?: FranceUniversity): QuestionGenerationResponse {
     if (route === 'uk_student') {
       const uk = ukFallbackQuestionByIndex(questionNumber)
       return {
@@ -313,6 +375,15 @@ export class InterviewSimulationService {
         questionType: uk.questionType,
         difficulty: uk.difficulty || 'medium',
         expectedAnswerLength: uk.expectedAnswerLength || 'medium',
+      }
+    }
+    if ((route === 'france_ema' || route === 'france_icn') && university) {
+      const fr = franceFallbackQuestionByIndex(questionNumber, university)
+      return {
+        question: fr.question,
+        questionType: fr.questionType,
+        difficulty: fr.difficulty || 'medium',
+        expectedAnswerLength: fr.expectedAnswerLength || 'medium',
       }
     }
     const fallbackQuestions = [
@@ -376,21 +447,63 @@ export class InterviewSimulationService {
   private getUniqueFallbackQuestion(
     questionNumber: number,
     askedNormalized: Set<string>,
-    route?: InterviewRoute
+    route?: InterviewRoute,
+    university?: FranceUniversity
   ): QuestionGenerationResponse {
     const normalized = (s: string) => s
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    const pool = route === 'uk_student' ?
-      UK_QUESTION_POOL.map(q => ({
+    
+    // UK question pool
+    if (route === 'uk_student') {
+      const pool = UK_QUESTION_POOL.map(q => ({
         question: q.question,
         questionType: q.questionType as 'academic' | 'financial' | 'intent' | 'background' | 'follow-up',
         difficulty: (q.difficulty || 'medium') as 'easy' | 'medium' | 'hard',
         expectedAnswerLength: (q.expectedAnswerLength || 'medium') as 'short' | 'medium' | 'long',
-      }))
-      : [
+      }));
+      
+      const available = pool.filter(q => !askedNormalized.has(normalized(q.question)));
+      if (available.length > 0) {
+        const idx = (questionNumber - 1) % available.length;
+        return available[idx];
+      }
+      return pool[0];
+    }
+    
+    // France question pool - STRICT no-duplicate guarantee
+    if ((route === 'france_ema' || route === 'france_icn') && university) {
+      const francePool = getRemainingQuestionsForUniversity(university);
+      const pool = francePool.map(q => ({
+        question: q.question,
+        questionType: q.questionType as 'academic' | 'financial' | 'intent' | 'background' | 'follow-up',
+        difficulty: (q.difficulty || 'medium') as 'easy' | 'medium' | 'hard',
+        expectedAnswerLength: (q.expectedAnswerLength || 'medium') as 'short' | 'medium' | 'long',
+      }));
+      
+      // Filter out already asked questions with strict matching
+      const available = pool.filter(q => {
+        const norm = normalized(q.question);
+        return !askedNormalized.has(norm);
+      });
+      
+      if (available.length > 0) {
+        const idx = (questionNumber - 1) % available.length;
+        console.log(`[France Fallback] ${available.length} questions available, selecting index ${idx}`);
+        return available[idx];
+      }
+      
+      // Should never reach here if we have 15/10 questions and only ask 10
+      console.error(`[France Fallback] No available questions! This should not happen.`);
+      
+      // Last resort: return a question from pool even if duplicate (better than crash)
+      return pool[questionNumber % pool.length];
+    }
+    
+    // USA F1 and generic fallback
+    const pool = [
       {
         question: "Why do you want to study in the US?",
         questionType: 'background' as const,
@@ -453,17 +566,9 @@ export class InterviewSimulationService {
       }
     ];
 
-    // Choose a random not-yet-asked question for UK; otherwise fallback to default rotation
-    if (route === 'uk_student') {
-      const remaining = pool.filter(q => !askedNormalized.has(normalized(q.question)));
-      if (remaining.length > 0) {
-        const idx = Math.floor(Math.random() * remaining.length);
-        return remaining[idx];
-      }
-    } else {
-      for (const q of pool) {
-        if (!askedNormalized.has(normalized(q.question))) return q;
-      }
+    // USA F1 fallback: use default rotation, return first not-yet-asked question
+    for (const q of pool) {
+      if (!askedNormalized.has(normalized(q.question))) return q;
     }
     return this.getFallbackQuestion(questionNumber, route);
   }

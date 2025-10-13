@@ -41,6 +41,8 @@ interface StudentContext {
   askedQuestionIds: string[];
   detectedRedFlags: string[];
   categoryCoverage: Record<string, number>;
+  askedClusters?: string[]; // Track semantic clusters already covered
+  contextFlags?: Record<string, boolean>; // Context availability for questions
 }
 
 interface QuestionResult {
@@ -50,8 +52,93 @@ interface QuestionResult {
   reasoning?: string;
 }
 
+/**
+ * Semantic clusters for detecting questions with same essence
+ */
+const SEMANTIC_CLUSTERS: Record<string, string[]> = {
+  return_intent: ['return', 'come back', 'go back', 'plans after', 'after graduation', 'after studies', 'after completing'],
+  finance_sponsor: ['sponsor', 'pay', 'fund', 'finance', 'cost', 'tuition', 'afford', 'expenses'],
+  failure_grades: ['fail', 'backlog', 'poor grades', 'low gpa', 'reject', 'arrear', 'bad marks'],
+  us_relatives: ['relatives', 'family', 'friends in us', 'uncle', 'aunt', 'cousin'],
+  university_choice: ['why this university', 'why choose', 'selected this', 'picked this'],
+  study_reason: ['why study', 'why us', 'why america', 'reason for studying'],
+  career_plans: ['career', 'job plans', 'work plans', 'professional goals'],
+};
+
+/**
+ * Get semantic cluster for a question
+ */
+function getSemanticCluster(question: string): string | null {
+  const q = question.toLowerCase();
+  for (const [cluster, keywords] of Object.entries(SEMANTIC_CLUSTERS)) {
+    if (keywords.some(kw => q.includes(kw))) {
+      return cluster;
+    }
+  }
+  return null;
+}
+
+/**
+ * Build context flags from profile and conversation history
+ */
+function buildContextFlags(
+  profile: StudentContext['profile'],
+  history: Array<{ question: string; answer: string }>
+): Record<string, boolean> {
+  const allAnswers = history.map(h => h.answer).join(' ').toLowerCase();
+  const profileStr = JSON.stringify(profile).toLowerCase();
+  
+  return {
+    has_failures: /fail|backlog|arrear|poor.*grade|low.*gpa/i.test(allAnswers + profileStr),
+    has_us_relatives: /relative|uncle|aunt|cousin|friend.*(in|living|stay).*(us|usa|america|united states)/i.test(allAnswers),
+    has_scholarship: /scholarship|grant|award|stipend/i.test(allAnswers + profileStr),
+    low_gpa: /gpa.*(2\.|1\.)|low.*gpa|poor.*grade/i.test(allAnswers + profileStr),
+    has_work_experience: /work|job|employee|experience.*(year|month)/i.test(allAnswers + profileStr),
+    mentioned_return_plans: /return|come back|go back|plan.*after/i.test(allAnswers),
+  };
+}
+
 export class SmartQuestionSelector {
   private questionBank: QuestionBank;
+  
+  private franceFollowUpPatterns = [
+    {
+      pattern: /course|programme|program/i,
+      trigger: (answer: string) => !(/duration|length|years?|months?|\d+/i.test(answer)),
+      followUp: "Can you specify the exact duration of your course?"
+    },
+    {
+      pattern: /tuition|fees?|cost/i,
+      trigger: (answer: string) => !(/€|euro|amount|\d+/i.test(answer)),
+      followUp: "Can you provide the exact tuition fee amount for your programme?"
+    },
+    {
+      pattern: /career|objectives?|goals?/i,
+      trigger: (answer: string) => answer.split(' ').length < 20 && !/specific|role|position|industry/i.test(answer),
+      followUp: "Can you be more specific about your career objectives and the role you're targeting?"
+    },
+    {
+      pattern: /chose|choose|selected/i,
+      trigger: (answer: string) => /good|best|top|ranked|reputation/i.test(answer) && answer.length < 100,
+      followUp: "Beyond the reputation, what specific features of the programme attracted you?"
+    },
+    {
+      pattern: /sponsor|financing|paying/i,
+      trigger: (answer: string) => !(/parent|family|loan|scholarship|savings/i.test(answer)),
+      followUp: "Who specifically will be sponsoring your studies? What is their relationship to you?"
+    },
+    {
+      pattern: /work|job|employment/i,
+      trigger: (answer: string) => /yes|maybe|plan/i.test(answer) && !(/hours?|part[- ]?time|rules/i.test(answer)),
+      followUp: "Are you aware of the work regulations for international students in France?"
+    },
+    {
+      pattern: /background|experience|education/i,
+      trigger: (answer: string) => answer.split(' ').length < 25 && !(/degree|university|years?|graduated/i.test(answer)),
+      followUp: "Can you provide more details about your academic qualifications and when you completed them?"
+    }
+  ];
+  
   private ukFollowUpPatterns = [
     {
       pattern: /business|management|marketing|finance modules?/i,
@@ -248,7 +335,14 @@ export class SmartQuestionSelector {
    * Detect if a follow-up question is needed based on route-specific patterns
    */
   private detectFollowUpNeed(route: InterviewRoute, answer: string): string | null {
-    const patterns = route === 'uk_student' ? this.ukFollowUpPatterns : this.usaFollowUpPatterns;
+    let patterns;
+    if (route === 'uk_student') {
+      patterns = this.ukFollowUpPatterns;
+    } else if (route === 'france_ema' || route === 'france_icn') {
+      patterns = this.franceFollowUpPatterns;
+    } else {
+      patterns = this.usaFollowUpPatterns;
+    }
 
     for (const { pattern, trigger, followUp } of patterns) {
       if (pattern.test(answer) && trigger(answer)) {
@@ -263,12 +357,49 @@ export class SmartQuestionSelector {
    * Select question from bank using LLM intelligence
    */
   private async selectFromBank(context: StudentContext): Promise<QuestionResult> {
+    // Build context flags if not provided
+    if (!context.contextFlags) {
+      context.contextFlags = buildContextFlags(context.profile, context.history);
+    }
+    
+    // Build asked clusters if not provided
+    if (!context.askedClusters) {
+      context.askedClusters = context.history
+        .map(h => getSemanticCluster(h.question))
+        .filter((c): c is string => c !== null);
+    }
+    
     // Filter questions by route
-    const availableQuestions = this.questionBank.questions.filter(
+    let availableQuestions = this.questionBank.questions.filter(
       (q) => q.route === context.route || q.route === 'both'
     ).filter(
       (q) => !context.askedQuestionIds.includes(q.id)
     );
+    
+    // Filter by semantic clusters (don't ask questions from already-covered clusters)
+    availableQuestions = availableQuestions.filter((q) => {
+      const cluster = getSemanticCluster(q.question);
+      if (cluster && context.askedClusters!.includes(cluster)) {
+        console.log(`[Question Selector] Skipping ${q.id} - cluster '${cluster}' already covered`);
+        return false;
+      }
+      return true;
+    });
+    
+    // Filter by context requirements (if question has requiresContext, check flags)
+    availableQuestions = availableQuestions.filter((q) => {
+      const qAny = q as any;
+      if (qAny.requiresContext && Array.isArray(qAny.requiresContext)) {
+        const hasRequiredContext = qAny.requiresContext.some((ctx: string) => 
+          context.contextFlags![ctx] === true
+        );
+        if (!hasRequiredContext) {
+          console.log(`[Question Selector] Skipping ${q.id} - missing required context: ${qAny.requiresContext.join(', ')}`);
+          return false;
+        }
+      }
+      return true;
+    });
 
     if (availableQuestions.length === 0) {
       return {
@@ -334,6 +465,20 @@ export class SmartQuestionSelector {
       preview: q.question.substring(0, 80),
     }));
 
+    // Build asked clusters summary
+    const askedClusters = context.askedClusters || [];
+    const clustersSummary = askedClusters.length > 0 
+      ? `Already covered semantic topics: ${askedClusters.join(', ')}` 
+      : 'No semantic topics covered yet';
+    
+    // Build context flags summary
+    const contextSummary = context.contextFlags 
+      ? Object.entries(context.contextFlags)
+          .filter(([_, v]) => v)
+          .map(([k]) => k)
+          .join(', ') || 'none'
+      : 'none';
+
     const systemPrompt = `You are an expert visa interview question selector. Your task is to select the most relevant next question from a question bank.
 
 ${routeGuidance}
@@ -341,14 +486,27 @@ ${routeGuidance}
 Current interview state:
 - Questions asked: ${context.history.length}
 - Category coverage: ${coverageStatus || 'none yet'}
+- ${clustersSummary}
 - Detected red flags: ${context.detectedRedFlags.join(', ') || 'none'}
 - Student profile: ${context.profile.course || 'unknown'} at ${context.profile.university || 'unknown'}
+- Context available: ${contextSummary}
+
+CRITICAL ANTI-REPETITION RULES:
+1. NEVER select a question that is semantically similar to already-asked questions
+   - "return/come back/plans after" = SAME topic
+   - "sponsor/pay/fund" = SAME topic
+   - Check the "Already covered semantic topics" list above
+2. NEVER ask about failures/backlogs/poor grades unless context shows: has_failures or low_gpa
+3. NEVER ask assumption-based questions without evidence in profile or answers
+4. If uncertain about context appropriateness, choose a general question instead
 
 Selection criteria (in priority order):
-1. Cover under-represented categories first (financial, academic, intent, personal, post_study)
-2. Match student profile relevance
-3. Progressive difficulty (start easy, increase gradually)
-4. Follow up on red flags if detected
+1. Avoid semantic clusters already covered
+2. Only select questions appropriate for available context
+3. Cover under-represented categories (financial, academic, intent, personal, post_study)
+4. Match student profile relevance
+5. Progressive difficulty (start easy, increase gradually)
+6. Follow up on red flags if detected
 
 Return JSON: {"questionId": "selected_id", "reasoning": "brief explanation"}`;
 
@@ -362,7 +520,7 @@ Select the best next question ID.`;
 
     try {
       // Enforce a short timeout for snappy selection; fallback if slow
-      const timeoutMs = 1200;
+      const timeoutMs = 3000;
       const response = await Promise.race([
         callLLMProvider(config, systemPrompt, userPrompt, 0.3, 500),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('LLM selection timeout')), timeoutMs)),
@@ -374,6 +532,7 @@ Select the best next question ID.`;
         selectedQuestion = availableQuestions.find((q) => q.id === result.questionId);
       }
       if (selectedQuestion) {
+        console.log(`[Question Selector] path=llm route=${context.route} step=${context.history.length + 1} id=${selectedQuestion.id}`);
         return {
           question: selectedQuestion.question,
           type: 'bank',
@@ -392,13 +551,33 @@ Select the best next question ID.`;
    * Rule-based fallback selection
    */
   private selectRuleBased(context: StudentContext, availableQuestions: Question[]): QuestionResult {
+    // Simple deterministic string hash for seeded selection
+    const hashString = (s: string): number => {
+      let h = 0;
+      for (let i = 0; i < s.length; i++) {
+        h = (h * 31 + s.charCodeAt(i)) | 0;
+      }
+      return Math.abs(h);
+    };
+
     // USA: strictly follow Nepal F1 stage flow
     if (context.route === 'usa_f1') {
       const step = context.history.length + 1;
       const stage = this.getUsaStage(step);
       const pool = this.filterUsaQuestionsByStage(availableQuestions, stage);
       const stagePool = pool.length ? pool : availableQuestions;
-      const selected = stagePool.find((q) => q.difficulty !== 'hard') || stagePool[0] || availableQuestions[0];
+      // Seed selection using earliest available stable signal; vary across sessions when empty
+      const seedBase = context.history[0]?.question || `${Date.now()}`;
+      const seededIndex = stagePool.length > 0 ? hashString(seedBase) % stagePool.length : 0;
+      // Prefer non-hard, but start from seeded index to introduce variety
+      let selected = stagePool[seededIndex] || stagePool[0] || availableQuestions[0];
+      if (selected?.difficulty === 'hard') {
+        const nonHard = stagePool.find((q) => q.difficulty !== 'hard');
+        if (nonHard) selected = nonHard;
+      }
+      if (selected) {
+        console.log(`[Question Selector] path=rule route=${context.route} step=${step} id=${selected.id} reason=stage:${this.getUsaStageLabel(stage)}`);
+      }
       return {
         question: selected.question,
         type: 'bank',
@@ -407,7 +586,7 @@ Select the best next question ID.`;
       };
     }
 
-    // UK and others: previous least-covered-category heuristic
+    // UK, France, and others: least-covered-category heuristic
     const categories: Array<'financial' | 'academic' | 'intent' | 'personal' | 'post_study'> = 
       ['financial', 'academic', 'intent', 'personal', 'post_study'];
     const leastCoveredCategory = categories.reduce((min, cat) => {
@@ -417,11 +596,18 @@ Select the best next question ID.`;
     });
     const categoryQuestions = availableQuestions.filter((q) => q.category === leastCoveredCategory);
     const selected = categoryQuestions.find((q) => q.difficulty !== 'hard') || categoryQuestions[0] || availableQuestions[0];
+    
+    const routeLabel = context.route === 'uk_student' ? 'UK' : 
+                       context.route === 'france_ema' ? 'France EMA' :
+                       context.route === 'france_icn' ? 'France ICN' : 'general';
+    if (selected) {
+      console.log(`[Question Selector] path=rule route=${context.route} step=${context.history.length + 1} id=${selected.id} reason=least_covered:${leastCoveredCategory}`);
+    }
     return {
       question: selected.question,
       type: 'bank',
       questionId: selected.id,
-      reasoning: `Rule-based: selected from least covered category (${leastCoveredCategory})`,
+      reasoning: `Rule-based (${routeLabel}): selected from least covered category (${leastCoveredCategory})`,
     };
   }
 

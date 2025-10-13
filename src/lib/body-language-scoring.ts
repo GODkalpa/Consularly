@@ -39,6 +39,262 @@ function getGroupExtremeX(face: any, nameIncludes: string, which: 'min' | 'max')
   return { x, y }
 }
 
+// Enhanced face point extraction with comprehensive fallback strategies
+function extractFacePoint(face: any, strategy: string): Vec2 | null {
+  if (!face) return null
+  
+  // Strategy-based extraction for reliable landmark detection
+  switch (strategy) {
+    case 'leftEye': {
+      const kps = face?.keypoints as Array<any> | undefined
+      
+      // Approach 1: Try named keypoints (TFJS with names)
+      if (kps?.length) {
+        const leftEyePoints = kps.filter((p: any) => 
+          typeof p.name === 'string' && 
+          (p.name.includes('leftEye') || p.name.includes('left_eye'))
+        )
+        if (leftEyePoints.length > 0) {
+          const cx = leftEyePoints.reduce((s, p) => s + p.x, 0) / leftEyePoints.length
+          const cy = leftEyePoints.reduce((s, p) => s + p.y, 0) / leftEyePoints.length
+          return { x: cx, y: cy }
+        }
+      }
+      
+      // Approach 2: Use scaledMesh (MediaPipe runtime with mesh array)
+      if (Array.isArray(face?.scaledMesh) && face.scaledMesh.length > 159) {
+        const p = face.scaledMesh[159]
+        if (p && p.length >= 2) return { x: p[0], y: p[1] }
+      }
+      
+      // Approach 3: Direct keypoints array access (TFJS without names)
+      // Left eye center is at indices 159, 145, 386 in FaceMesh
+      // Use average of multiple eye landmarks for robustness
+      if (Array.isArray(kps) && kps.length >= 468) {
+        const leftEyeIndices = [159, 145, 133] // Left eye center and corners
+        const validPoints = leftEyeIndices
+          .filter(idx => kps[idx] && typeof kps[idx].x === 'number' && typeof kps[idx].y === 'number')
+          .map(idx => kps[idx])
+        
+        if (validPoints.length > 0) {
+          const cx = validPoints.reduce((s, p) => s + p.x, 0) / validPoints.length
+          const cy = validPoints.reduce((s, p) => s + p.y, 0) / validPoints.length
+          return { x: cx, y: cy }
+        }
+      }
+      
+      return null
+    }
+    
+    case 'rightEye': {
+      const kps = face?.keypoints as Array<any> | undefined
+      
+      // Approach 1: Try named keypoints
+      if (kps?.length) {
+        const rightEyePoints = kps.filter((p: any) => 
+          typeof p.name === 'string' && 
+          (p.name.includes('rightEye') || p.name.includes('right_eye'))
+        )
+        if (rightEyePoints.length > 0) {
+          const cx = rightEyePoints.reduce((s, p) => s + p.x, 0) / rightEyePoints.length
+          const cy = rightEyePoints.reduce((s, p) => s + p.y, 0) / rightEyePoints.length
+          return { x: cx, y: cy }
+        }
+      }
+      
+      // Approach 2: Use scaledMesh
+      if (Array.isArray(face?.scaledMesh) && face.scaledMesh.length > 386) {
+        const p = face.scaledMesh[386]
+        if (p && p.length >= 2) return { x: p[0], y: p[1] }
+      }
+      
+      // Approach 3: Direct keypoints array access
+      if (Array.isArray(kps) && kps.length >= 468) {
+        const rightEyeIndices = [386, 374, 362] // Right eye center and corners
+        const validPoints = rightEyeIndices
+          .filter(idx => kps[idx] && typeof kps[idx].x === 'number' && typeof kps[idx].y === 'number')
+          .map(idx => kps[idx])
+        
+        if (validPoints.length > 0) {
+          const cx = validPoints.reduce((s, p) => s + p.x, 0) / validPoints.length
+          const cy = validPoints.reduce((s, p) => s + p.y, 0) / validPoints.length
+          return { x: cx, y: cy }
+        }
+      }
+      
+      return null
+    }
+    
+    case 'noseTip': {
+      const kps = face?.keypoints as Array<any> | undefined
+      
+      // Approach 1: Try named keypoints
+      if (kps?.length) {
+        const nosePoints = kps.filter((p: any) => 
+          typeof p.name === 'string' && 
+          (p.name.includes('nose') || p.name.includes('Nose'))
+        )
+        if (nosePoints.length > 0) {
+          const p = nosePoints[Math.floor(nosePoints.length / 2)]
+          return { x: p.x, y: p.y }
+        }
+      }
+      
+      // Approach 2: Use scaledMesh
+      if (Array.isArray(face?.scaledMesh) && face.scaledMesh.length > 1) {
+        const p = face.scaledMesh[1]
+        if (p && p.length >= 2) return { x: p[0], y: p[1] }
+      }
+      
+      // Approach 3: Direct keypoints array access
+      // Nose tip is at index 1 (or use 4 for nose bottom)
+      if (Array.isArray(kps) && kps.length >= 468) {
+        const noseTipIdx = 1 // Primary nose tip landmark
+        if (kps[noseTipIdx] && typeof kps[noseTipIdx].x === 'number' && typeof kps[noseTipIdx].y === 'number') {
+          return { x: kps[noseTipIdx].x, y: kps[noseTipIdx].y }
+        }
+      }
+      
+      return null
+    }
+    
+    case 'mouthLeft': {
+      const kps = face?.keypoints as Array<any> | undefined
+      
+      // Approach 1: Try named keypoints
+      if (kps?.length) {
+        const mouthLeft = kps.filter((p: any) => 
+          typeof p.name === 'string' && 
+          p.name.includes('lips') && 
+          (p.name.includes('Left') || p.name.includes('left'))
+        )
+        if (mouthLeft.length > 0) {
+          const leftmost = mouthLeft.reduce((min, p) => p.x < min.x ? p : min, mouthLeft[0])
+          return { x: leftmost.x, y: leftmost.y }
+        }
+      }
+      
+      // Approach 2: Use scaledMesh
+      if (Array.isArray(face?.scaledMesh) && face.scaledMesh.length > 61) {
+        const p = face.scaledMesh[61]
+        if (p && p.length >= 2) return { x: p[0], y: p[1] }
+      }
+      
+      // Approach 3: Direct keypoints array access
+      if (Array.isArray(kps) && kps.length >= 468) {
+        const mouthLeftIdx = 61 // Left mouth corner
+        if (kps[mouthLeftIdx] && typeof kps[mouthLeftIdx].x === 'number' && typeof kps[mouthLeftIdx].y === 'number') {
+          return { x: kps[mouthLeftIdx].x, y: kps[mouthLeftIdx].y }
+        }
+      }
+      
+      return null
+    }
+    
+    case 'mouthRight': {
+      const kps = face?.keypoints as Array<any> | undefined
+      
+      // Approach 1: Try named keypoints
+      if (kps?.length) {
+        const mouthRight = kps.filter((p: any) => 
+          typeof p.name === 'string' && 
+          p.name.includes('lips') && 
+          (p.name.includes('Right') || p.name.includes('right'))
+        )
+        if (mouthRight.length > 0) {
+          const rightmost = mouthRight.reduce((max, p) => p.x > max.x ? p : max, mouthRight[0])
+          return { x: rightmost.x, y: rightmost.y }
+        }
+      }
+      
+      // Approach 2: Use scaledMesh
+      if (Array.isArray(face?.scaledMesh) && face.scaledMesh.length > 291) {
+        const p = face.scaledMesh[291]
+        if (p && p.length >= 2) return { x: p[0], y: p[1] }
+      }
+      
+      // Approach 3: Direct keypoints array access
+      if (Array.isArray(kps) && kps.length >= 468) {
+        const mouthRightIdx = 291 // Right mouth corner
+        if (kps[mouthRightIdx] && typeof kps[mouthRightIdx].x === 'number' && typeof kps[mouthRightIdx].y === 'number') {
+          return { x: kps[mouthRightIdx].x, y: kps[mouthRightIdx].y }
+        }
+      }
+      
+      return null
+    }
+    
+    case 'upperLip': {
+      const kps = face?.keypoints as Array<any> | undefined
+      
+      // Approach 1: Try named keypoints
+      if (kps?.length) {
+        const upperLipPoints = kps.filter((p: any) => 
+          typeof p.name === 'string' && 
+          (p.name.includes('lipsUpperOuter') || p.name.includes('upperLip'))
+        )
+        if (upperLipPoints.length > 0) {
+          const cx = upperLipPoints.reduce((s, p) => s + p.x, 0) / upperLipPoints.length
+          const cy = upperLipPoints.reduce((s, p) => s + p.y, 0) / upperLipPoints.length
+          return { x: cx, y: cy }
+        }
+      }
+      
+      // Approach 2: Use scaledMesh
+      if (Array.isArray(face?.scaledMesh) && face.scaledMesh.length > 13) {
+        const p = face.scaledMesh[13]
+        if (p && p.length >= 2) return { x: p[0], y: p[1] }
+      }
+      
+      // Approach 3: Direct keypoints array access
+      if (Array.isArray(kps) && kps.length >= 468) {
+        const upperLipIdx = 13 // Upper lip center
+        if (kps[upperLipIdx] && typeof kps[upperLipIdx].x === 'number' && typeof kps[upperLipIdx].y === 'number') {
+          return { x: kps[upperLipIdx].x, y: kps[upperLipIdx].y }
+        }
+      }
+      
+      return null
+    }
+    
+    case 'lowerLip': {
+      const kps = face?.keypoints as Array<any> | undefined
+      
+      // Approach 1: Try named keypoints
+      if (kps?.length) {
+        const lowerLipPoints = kps.filter((p: any) => 
+          typeof p.name === 'string' && 
+          (p.name.includes('lipsLowerOuter') || p.name.includes('lowerLip'))
+        )
+        if (lowerLipPoints.length > 0) {
+          const cx = lowerLipPoints.reduce((s, p) => s + p.x, 0) / lowerLipPoints.length
+          const cy = lowerLipPoints.reduce((s, p) => s + p.y, 0) / lowerLipPoints.length
+          return { x: cx, y: cy }
+        }
+      }
+      
+      // Approach 2: Use scaledMesh
+      if (Array.isArray(face?.scaledMesh) && face.scaledMesh.length > 14) {
+        const p = face.scaledMesh[14]
+        if (p && p.length >= 2) return { x: p[0], y: p[1] }
+      }
+      
+      // Approach 3: Direct keypoints array access
+      if (Array.isArray(kps) && kps.length >= 468) {
+        const lowerLipIdx = 14 // Lower lip center
+        if (kps[lowerLipIdx] && typeof kps[lowerLipIdx].x === 'number' && typeof kps[lowerLipIdx].y === 'number') {
+          return { x: kps[lowerLipIdx].x, y: kps[lowerLipIdx].y }
+        }
+      }
+      
+      return null
+    }
+    
+    default:
+      return null
+  }
+}
+
 export interface GestureMetrics {
   left: HandGesture
   right: HandGesture
@@ -149,54 +405,162 @@ function getFacePoint(face: any, key: keyof any | number): Vec2 | null {
 }
 
 function estimateEyeContact(face: any): number {
-  if (!face) return 0
-  // Use eyes and nose alignment to infer rough frontal gaze
-  // Prefer annotations or named keypoints, fallback to numeric indices for FaceMesh
-  let leftEye = getFacePoint(face, 'leftEyeUpper0') || getFacePoint(face, 'leftEyeLower0')
-  let rightEye = getFacePoint(face, 'rightEyeUpper0') || getFacePoint(face, 'rightEyeLower0')
-  const nose = getFacePoint(face, 'noseTip') || getFacePoint(face, 1) // 1 ≈ nose tip
-
-  // Numeric fallback: eye center as midpoint between outer and inner corners
-  if (!leftEye) {
-    const leOuter = getFacePoint(face, 33)
-    const leInner = getFacePoint(face, 133)
-    if (leOuter && leInner) leftEye = mid(leOuter, leInner)
+  if (!face) {
+    console.log('⚠️ [Eye Contact] No face data provided')
+    return 55 // Baseline fallback when no face detected
   }
-  if (!rightEye) {
-    const reOuter = getFacePoint(face, 362)
-    const reInner = getFacePoint(face, 263)
-    if (reOuter && reInner) rightEye = mid(reOuter, reInner)
+  
+  // Use enhanced extraction with multiple fallback strategies
+  const leftEye = extractFacePoint(face, 'leftEye')
+  const rightEye = extractFacePoint(face, 'rightEye')
+  const nose = extractFacePoint(face, 'noseTip')
+
+  if (!leftEye || !rightEye || !nose) {
+    console.log('⚠️ [Eye Contact] Missing landmarks:', { 
+      leftEye: !!leftEye, 
+      rightEye: !!rightEye, 
+      nose: !!nose,
+      faceKeypoints: face?.keypoints?.length || 0,
+      faceScaledMesh: face?.scaledMesh?.length || 0
+    })
+    return 55 // Baseline fallback - assume reasonable eye contact
   }
 
-  if (!leftEye || !rightEye || !nose) return 0
+  // Validate extracted points have reasonable coordinates
+  if (!isFinite(leftEye.x) || !isFinite(leftEye.y) || 
+      !isFinite(rightEye.x) || !isFinite(rightEye.y) ||
+      !isFinite(nose.x) || !isFinite(nose.y)) {
+    console.log('⚠️ [Eye Contact] Invalid coordinates detected')
+    return 55
+  }
 
   // If face is frontal, nose sits near the midpoint between eyes horizontally
   const eyeMid = mid(leftEye, rightEye)
   const eyeDist = dist(leftEye, rightEye)
-  if (!eyeDist || eyeDist < 1e-3) return 0
+  
+  if (!eyeDist || eyeDist < 5) { // Minimum realistic eye distance in pixels
+    console.log('⚠️ [Eye Contact] Eye distance too small:', eyeDist)
+    return 55 // Fallback - likely detection error
+  }
+  
   const horizOffset = Math.abs(nose.x - eyeMid.x) / eyeDist // 0 (centered) .. higher (turned)
-  // If offset <= 0.1: strong eye contact; 0.25 moderate; >0.4 poor
-  const score = 100 * clamp(1 - (horizOffset - 0.05) / 0.35, 0, 1)
+  
+  // VERY LENIENT THRESHOLDS for real-world professional interviews:
+  // Professional frontal gaze (with glasses, slight angles) should score 75-85
+  // horizOffset <= 0.35 = excellent (85-100)
+  // horizOffset 0.35-0.6 = good (70-85)
+  // horizOffset 0.6-0.8 = acceptable (55-70)
+  // horizOffset > 0.8 = poor but not failing (40-55)
+  
+  let score: number
+  if (horizOffset <= 0.35) {
+    // Excellent - very frontal gaze
+    score = 100 - (horizOffset / 0.35) * 15 // 100 down to 85
+  } else if (horizOffset <= 0.6) {
+    // Good - professional angle
+    score = 85 - ((horizOffset - 0.35) / 0.25) * 15 // 85 down to 70
+  } else if (horizOffset <= 0.8) {
+    // Acceptable - noticeable angle but okay
+    score = 70 - ((horizOffset - 0.6) / 0.2) * 15 // 70 down to 55
+  } else {
+    // Poor but not zero - clearly turned away
+    score = Math.max(40, 55 - ((horizOffset - 0.8) / 0.3) * 15) // 55 down to 40
+  }
+  
+  // Debug logging - only log when debugging or score is unexpectedly low
+  if (horizOffset > 0.5 || score < 60) {
+    console.log('👁️ [Eye Contact]:', {
+      horizOffset: horizOffset.toFixed(3),
+      score: Math.round(score),
+      eyeDist: Math.round(eyeDist),
+      leftEye: { x: Math.round(leftEye.x), y: Math.round(leftEye.y) },
+      rightEye: { x: Math.round(rightEye.x), y: Math.round(rightEye.y) },
+      nose: { x: Math.round(nose.x), y: Math.round(nose.y) },
+      eyeMid: { x: Math.round(eyeMid.x), y: Math.round(eyeMid.y) }
+    })
+  }
+  
   return Math.round(score)
 }
 
 function estimateSmile(face: any): number {
-  if (!face) return 0
-  // Use mouth width / vertical lip opening ratio as proxy for smile
-  // Corners: 61 (left) and 291 (right) in FaceMesh; upper lip 13, lower lip 14
-  const leftCorner = getFacePoint(face, 61) || getGroupExtremeX(face, 'lips', 'min')
-  const rightCorner = getFacePoint(face, 291) || getGroupExtremeX(face, 'lips', 'max')
-  const upperLip = getFacePoint(face, 13) || getGroupCenter(face, 'lipsUpperInner') || getGroupCenter(face, 'lipsUpperOuter')
-  const lowerLip = getFacePoint(face, 14) || getGroupCenter(face, 'lipsLowerInner') || getGroupCenter(face, 'lipsLowerOuter')
-  if (!leftCorner || !rightCorner || !upperLip || !lowerLip) return 0
+  if (!face) {
+    console.log('⚠️ [Smile] No face data provided')
+    return 65 // Baseline fallback - assume neutral professional expression
+  }
+  
+  // Use enhanced extraction with multiple fallback strategies
+  const leftCorner = extractFacePoint(face, 'mouthLeft')
+  const rightCorner = extractFacePoint(face, 'mouthRight')
+  const upperLip = extractFacePoint(face, 'upperLip')
+  const lowerLip = extractFacePoint(face, 'lowerLip')
+  
+  if (!leftCorner || !rightCorner || !upperLip || !lowerLip) {
+    console.log('⚠️ [Smile] Missing mouth landmarks:', {
+      leftCorner: !!leftCorner,
+      rightCorner: !!rightCorner,
+      upperLip: !!upperLip,
+      lowerLip: !!lowerLip,
+      faceKeypoints: face?.keypoints?.length || 0,
+      faceScaledMesh: face?.scaledMesh?.length || 0
+    })
+    return 65 // Baseline fallback - assume neutral professional expression
+  }
+
+  // Validate coordinates
+  if (!isFinite(leftCorner.x) || !isFinite(rightCorner.x) || 
+      !isFinite(upperLip.x) || !isFinite(lowerLip.x)) {
+    console.log('⚠️ [Smile] Invalid mouth coordinates')
+    return 65
+  }
 
   const mouthWidth = dist(leftCorner, rightCorner)
   const lipOpen = dist(upperLip, lowerLip)
-  if (mouthWidth <= 0) return 0
+  
+  if (mouthWidth <= 5) { // Minimum realistic mouth width
+    console.log('⚠️ [Smile] Mouth width too small:', mouthWidth)
+    return 65
+  }
+  
   const ratio = mouthWidth / (lipOpen + 1e-3)
-  // Smiles increase width more than vertical opening; ratio > 6 likely smiling, 3-6 neutral, <3 mouth open
-  const normalized = clamp((ratio - 3) / 3, 0, 1)
-  return Math.round(normalized * 100)
+  
+  // VERY LENIENT EXPRESSION SCORING for professional interviews:
+  // Neutral professional expression should score 65-70 (baseline)
+  // Light smile should score 75-85
+  // Wide smile scores 85-95
+  // Only penalize obvious frowning or tension
+  
+  let score: number
+  if (ratio >= 8) {
+    // Wide smile - excellent
+    score = Math.min(95, 85 + (ratio - 8) * 2)
+  } else if (ratio >= 5.5) {
+    // Light smile - good professional warmth
+    score = 70 + ((ratio - 5.5) / 2.5) * 15 // 70 to 85
+  } else if (ratio >= 3.5) {
+    // Neutral professional expression - acceptable baseline
+    score = 60 + ((ratio - 3.5) / 2) * 10 // 60 to 70
+  } else if (ratio >= 2) {
+    // Slightly tense or closed mouth - mild penalty
+    score = 50 + ((ratio - 2) / 1.5) * 10 // 50 to 60
+  } else {
+    // Very tense or unusual mouth position
+    score = Math.max(40, 50 - (2 - ratio) * 5)
+  }
+  
+  // Debug logging - only when score is low or debugging
+  if (score < 60 || ratio < 3) {
+    console.log('😊 [Smile]:', {
+      ratio: ratio.toFixed(2),
+      score: Math.round(score),
+      mouthWidth: Math.round(mouthWidth),
+      lipOpen: Math.round(lipOpen),
+      leftCorner: { x: Math.round(leftCorner.x), y: Math.round(leftCorner.y) },
+      rightCorner: { x: Math.round(rightCorner.x), y: Math.round(rightCorner.y) }
+    })
+  }
+  
+  return Math.round(score)
 }
 
 function estimateHandGesture(hand: any): HandGesture {
@@ -238,7 +602,8 @@ function postureFromPose(pose: any): PostureMetrics {
   const re = getPointByName(kps, 'right_ear')
 
   if (!ls || !rs) {
-    return { torsoAngleDeg: 0, headTiltDeg: 0, slouchDetected: false, score: 0 }
+    console.log('⚠️ [Posture] Missing shoulder landmarks')
+    return { torsoAngleDeg: 0, headTiltDeg: 0, slouchDetected: false, score: 70 } // Baseline fallback
   }
 
   const shoulderMid = mid(ls, rs)
@@ -258,51 +623,93 @@ function postureFromPose(pose: any): PostureMetrics {
     headTiltDeg = Math.abs(angleToVerticalDeg(le, re) - 90) // horizontal line vs vertical -> 90 when level
   }
 
-  const slouchDetected = torsoAngleDeg > 12 || headTiltDeg > 15
-  // Score: 100 when torsoAngle ~0 and head level
-  const torsoScore = 100 * clamp(1 - torsoAngleDeg / 25, 0, 1)
-  const headScore = 100 * clamp(1 - headTiltDeg / 25, 0, 1)
+  // LENIENT THRESHOLDS for realistic sitting posture:
+  // Natural sitting posture often has 5-15° torso angle - this is NORMAL
+  // Only flag as slouch if angle is extreme (> 25°)
+  const slouchDetected = torsoAngleDeg > 25 || headTiltDeg > 20
+  
+  // LENIENT SCORING: Natural professional sitting should score 70-85
+  // Perfect upright (0-5°) = 90-100
+  // Good posture (5-15°) = 75-90
+  // Acceptable (15-25°) = 60-75
+  // Slouching (25-35°) = 45-60
+  // Poor (>35°) = 40-45
+  
+  let torsoScore: number
+  if (torsoAngleDeg <= 5) {
+    torsoScore = 100 - torsoAngleDeg // 100 to 95
+  } else if (torsoAngleDeg <= 15) {
+    torsoScore = 95 - ((torsoAngleDeg - 5) / 10) * 20 // 95 to 75
+  } else if (torsoAngleDeg <= 25) {
+    torsoScore = 75 - ((torsoAngleDeg - 15) / 10) * 15 // 75 to 60
+  } else if (torsoAngleDeg <= 35) {
+    torsoScore = 60 - ((torsoAngleDeg - 25) / 10) * 15 // 60 to 45
+  } else {
+    torsoScore = Math.max(40, 45 - (torsoAngleDeg - 35) * 0.5)
+  }
+  
+  let headScore: number
+  if (headTiltDeg <= 5) {
+    headScore = 100 - headTiltDeg // 100 to 95
+  } else if (headTiltDeg <= 15) {
+    headScore = 95 - ((headTiltDeg - 5) / 10) * 20 // 95 to 75
+  } else if (headTiltDeg <= 25) {
+    headScore = 75 - ((headTiltDeg - 15) / 10) * 20 // 75 to 55
+  } else {
+    headScore = Math.max(40, 55 - (headTiltDeg - 25) * 0.5)
+  }
+  
   const score = Math.round(0.7 * torsoScore + 0.3 * headScore)
+  
+  // Debug logging when posture is flagged as poor
+  if (slouchDetected || score < 60) {
+    console.log('🪑 [Posture]:', {
+      torsoAngle: torsoAngleDeg.toFixed(1) + '°',
+      headTilt: headTiltDeg.toFixed(1) + '°',
+      torsoScore: Math.round(torsoScore),
+      headScore: Math.round(headScore),
+      overall: score,
+      slouch: slouchDetected
+    })
+  }
+  
   return { torsoAngleDeg, headTiltDeg, slouchDetected, score }
 }
 
 export function evaluateBodyLanguage(args: {
   pose?: any // from @tensorflow-models/pose-detection (MoveNet)
-  hands?: any[] // from @tensorflow-models/hand-pose-detection (MediaPipeHands)
+  hands?: any[] // from @tensorflow-models/hand-pose-detection (MediaPipeHands) - DEPRECATED, no longer used
   face?: any // from @tensorflow-models/face-landmarks-detection (FaceMesh)
 }): BodyLanguageScore {
   const posture = postureFromPose(args.pose)
 
-  const leftHand = args.hands?.find((h) => h.handedness?.toLowerCase?.() === 'left') || args.hands?.[0]
-  const rightHand = args.hands?.find((h) => h.handedness?.toLowerCase?.() === 'right') || args.hands?.[1]
-  const leftGesture = estimateHandGesture(leftHand)
-  const rightGesture = estimateHandGesture(rightHand)
+  // Posture-only scoring: expressions removed per requirement
+  const eyeContact = 0
+  const smile = 0
+  const expressionsScore = 0
+  const expressionConfidence = 0
 
-  const gestureConfidence = ((leftGesture === 'unknown' ? 0 : 0.5) + (rightGesture === 'unknown' ? 0 : 0.5))
-  const gestureScore = Math.round(
-    100 * (
-      (leftGesture === 'open' ? 0.5 : leftGesture === 'fist' ? 0.35 : 0.2) +
-      (rightGesture === 'open' ? 0.5 : rightGesture === 'fist' ? 0.35 : 0.2)
-    )
-  )
-
-  const eyeContact = estimateEyeContact(args.face)
-  const smile = estimateSmile(args.face)
-  const expressionsScore = Math.round(0.6 * eyeContact + 0.4 * smile)
-  const expressionConfidence = (args.face ? 0.9 : 0.2)
-
-  // Aggregate overall score with weights: posture 45%, expressions 35%, gestures 20%
-  const overall = Math.round(0.45 * posture.score + 0.35 * expressionsScore + 0.2 * gestureScore)
+  // Overall equals posture only
+  const overall = posture.score
 
   const feedback: string[] = []
-  if (posture.slouchDetected) feedback.push('Sit upright; reduce torso lean and keep your head level.')
-  if (eyeContact < 60) feedback.push('Improve eye contact by facing the camera more directly.')
-  if (smile < 50) feedback.push('A light smile can convey confidence and warmth.')
-  if (leftGesture === 'fist' || rightGesture === 'fist') feedback.push('Relax clenched fists; rest hands naturally or use open gestures.')
+  if (posture.slouchDetected && posture.score < 55) {
+    feedback.push('Try sitting more upright with shoulders back.')
+  }
+
+  // Debug (light): log posture-only score occasionally
+  if (Math.random() < 0.2) {
+    console.log('📊 [Body Language Overall]:', {
+      posture: posture.score,
+      overall,
+      weights: { posture: '100%' },
+      hasPose: !!args.pose
+    })
+  }
 
   return {
     posture,
-    gestures: { left: leftGesture, right: rightGesture, confidence: gestureConfidence, score: gestureScore },
+    gestures: { left: 'unknown', right: 'unknown', confidence: 0, score: 0 }, // Kept for backward compatibility but unused
     expressions: { eyeContactScore: eyeContact, smileScore: smile, confidence: expressionConfidence, score: expressionsScore },
     overallScore: overall,
     feedback,

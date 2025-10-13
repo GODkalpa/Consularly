@@ -145,6 +145,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: user.email,
         displayName: displayName,
         role: 'user', // Default role for new users
+        quotaLimit: 10, // Default quota for new signup users
+        quotaUsed: 0, // Start with 0 interviews used
         createdAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

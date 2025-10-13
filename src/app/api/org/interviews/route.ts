@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
       },
       interviewType,
       route,
+      university: route?.startsWith('france_') ? route.split('_')[1] : undefined,
       duration,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
