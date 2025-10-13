@@ -70,6 +70,23 @@ export async function PATCH(
       updateData.route = body.route
     }
 
+    // Enhanced reporting fields
+    if (body.finalReport && typeof body.finalReport === 'object') {
+      updateData.finalReport = body.finalReport
+    }
+
+    if (Array.isArray(body.perAnswerScores)) {
+      updateData.perAnswerScores = body.perAnswerScores
+    }
+
+    if (typeof body.completedQuestions === 'number') {
+      updateData.completedQuestions = body.completedQuestions
+    }
+
+    if (Array.isArray(body.conversationHistory)) {
+      updateData.conversationHistory = body.conversationHistory
+    }
+
     // Update interview document
     await adminDb().collection('interviews').doc(interviewId).update(updateData)
 

@@ -36,11 +36,13 @@ import {
   Trophy,
   Clock,
   Target,
+  TrendingUp,
 } from "lucide-react"
 import { UserInterviewSimulation } from "./UserInterviewSimulation"
 import { db, firebaseEnabled } from "@/lib/firebase"
 import { collection, onSnapshot, query, where, type DocumentData } from "firebase/firestore"
 import { ResultsTrendChart } from "./ResultsTrendChart"
+import { ExpandableInterviewCard } from "./ExpandableInterviewCard"
 
 const menuItems = [
   { title: "Overview", icon: BarChart3, id: "overview" },
@@ -67,6 +69,7 @@ export function UserDashboard() {
     route?: string
     startTime?: Date | null
     endTime?: Date | null
+    finalReport?: any
   }>>([])
 
   // Live subscribe to user's interviews
@@ -89,6 +92,7 @@ export function UserDashboard() {
           route: data?.route,
           startTime: toDate(data?.startTime),
           endTime: toDate(data?.endTime),
+          finalReport: data?.finalReport,
         }
       }).sort((a, b) => (b.startTime?.getTime() || 0) - (a.startTime?.getTime() || 0))
       setInterviews(rows)
@@ -478,8 +482,67 @@ export function UserDashboard() {
       return <span className={`${common} ${tone}`}>{s}</span>
     }
 
+    // Calculate progress metrics
+    const completedInterviews = filteredInterviews.filter(iv => iv.status === 'completed')
+    const avgScore = completedInterviews.length > 0
+      ? Math.round(completedInterviews.reduce((sum, iv) => sum + (iv.score || 0), 0) / completedInterviews.length)
+      : 0
+    const latestScore = completedInterviews.length > 0 && typeof completedInterviews[0].score === 'number'
+      ? completedInterviews[0].score
+      : 0
+    const previousScore = completedInterviews.length > 1 && typeof completedInterviews[1].score === 'number'
+      ? completedInterviews[1].score
+      : 0
+    const improvement = previousScore > 0 ? latestScore - previousScore : 0
+
     return (
       <div className="space-y-6">
+        {/* Progress Tracking (show if 2+ interviews) */}
+        {completedInterviews.length >= 2 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                  <Trophy className="h-4 w-4" />
+                  Average Score
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-blue-900 dark:text-blue-100">{avgScore}/100</div>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">Across {completedInterviews.length} interviews</p>
+              </CardContent>
+            </Card>
+            <Card className={`bg-gradient-to-br ${improvement >= 0 ? 'from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200' : 'from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900 border-orange-200'}`}>
+              <CardHeader className="pb-3">
+                <CardTitle className={`text-sm font-medium ${improvement >= 0 ? 'text-green-900 dark:text-green-100' : 'text-orange-900 dark:text-orange-100'} flex items-center gap-2`}>
+                  <TrendingUp className="h-4 w-4" />
+                  Recent Progress
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className={`text-3xl font-bold ${improvement >= 0 ? 'text-green-900 dark:text-green-100' : 'text-orange-900 dark:text-orange-100'}`}>
+                  {improvement > 0 ? '+' : ''}{improvement}
+                </div>
+                <p className={`text-xs mt-1 ${improvement >= 0 ? 'text-green-700 dark:text-green-300' : 'text-orange-700 dark:text-orange-300'}`}>
+                  {improvement >= 0 ? 'Improvement' : 'Change'} from last interview
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium text-purple-900 dark:text-purple-100 flex items-center gap-2">
+                  <Target className="h-4 w-4" />
+                  Total Completed
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-purple-900 dark:text-purple-100">{completedInterviews.length}</div>
+                <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">Practice interviews</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Toolbar Filters */}
         <Card>
           <CardContent className="py-4">
@@ -534,43 +597,13 @@ export function UserDashboard() {
             {!filteredInterviews.length ? (
               <div className="text-sm text-muted-foreground py-2">No results for the selected filters.</div>
             ) : (
-              <div className="divide-y rounded-md border">
+              <div className="space-y-4">
                 {filteredInterviews
                   .slice()
                   .sort((a, b) => (b.startTime?.getTime() || 0) - (a.startTime?.getTime() || 0))
                   .map((iv) => (
-                  <div key={iv.id} className="flex items-center justify-between p-4 text-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="h-2 w-2 rounded-full bg-primary-500" />
-                      <div>
-                        <div className="font-medium">
-                          {iv.startTime ? iv.startTime.toLocaleString() : '—'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          <span className="inline-flex items-center gap-1">
-                            <span className="rounded px-1.5 py-0.5 bg-secondary-100 text-secondary-700 font-medium">
-                              {iv.route || 'visa'}
-                            </span>
-                            <span>•</span>
-                            <span className="rounded px-1 py-0.5 bg-accent-100 text-accent-700 font-medium">
-                              {iv.status || 'completed'}
-                            </span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-xs text-muted-foreground">Score</div>
-                        <div className="text-base font-semibold">{typeof iv.score === 'number' ? `${iv.score}/100` : '—'}</div>
-                      </div>
-                      {scoreTone(iv.score)}
-                      <Button variant="outline" size="sm" onClick={() => setActiveSection('interview')}>
-                        Practice Again
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                    <ExpandableInterviewCard key={iv.id} interview={iv as any} />
+                  ))}
               </div>
             )}
           </CardContent>

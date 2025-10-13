@@ -55,6 +55,10 @@ export async function POST(request: NextRequest) {
     // Define weights early for validation response
     const weights = F1_MVP_SCORING_CONFIG.weights
     
+    // CRITICAL FIX: Count words to prevent scoring empty/minimal answers
+    const wordCount = answer.trim().split(/\s+/).filter(w => w.length > 0).length
+    const MIN_WORD_COUNT = 10 // Minimum words for a valid answer
+    
     // Validate transcript is not empty or placeholder
     if (!answer || answer.trim() === '' || answer === '[No response]') {
       return NextResponse.json({
@@ -74,6 +78,33 @@ export async function POST(request: NextRequest) {
         categories: { content: 0, speech: 0, bodyLanguage: 0 },
         weights,
       }, { status: 400 })
+    }
+    
+    // CRITICAL FIX: Validate minimum word count to prevent gaming the system
+    // If answer is too short (< 10 words), give 0 for content/speech but still score body language
+    if (wordCount < MIN_WORD_COUNT) {
+      const bodyOnlyScore = bodyLanguageMissing ? 0 : Math.round(defaultBody!.overallScore)
+      const overallWithBodyOnly = Math.round(weights.body * bodyOnlyScore) // Max 10/100 for body alone
+      
+      console.warn(`⚠️ Answer too brief (${wordCount} words < ${MIN_WORD_COUNT} minimum) - giving 0 for content/speech`)
+      
+      return NextResponse.json({
+        error: 'Answer too brief',
+        rubric: { communication: 0, relevance: 0, specificity: 0, consistency: 0, academicPreparedness: 0, financialCapability: 0, intentToReturn: 0 },
+        summary: `Answer too brief (${wordCount} word${wordCount !== 1 ? 's' : ''}). Provide detailed responses with at least ${MIN_WORD_COUNT} words to demonstrate your knowledge and communication skills.`,
+        recommendations: [
+          'Provide more detailed answers (aim for 30-100 words per question)',
+          'Include specific examples, numbers, and concrete details',
+          'Speak clearly and ensure your microphone is working properly',
+        ],
+        redFlags: [`Insufficient answer length: only ${wordCount} word${wordCount !== 1 ? 's' : ''} provided`],
+        contentScore: 0,
+        speechScore: 0,
+        bodyScore: bodyOnlyScore,
+        overall: overallWithBodyOnly,
+        categories: { content: 0, speech: 0, bodyLanguage: bodyOnlyScore },
+        weights,
+      }, { status: 200 }) // 200 status since it's a valid request, just poor answer
     }
 
     // DEBUG: Log the answer being scored

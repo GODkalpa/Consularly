@@ -50,6 +50,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
     }
 
+    // Enhanced reporting fields
+    if (body.finalReport && typeof body.finalReport === 'object') {
+      updates.finalReport = body.finalReport
+    }
+
+    if (Array.isArray(body.perAnswerScores)) {
+      updates.perAnswerScores = body.perAnswerScores
+    }
+
+    if (typeof body.completedQuestions === 'number') {
+      updates.completedQuestions = body.completedQuestions
+    }
+
+    if (Array.isArray(body.conversationHistory)) {
+      updates.conversationHistory = body.conversationHistory
+    }
+
     await adminDb().collection('interviews').doc(interviewId).update(updates)
     return NextResponse.json({ ok: true })
   } catch (e: any) {

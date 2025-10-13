@@ -23,17 +23,61 @@ export interface Interview {
   createdAt: Date;
   updatedAt: Date;
   // Optional metadata
-  interviewType?: string; // e.g., 'technical', 'behavioral', 'mock'
+  interviewType?: string; // e.g., 'technical', 'behavioral', 'mock', 'visa'
+  route?: string; // e.g., 'uk_student', 'usa_f1', 'france_ema'
   notes?: string;
+  // Enhanced reporting fields
+  finalReport?: FinalReport;
+  perAnswerScores?: PerAnswerScore[];
+  completedQuestions?: number;
+  conversationHistory?: Array<{
+    question: string;
+    answer: string;
+    timestamp?: string;
+    questionType?: string;
+  }>;
+}
+
+// Extended type for interviews with full report data
+export type InterviewWithReport = Interview & {
+  finalReport: FinalReport;
+  perAnswerScores: PerAnswerScore[];
 }
 
 export interface ScoreDetails {
   communication: number; // 0-100
-  technicalSkills: number; // 0-100
-  problemSolving: number; // 0-100
-  professionalism: number; // 0-100
-  overallImpression: number; // 0-100
+  technical: number; // 0-100 (formerly technicalSkills)
+  confidence: number; // 0-100 (formerly professionalism)
+  overall: number; // 0-100 (formerly overallImpression)
   feedback?: string;
+}
+
+export interface DetailedInsight {
+  category: 'Content Quality' | 'Financial' | 'Course' | 'Communication' | 'Body Language' | 'Intent';
+  type: 'strength' | 'weakness';
+  finding: string;
+  example?: string;
+  actionItem: string;
+}
+
+export interface FinalReport {
+  decision: 'accepted' | 'rejected' | 'borderline';
+  overall: number; // 0-100
+  dimensions: Record<string, number>;
+  summary: string; // 2-3 detailed paragraphs
+  detailedInsights: DetailedInsight[];
+  strengths: string[]; // 3-5 key strengths
+  weaknesses: string[]; // 3-5 key weaknesses
+  recommendations?: string[]; // Deprecated, use detailedInsights instead
+}
+
+export interface PerAnswerScore {
+  overall: number;
+  categories: {
+    content: number;
+    speech: number;
+    bodyLanguage: number;
+  };
 }
 
 export interface InterviewMetrics {

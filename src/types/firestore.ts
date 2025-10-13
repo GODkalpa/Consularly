@@ -52,6 +52,37 @@ export interface ScoreDetails {
   overall: number; // 0-100
 }
 
+// Detailed Insight Interface
+export interface DetailedInsight {
+  category: 'Content Quality' | 'Financial' | 'Course' | 'Communication' | 'Body Language' | 'Intent';
+  type: 'strength' | 'weakness';
+  finding: string;
+  example?: string;
+  actionItem: string;
+}
+
+// Final Report Interface
+export interface FinalReport {
+  decision: 'accepted' | 'rejected' | 'borderline';
+  overall: number; // 0-100
+  dimensions: Record<string, number>;
+  summary: string; // 2-3 detailed paragraphs
+  detailedInsights: DetailedInsight[];
+  strengths: string[]; // 3-5 key strengths
+  weaknesses: string[]; // 3-5 key weaknesses
+  recommendations?: string[]; // Deprecated, use detailedInsights instead
+}
+
+// Per-Answer Score Interface
+export interface PerAnswerScore {
+  overall: number;
+  categories: {
+    content: number;
+    speech: number;
+    bodyLanguage: number;
+  };
+}
+
 // Interview Interface
 export interface Interview {
   userId: string;
@@ -67,6 +98,16 @@ export interface Interview {
   duration: number; // minutes
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  // Enhanced reporting fields
+  finalReport?: FinalReport;
+  perAnswerScores?: PerAnswerScore[];
+  completedQuestions?: number;
+  conversationHistory?: Array<{
+    question: string;
+    answer: string;
+    timestamp?: string;
+    questionType?: string;
+  }>;
 }
 
 // Interview Metrics Interface
@@ -163,6 +204,12 @@ export interface UserProfileWithId extends UserProfile {
 
 export interface InterviewWithId extends Interview {
   id: string; // document ID
+}
+
+// Extended type for interviews with full report data
+export type InterviewWithReport = InterviewWithId & {
+  finalReport: FinalReport;
+  perAnswerScores: PerAnswerScore[];
 }
 
 export interface InterviewMetricsWithId extends InterviewMetrics {

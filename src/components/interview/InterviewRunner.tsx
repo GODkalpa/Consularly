@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { CheckCircle2, ChevronRight, Loader2, Play, Square, Award, TrendingUp, Target, Lightbulb, MessageSquare } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Loader2, Play, Square, Award, TrendingUp, Target, Lightbulb, MessageSquare, AlertCircle, Star, BookOpen, DollarSign, GraduationCap, Users, Eye } from 'lucide-react'
 import { AssemblyAITranscription } from '@/components/speech/AssemblyAITranscription'
 import { useMicLevel } from '@/hooks/use-mic-level'
 import type { TranscriptionResult } from '@/lib/assemblyai-service'
@@ -92,6 +92,15 @@ export default function InterviewRunner() {
     overall: number
     dimensions: Record<string, number>
     summary: string
+    detailedInsights?: Array<{
+      category: string
+      type: 'strength' | 'weakness'
+      finding: string
+      example?: string
+      actionItem: string
+    }>
+    strengths?: string[]
+    weaknesses?: string[]
     recommendations: string[]
   }>(null)
   const preflightRef = useRef<boolean>(false)
@@ -385,7 +394,20 @@ export default function InterviewRunner() {
 
   // Define computeFinalReport first to avoid circular dependency
   const computeFinalReport = useCallback(async (finalApiSession: any) => {
+    console.log('📄 Starting final report generation...', {
+      route: session?.route,
+      conversationLength: finalApiSession.conversationHistory?.length,
+      perAnswerScoresCount: perfList?.length,
+    })
+    
     try {
+      // CRITICAL FIX: Add 30-second timeout to prevent infinite loading
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => {
+        console.warn('⏱️ Final report API timeout (30s) - using fallback')
+        controller.abort()
+      }, 30000)
+      
       // CRITICAL FIX: Pass per-answer scores to final evaluation for consistency
       const res = await fetch('/api/interview/final', {
         method: 'POST',
@@ -395,30 +417,58 @@ export default function InterviewRunner() {
           studentProfile: finalApiSession.studentProfile,
           conversationHistory: finalApiSession.conversationHistory,
           perAnswerScores: perfList,  // Include detailed per-answer scoring data
-        })
+        }),
+        signal: controller.signal,
       })
+      
+      clearTimeout(timeoutId)
+      
       if (res.ok) {
         const data = await res.json()
+        console.log('✅ Final report generated successfully:', {
+          decision: data.decision,
+          overall: data.overall,
+          dimensionsCount: Object.keys(data.dimensions || {}).length,
+        })
         setFinalReport(data)
       } else {
-        setFinalReport({
-          decision: 'borderline',
-          overall: 60,
+        console.warn('⚠️ Final report API returned error:', res.status, res.statusText)
+        const errorText = await res.text().catch(() => 'Unknown error')
+        console.error('API Error details:', errorText)
+        const fallbackReport = {
+          decision: 'borderline' as const,
+          overall: combinedAggregate?.overall || 60,
           dimensions: { communication: 60, credibility: 60 },
-          summary: 'Final AI evaluation unavailable. This is a heuristic fallback based on response lengths and consistency.',
+          summary: 'Final AI evaluation unavailable (API error ' + res.status + '). Using heuristic scoring based on per-answer analysis. Your performance scored an average of ' + (combinedAggregate?.overall || 60) + '/100 across all questions.',
+          detailedInsights: [],
+          strengths: [],
+          weaknesses: ['Technical error prevented detailed AI analysis - API returned error ' + res.status],
           recommendations: ['Add more concrete details (numbers, evidence).', 'Clarify financial maintenance and accommodation arrangements.']
-        })
+        }
+        console.log('🔄 Setting fallback report due to API error:', fallbackReport)
+        setFinalReport(fallbackReport)
       }
-    } catch (e) {
-      setFinalReport({
-        decision: 'borderline',
-        overall: 60,
+    } catch (e: any) {
+      console.error('❌ Final report generation failed:', e?.name, e?.message)
+      
+      // CRITICAL: Provide fallback report so interview data is still saved
+      const isTimeout = e?.name === 'AbortError'
+      const fallbackReport = {
+        decision: 'borderline' as const,
+        overall: combinedAggregate?.overall || 60,
         dimensions: { communication: 60, credibility: 60 },
-        summary: 'Final AI evaluation failed. Showing fallback.',
+        summary: isTimeout 
+          ? 'Final AI evaluation timed out after 30 seconds. Using heuristic scoring based on per-answer analysis. Your performance scored an average of ' + (combinedAggregate?.overall || 60) + '/100 across all questions.'
+          : 'Final AI evaluation failed due to a technical error. Using heuristic scoring based on per-answer analysis.',
+        detailedInsights: [],
+        strengths: [],
+        weaknesses: ['Technical error prevented detailed AI analysis - please contact support if this persists'],
         recommendations: ['Add more concrete details (numbers, evidence).', 'Clarify financial maintenance and accommodation arrangements.']
-      })
+      }
+      console.log('🔄 Setting fallback report due to error:', fallbackReport)
+      setFinalReport(fallbackReport)
     }
-  }, [session?.route, perfList])
+  }, [session?.route, perfList, combinedAggregate])
 
   // Define processAnswer before finalizeAnswer to avoid initialization error
   const processAnswer = useCallback(async (transcriptText: string) => {
@@ -456,13 +506,24 @@ export default function InterviewRunner() {
       
       // Persist helper and start both API calls simultaneously
       const orderValue = session.currentQuestionIndex + 1
-      const words = transcriptText ? transcriptText.trim().split(/\s+/).length : 0
-      const contentHeuristic = Math.min(100, Math.round(words * 3))
-      const speechHeuristic = typeof avgConfidence === 'number' ? Math.round(avgConfidence * 100) : 70
-      const bodyHeuristic = capturedBodyScore ? Math.round(capturedBodyScore.overallScore) : 60
+      const words = transcriptText ? transcriptText.trim().split(/\s+/).filter(w => w.length > 0).length : 0
+      const MIN_WORD_COUNT = 10 // Minimum words for a valid answer
+      
+      // CRITICAL FIX: If answer is too brief (< 10 words), give 0 for content/speech
+      // This prevents gaming the system by clicking "Next" without speaking
+      const isTooShort = words < MIN_WORD_COUNT
+      const contentHeuristic = isTooShort ? 0 : Math.min(100, Math.round(words * 3))
+      const speechHeuristic = isTooShort ? 0 : (typeof avgConfidence === 'number' ? Math.round(avgConfidence * 100) : 70)
+      const bodyHeuristic = capturedBodyScore ? Math.round(capturedBodyScore.overallScore) : 0
+      
+      // Overall score with proper weights: 70% content, 20% speech, 10% body
       const perfFallback = {
-        overall: Math.round((contentHeuristic + speechHeuristic + bodyHeuristic) / 3),
+        overall: Math.round(0.7 * contentHeuristic + 0.2 * speechHeuristic + 0.1 * bodyHeuristic),
         categories: { content: contentHeuristic, speech: speechHeuristic, bodyLanguage: bodyHeuristic }
+      }
+      
+      if (isTooShort) {
+        console.warn(`⚠️ [Fallback Scoring] Answer too brief (${words} words < ${MIN_WORD_COUNT} minimum) - using fallback: ${perfFallback.overall}/100`)
       }
       const persistResponse = async (
         orderParam: number,
@@ -523,15 +584,24 @@ export default function InterviewRunner() {
                   bodyLanguage: Math.round(data.categories.bodyLanguage ?? 0),
                 }
               }
+              console.log('✅ Scoring API success - adding to perfList:', normalized)
               setPerfList((prev) => [...prev, normalized])
               await persistResponse(orderValue, normalized)
             } else {
+              console.warn('⚠️ Invalid scoring response - using fallback')
+              setPerfList((prev) => [...prev, perfFallback])
               await persistResponse(orderValue, perfFallback)
             }
           } else {
+            console.warn('⚠️ Scoring API error - using fallback')
+            setPerfList((prev) => [...prev, perfFallback])
             await persistResponse(orderValue, perfFallback)
           }
-        }).catch(async err => { console.error('❌ Scoring API failed:', err); await persistResponse(orderValue, perfFallback) }),
+        }).catch(async err => { 
+          console.error('❌ Scoring API failed:', err)
+          setPerfList((prev) => [...prev, perfFallback])
+          await persistResponse(orderValue, perfFallback)
+        }),
         
         fetch('/api/interview/session', {
           method: 'POST',
@@ -556,11 +626,12 @@ export default function InterviewRunner() {
       answerBufferRef.current = ''
 
       if (data.isComplete) {
-        // compute final report
+        // compute final report - this will trigger setFinalReport
         await computeFinalReport(updated)
-        setSession((prev) => prev ? { ...prev, status: 'completed' } : prev)
-        // Wait for scoring to complete before final evaluation
+        // Wait for scoring to complete
         try { await scoringPromise } catch {}
+        // Set session to completed - the finalization useEffect will wait for finalReport
+        setSession((prev) => prev ? { ...prev, status: 'completed' } : prev)
         return
       }
 
@@ -680,7 +751,10 @@ export default function InterviewRunner() {
 
   // Aggregate combined performance across answers (shown on completion)
   const combinedAggregate = useMemo(() => {
-    if (!perfList.length) return null
+    if (!perfList.length) {
+      console.warn('⚠️ No per-answer scores available (perfList is empty)')
+      return null
+    }
     const sum = perfList.reduce((acc, s) => {
       acc.overall += s.overall
       acc.content += s.categories.content
@@ -689,7 +763,7 @@ export default function InterviewRunner() {
       return acc
     }, { overall: 0, content: 0, speech: 0, body: 0 })
     const n = perfList.length
-    return {
+    const result = {
       overall: Math.round(sum.overall / n),
       categories: {
         content: Math.round(sum.content / n),
@@ -697,6 +771,8 @@ export default function InterviewRunner() {
         bodyLanguage: Math.round(sum.body / n),
       }
     }
+    console.log('📊 Combined aggregate scores calculated:', result)
+    return result
   }, [perfList])
 
   // Finalize interview record in Firestore (user or org scope) when completed
@@ -709,6 +785,7 @@ export default function InterviewRunner() {
       scope, 
       sessionStatus: session?.status,
       hasScore: typeof finalReport?.overall === 'number',
+      hasFinalReport: !!finalReport,
       hasCombinedAggregate: !!combinedAggregate
     })
     
@@ -718,6 +795,13 @@ export default function InterviewRunner() {
     }
     if (!session || session.status !== 'completed') {
       console.log('[Finalize] Skipping - session not completed', { status: session?.status })
+      return
+    }
+    
+    // CRITICAL FIX: Wait for finalReport to be ready before saving
+    // This prevents saving incomplete data to Firestore
+    if (!finalReport) {
+      console.log('[Finalize] Skipping - waiting for finalReport to be ready')
       return
     }
 
@@ -740,14 +824,27 @@ export default function InterviewRunner() {
         const url = scope === 'org'
           ? `/api/org/interviews/${interviewId}`
           : `/api/interviews/${interviewId}`
+        
+        // Prepare conversation history from apiSession
+        const conversationHistory = apiSession?.conversationHistory?.map((h: any) => ({
+          question: h.question,
+          answer: h.answer,
+          timestamp: h.timestamp,
+          questionType: h.questionType,
+        })) || []
+        
         const body: any = {
           status: 'completed',
           endTime: new Date().toISOString(),
         }
         if (typeof score === 'number') body.score = score
         if (scoreDetails) body.scoreDetails = scoreDetails
+        if (finalReport) body.finalReport = finalReport
+        if (perfList.length > 0) body.perAnswerScores = perfList
+        if (perfList.length > 0) body.completedQuestions = perfList.length
+        if (conversationHistory.length > 0) body.conversationHistory = conversationHistory
         
-        console.log('[Finalize] Sending PATCH', { url, body })
+        console.log('[Finalize] Sending PATCH', { url, hasFinalReport: !!finalReport, perfListLength: perfList.length })
         const res = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) })
         
         if (!res.ok) {
@@ -762,7 +859,7 @@ export default function InterviewRunner() {
         console.error('[InterviewRunner] Finalize interview patch failed', e)
       }
     })()
-  }, [session?.status, combinedAggregate, finalReport])
+  }, [session?.status, combinedAggregate, finalReport, perfList, apiSession])
 
   if (loading) {
     return (
@@ -858,6 +955,15 @@ export default function InterviewRunner() {
   }
 
   if (session.status === 'completed') {
+    // DEBUG: Log render state
+    console.log('🎬 Rendering completion screen:', {
+      hasFinalReport: !!finalReport,
+      hasCombinedAggregate: !!combinedAggregate,
+      perfListLength: perfList.length,
+      finalReportOverall: finalReport?.overall,
+      finalReportDecision: finalReport?.decision,
+    })
+    
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-muted/20 to-muted/40 p-6">
         <div className="max-w-7xl mx-auto space-y-8">
@@ -900,37 +1006,40 @@ export default function InterviewRunner() {
 
 
           {/* Animated Score Cards with Circular Progress */}
-          {finalReport && combinedAggregate ? (
+          {finalReport ? (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <ScoreCard
-                  title="Overall Performance"
-                  score={combinedAggregate.overall}
-                  maxScore={100}
-                  status={combinedAggregate.overall >= 80 ? "Excellent" : combinedAggregate.overall >= 60 ? "Good" : "Needs Improvement"}
-                  icon={<Award className="h-5 w-5" />}
-                  delay={0.4}
-                  color="#4840A3"
-                />
-                <ScoreCard
-                  title="Content Quality"
-                  score={combinedAggregate.categories.content}
-                  maxScore={100}
-                  status={combinedAggregate.categories.content >= 80 ? "Strong" : combinedAggregate.categories.content >= 60 ? "Adequate" : "Developing"}
-                  icon={<Target className="h-5 w-5" />}
-                  delay={0.5}
-                  color="#F9CD6A"
-                />
-                <ScoreCard
-                  title="Communication"
-                  score={Math.round((combinedAggregate.categories.speech + combinedAggregate.categories.bodyLanguage) / 2)}
-                  maxScore={100}
-                  status={Math.round((combinedAggregate.categories.speech + combinedAggregate.categories.bodyLanguage) / 2) >= 80 ? "Outstanding" : "Proficient"}
-                  icon={<TrendingUp className="h-5 w-5" />}
-                  delay={0.6}
-                  color="#9CBBFC"
-                />
-              </div>
+              {/* Show per-answer score cards only if available */}
+              {combinedAggregate && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <ScoreCard
+                    title="Overall Performance"
+                    score={combinedAggregate.overall}
+                    maxScore={100}
+                    status={combinedAggregate.overall >= 80 ? "Excellent" : combinedAggregate.overall >= 60 ? "Good" : "Needs Improvement"}
+                    icon={<Award className="h-5 w-5" />}
+                    delay={0.4}
+                    color="#4840A3"
+                  />
+                  <ScoreCard
+                    title="Content Quality"
+                    score={combinedAggregate.categories.content}
+                    maxScore={100}
+                    status={combinedAggregate.categories.content >= 80 ? "Strong" : combinedAggregate.categories.content >= 60 ? "Adequate" : "Developing"}
+                    icon={<Target className="h-5 w-5" />}
+                    delay={0.5}
+                    color="#F9CD6A"
+                  />
+                  <ScoreCard
+                    title="Communication"
+                    score={Math.round((combinedAggregate.categories.speech + combinedAggregate.categories.bodyLanguage) / 2)}
+                    maxScore={100}
+                    status={Math.round((combinedAggregate.categories.speech + combinedAggregate.categories.bodyLanguage) / 2) >= 80 ? "Outstanding" : "Proficient"}
+                    icon={<TrendingUp className="h-5 w-5" />}
+                    delay={0.6}
+                    color="#9CBBFC"
+                  />
+                </div>
+              )}
 
               {/* AI Summary */}
               <motion.div
@@ -1003,8 +1112,164 @@ export default function InterviewRunner() {
                 </motion.div>
               )}
 
-              {/* Recommendations */}
-              {finalReport.recommendations?.length > 0 && (
+              {/* Strengths and Weaknesses */}
+              {(finalReport.strengths?.length > 0 || finalReport.weaknesses?.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Strengths */}
+                  {finalReport.strengths?.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.9 }}
+                    >
+                      <Card className="border-2 shadow-lg border-green-500/20 bg-gradient-to-br from-green-50/50 to-transparent dark:from-green-950/20">
+                        <CardHeader className="bg-gradient-to-r from-green-500/10 to-transparent">
+                          <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                            <Star className="h-5 w-5" />
+                            Key Strengths
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-6">
+                          <div className="space-y-3">
+                            {finalReport.strengths.map((strength, i) => (
+                              <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 1.0 + i * 0.1 }}
+                                className="flex items-start gap-3 p-3 rounded-lg bg-white/50 dark:bg-gray-900/30"
+                              >
+                                <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                                <p className="text-sm leading-relaxed text-foreground">{strength}</p>
+                              </motion.div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  )}
+
+                  {/* Weaknesses */}
+                  {finalReport.weaknesses?.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.9 }}
+                    >
+                      <Card className="border-2 shadow-lg border-orange-500/20 bg-gradient-to-br from-orange-50/50 to-transparent dark:from-orange-950/20">
+                        <CardHeader className="bg-gradient-to-r from-orange-500/10 to-transparent">
+                          <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                            <AlertCircle className="h-5 w-5" />
+                            Areas for Improvement
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-6">
+                          <div className="space-y-3">
+                            {finalReport.weaknesses.map((weakness, i) => (
+                              <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 1.0 + i * 0.1 }}
+                                className="flex items-start gap-3 p-3 rounded-lg bg-white/50 dark:bg-gray-900/30"
+                              >
+                                <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                                <p className="text-sm leading-relaxed text-foreground">{weakness}</p>
+                              </motion.div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  )}
+                </div>
+              )}
+
+              {/* Detailed Insights */}
+              {finalReport.detailedInsights?.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.0 }}
+                >
+                  <Card className="border-2 shadow-lg border-primary/20">
+                    <CardHeader className="bg-gradient-to-r from-primary/10 to-transparent">
+                      <CardTitle className="flex items-center gap-2">
+                        <Lightbulb className="h-5 w-5 text-primary" />
+                        Detailed AI-Powered Insights
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      <div className="space-y-4">
+                        {finalReport.detailedInsights.map((insight, i) => {
+                          const categoryIcon = {
+                            'Content Quality': Target,
+                            'Financial': DollarSign,
+                            'Course': GraduationCap,
+                            'Communication': MessageSquare,
+                            'Body Language': Eye,
+                            'Intent': Users,
+                          }[insight.category] || BookOpen
+
+                          const IconComponent = categoryIcon
+                          const isStrength = insight.type === 'strength'
+
+                          return (
+                            <motion.div
+                              key={i}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 1.1 + i * 0.05 }}
+                              className={`p-5 rounded-xl border-2 ${
+                                isStrength
+                                  ? 'bg-gradient-to-r from-green-50/80 to-green-50/30 dark:from-green-950/30 dark:to-green-950/10 border-green-500/20'
+                                  : 'bg-gradient-to-r from-orange-50/80 to-orange-50/30 dark:from-orange-950/30 dark:to-orange-950/10 border-orange-500/20'
+                              }`}
+                            >
+                              <div className="flex items-start gap-4">
+                                <div className={`flex-shrink-0 p-2 rounded-lg ${
+                                  isStrength ? 'bg-green-100 dark:bg-green-900/50' : 'bg-orange-100 dark:bg-orange-900/50'
+                                }`}>
+                                  <IconComponent className={`h-5 w-5 ${
+                                    isStrength ? 'text-green-700 dark:text-green-400' : 'text-orange-700 dark:text-orange-400'
+                                  }`} />
+                                </div>
+                                <div className="flex-1 space-y-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge variant={isStrength ? 'default' : 'secondary'} className={`text-xs ${
+                                      isStrength ? 'bg-green-600' : 'bg-orange-600'
+                                    }`}>
+                                      {insight.category}
+                                    </Badge>
+                                    <Badge variant="outline" className="text-xs">
+                                      {isStrength ? 'Strength' : 'Needs Work'}
+                                    </Badge>
+                                  </div>
+                                  <p className="font-semibold text-sm text-foreground">{insight.finding}</p>
+                                  {insight.example && (
+                                    <p className="text-sm text-muted-foreground italic border-l-2 border-muted pl-3">
+                                      &ldquo;{insight.example}&rdquo;
+                                    </p>
+                                  )}
+                                  <div className="pt-2">
+                                    <p className="text-sm text-foreground flex items-start gap-2">
+                                      <Lightbulb className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                                      <span><strong>Action:</strong> {insight.actionItem}</span>
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* Legacy Recommendations (fallback if no detailed insights) */}
+              {(!finalReport.detailedInsights || finalReport.detailedInsights.length === 0) && finalReport.recommendations?.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}

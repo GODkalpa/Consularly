@@ -257,7 +257,12 @@ const InterviewStageComponent: React.FC<InterviewStageProps> = ({
                   secondsRemaining <= 10 ? 'destructive' : 
                   phase === 'prep' ? 'secondary' : 'default'
                 }
-                className="px-3 py-1.5 text-sm font-semibold backdrop-blur-md bg-opacity-90"
+                className="px-3 py-1.5 text-sm font-semibold shadow-2xl border-2 border-white/30"
+                style={{
+                  backgroundColor: secondsRemaining <= 10 ? '#dc2626' : phase === 'prep' ? '#1e293b' : '#2563eb',
+                  color: 'white',
+                  backdropFilter: 'blur(12px)'
+                }}
               >
                 {phase === 'prep' ? '🎯 Prep' : '🎤 Answer'}: {Math.max(0, secondsRemaining)}s
               </Badge>
@@ -274,7 +279,12 @@ const InterviewStageComponent: React.FC<InterviewStageProps> = ({
                   secondsRemaining <= 10 ? 'destructive' : 
                   secondsRemaining <= 30 ? 'default' : 'outline'
                 }
-                className="px-3 py-1.5 text-sm font-semibold backdrop-blur-md"
+                className="px-3 py-1.5 text-sm font-semibold shadow-2xl border-2 border-white/30"
+                style={{
+                  backgroundColor: secondsRemaining <= 10 ? '#dc2626' : secondsRemaining <= 30 ? '#2563eb' : '#475569',
+                  color: 'white',
+                  backdropFilter: 'blur(12px)'
+                }}
               >
                 ⏱️ {Math.max(0, secondsRemaining)}s
               </Badge>
