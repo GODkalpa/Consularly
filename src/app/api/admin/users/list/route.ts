@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb } from '@/lib/firebase-admin'
 
 // GET /api/admin/users/list
-// Returns users for admin dashboard
-// Query param: ?type=signup (for signup users only) or ?type=all (for all users)
+// Returns users for admin dashboard with pagination
+// Query params: 
+//   ?type=signup (signup users only) or ?type=all (all users)
+//   ?limit=100 (default 500, max 1000)
+//   ?offset=0 (for pagination)
 export async function GET(req: NextRequest) {
   try {
     await ensureFirebaseAdmin()
@@ -31,16 +34,25 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type') || 'all'
+    const limit = Math.min(parseInt(searchParams.get('limit') || '500', 10), 1000)
+    const offset = parseInt(searchParams.get('offset') || '0', 10)
 
-    let usersSnapshot
+    const db = adminDb()
     
     if (type === 'signup') {
       // For quota management - only signup users (no orgId OR has quotaLimit)
-      const allUsersSnapshot = await adminDb().collection('users')
+      // Use indexed query with limit
+      let query = db.collection('users')
         .where('role', '==', 'user')
-        .get()
+        .limit(limit)
 
-      const signupUsers = allUsersSnapshot.docs
+      if (offset > 0) {
+        query = query.offset(offset)
+      }
+
+      const snapshot = await query.get()
+
+      const signupUsers = snapshot.docs
         .filter(doc => {
           const data = doc.data()
           return !data.orgId || (typeof data.quotaLimit === 'number')
@@ -50,38 +62,54 @@ export async function GET(req: NextRequest) {
           ...doc.data()
         }))
 
-      return NextResponse.json({ users: signupUsers }, { status: 200 })
+      const response = NextResponse.json({ users: signupUsers, total: signupUsers.length }, { status: 200 })
+      response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+      return response
     } else {
-      // For user management - all users based on permissions
-      const allUsersSnap = await adminDb().collection('users').get()
+      // For user management - optimized fetching based on permissions
+      let users: any[] = []
 
-      const users = allUsersSnap.docs
-        .filter(doc => {
-          if (isSuper) return true
-          if (!callerOrgId) return doc.id === callerUid // admin without org sees only themselves
-
-          const data = doc.data() as { orgId?: string | null; role?: string }
-          const orgId = data?.orgId
-          const role = data?.role
-
-          const isSignupUser = !orgId || orgId === ''
-          const inCallerOrg = orgId === callerOrgId
-          const isCaller = doc.id === callerUid
-          const isSameRoleAdmin = role === 'admin' || role === 'super_admin'
-
-          if (isCaller) return true
-          if (inCallerOrg) return true
-          if (isSignupUser && (!role || role === 'user' || role === 'student')) return true
-          // Do not expose other org admins/users
-          if (isSameRoleAdmin && inCallerOrg) return true
-          return false
-        })
-        .map(doc => ({
+      if (isSuper) {
+        // Super admin - fetch with pagination
+        let query = db.collection('users').limit(limit)
+        if (offset > 0) {
+          query = query.offset(offset)
+        }
+        const snapshot = await query.get()
+        users = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }))
+      } else if (callerOrgId) {
+        // Regular admin with org - fetch only org members + signup users
+        const [orgUsersSnap, signupUsersSnap] = await Promise.all([
+          db.collection('users')
+            .where('orgId', '==', callerOrgId)
+            .limit(limit)
+            .get(),
+          db.collection('users')
+            .where('role', '==', 'user')
+            .limit(Math.floor(limit / 2))
+            .get()
+        ])
 
-      return NextResponse.json({ users }, { status: 200 })
+        const orgUsers = orgUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        const signupUsers = signupUsersSnap.docs
+          .filter(doc => !doc.data().orgId)
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+        
+        users = [...orgUsers, ...signupUsers]
+      } else {
+        // Admin without org - only themselves
+        const callerDoc = await db.collection('users').doc(callerUid).get()
+        if (callerDoc.exists) {
+          users = [{ id: callerDoc.id, ...callerDoc.data() }]
+        }
+      }
+
+      const response = NextResponse.json({ users, total: users.length }, { status: 200 })
+      response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+      return response
     }
   } catch (e: any) {
     console.error('[api/admin/users/list] GET error', e)

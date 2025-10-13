@@ -1,4 +1,13 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "interviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdAt", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

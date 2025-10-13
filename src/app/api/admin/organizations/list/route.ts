@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb } from '@/lib/firebase-admin'
 
 // GET /api/admin/organizations/list
-// Returns all organizations for admin dashboard
+// Returns organizations for admin dashboard with pagination
+// Query params: ?limit=500 (default 500, max 1000)
 export async function GET(req: NextRequest) {
   try {
     await ensureFirebaseAdmin()
@@ -25,13 +26,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    const { searchParams } = new URL(req.url)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '500', 10), 1000)
+
+    const db = adminDb()
+    
     // Super admins can see all organizations
     // Regular admins can only see their own organization
-    let organizationsQuery = adminDb().collection('organizations')
-    
     if (callerRole === 'admin' && callerData?.orgId) {
       // Regular admin - only their org
-      const orgSnap = await organizationsQuery.doc(callerData.orgId).get()
+      const orgSnap = await db.collection('organizations').doc(callerData.orgId).get()
       if (!orgSnap.exists) {
         return NextResponse.json({ organizations: [] }, { status: 200 })
       }
@@ -39,15 +43,22 @@ export async function GET(req: NextRequest) {
         id: orgSnap.id,
         ...orgSnap.data()
       }]
-      return NextResponse.json({ organizations }, { status: 200 })
+      const response = NextResponse.json({ organizations }, { status: 200 })
+      response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+      return response
     } else {
-      // Super admin - all orgs
-      const snapshot = await organizationsQuery.get()
+      // Super admin - all orgs with pagination
+      const snapshot = await db.collection('organizations')
+        .limit(limit)
+        .get()
+      
       const organizations = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }))
-      return NextResponse.json({ organizations }, { status: 200 })
+      const response = NextResponse.json({ organizations, total: organizations.length }, { status: 200 })
+      response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+      return response
     }
   } catch (e: any) {
     console.error('[api/admin/organizations/list] GET error', e)

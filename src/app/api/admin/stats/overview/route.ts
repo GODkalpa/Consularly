@@ -39,34 +39,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden: admin access required' }, { status: 403 })
     }
 
-    // Fetch statistics from Firestore
-    const [usersSnap, orgsSnap, interviewsSnap] = await Promise.all([
-      adminDb().collection('users').get(),
-      adminDb().collection('organizations').get(),
-      adminDb().collection('interviews').get(),
+    // Use aggregation queries for efficient counting - no full collection scans
+    const db = adminDb()
+    
+    const [usersCount, orgsCount, interviewsCount] = await Promise.all([
+      db.collection('users').count().get(),
+      db.collection('organizations').count().get(),
+      db.collection('interviews').count().get(),
     ])
 
-    const totalUsers = usersSnap.size
-    const totalOrganizations = orgsSnap.size
-    const totalInterviews = interviewsSnap.size
+    const totalUsers = usersCount.data().count
+    const totalOrganizations = orgsCount.data().count
+    const totalInterviews = interviewsCount.data().count
 
-    // Calculate active users (logged in within last 30 days)
+    // Calculate active users (logged in within last 30 days) using query
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
     
-    let activeUsers = 0
-    usersSnap.forEach((doc) => {
-      const data = doc.data()
-      const lastLoginAt = data?.lastLoginAt
-      if (lastLoginAt) {
-        const loginDate = lastLoginAt.toDate ? lastLoginAt.toDate() : new Date(lastLoginAt)
-        if (loginDate >= thirtyDaysAgo) {
-          activeUsers++
-        }
-      }
-    })
+    const activeUsersCount = await db.collection('users')
+      .where('lastLoginAt', '>=', thirtyDaysAgo)
+      .count()
+      .get()
+    
+    const activeUsers = activeUsersCount.data().count
 
-    // Calculate monthly revenue from organization plans
+    // Calculate monthly revenue - fetch only organizations with select()
+    const orgsSnap = await db.collection('organizations')
+      .select('plan')
+      .get()
+    
     let monthlyRevenue = 0
     const planPricing = {
       basic: 99,
@@ -86,20 +87,18 @@ export async function GET(request: NextRequest) {
     // For now, return 0 as placeholder
     const pendingSupport = 0
 
-    // System health: percentage of successful interviews
-    let completedInterviews = 0
-    interviewsSnap.forEach((doc) => {
-      const data = doc.data()
-      if (data?.status === 'completed') {
-        completedInterviews++
-      }
-    })
+    // System health: percentage of completed interviews using aggregation
+    const completedCount = await db.collection('interviews')
+      .where('status', '==', 'completed')
+      .count()
+      .get()
     
+    const completedInterviews = completedCount.data().count
     const systemHealth = totalInterviews > 0 
       ? Math.round((completedInterviews / totalInterviews) * 100 * 10) / 10 
       : 100
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       totalUsers,
       totalOrganizations,
       totalInterviews,
@@ -108,6 +107,11 @@ export async function GET(request: NextRequest) {
       pendingSupport,
       systemHealth,
     })
+    
+    // Cache for 30 seconds to reduce database load
+    response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    
+    return response
   } catch (e: any) {
     console.error('[api/admin/stats/overview] Error', e)
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
