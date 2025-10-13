@@ -468,7 +468,7 @@ export default function InterviewRunner() {
       console.log('🔄 Setting fallback report due to error:', fallbackReport)
       setFinalReport(fallbackReport)
     }
-  }, [session?.route, perfList, combinedAggregate])
+  }, [session?.route, perfList])
 
   // Define processAnswer before finalizeAnswer to avoid initialization error
   const processAnswer = useCallback(async (transcriptText: string) => {
@@ -1113,10 +1113,10 @@ export default function InterviewRunner() {
               )}
 
               {/* Strengths and Weaknesses */}
-              {(finalReport.strengths?.length > 0 || finalReport.weaknesses?.length > 0) && (
+              {((finalReport.strengths?.length || 0) > 0 || (finalReport.weaknesses?.length || 0) > 0) && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Strengths */}
-                  {finalReport.strengths?.length > 0 && (
+                  {(finalReport.strengths?.length || 0) > 0 && (
                     <motion.div
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -1131,7 +1131,7 @@ export default function InterviewRunner() {
                         </CardHeader>
                         <CardContent className="p-6">
                           <div className="space-y-3">
-                            {finalReport.strengths.map((strength, i) => (
+                            {finalReport.strengths?.map((strength, i) => (
                               <motion.div
                                 key={i}
                                 initial={{ opacity: 0, y: 10 }}
@@ -1150,7 +1150,7 @@ export default function InterviewRunner() {
                   )}
 
                   {/* Weaknesses */}
-                  {finalReport.weaknesses?.length > 0 && (
+                  {(finalReport.weaknesses?.length || 0) > 0 && (
                     <motion.div
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -1165,7 +1165,7 @@ export default function InterviewRunner() {
                         </CardHeader>
                         <CardContent className="p-6">
                           <div className="space-y-3">
-                            {finalReport.weaknesses.map((weakness, i) => (
+                            {finalReport.weaknesses?.map((weakness, i) => (
                               <motion.div
                                 key={i}
                                 initial={{ opacity: 0, y: 10 }}
@@ -1186,7 +1186,7 @@ export default function InterviewRunner() {
               )}
 
               {/* Detailed Insights */}
-              {finalReport.detailedInsights?.length > 0 && (
+              {(finalReport.detailedInsights?.length || 0) > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1201,7 +1201,7 @@ export default function InterviewRunner() {
                     </CardHeader>
                     <CardContent className="p-6">
                       <div className="space-y-4">
-                        {finalReport.detailedInsights.map((insight, i) => {
+                        {finalReport.detailedInsights?.map((insight, i) => {
                           const categoryIcon = {
                             'Content Quality': Target,
                             'Financial': DollarSign,

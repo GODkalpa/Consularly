@@ -35,12 +35,15 @@ export async function GET(
       return NextResponse.json({ error: 'Interview not found' }, { status: 404 })
     }
 
-    const interview = interviewSnap.data() as { userId?: string; orgId?: string } | undefined
+    const interview = interviewSnap.data()
+    if (!interview) {
+      return NextResponse.json({ error: 'Interview data not found' }, { status: 404 })
+    }
     
     // Authorization: user can view their own interviews, org members can view org interviews, admin can view any
     const canView = isAdmin || 
-                    interview?.userId === callerUid || 
-                    (interview?.orgId && interview.orgId === caller?.orgId)
+                    interview.userId === callerUid || 
+                    (interview.orgId && interview.orgId === caller?.orgId)
     
     if (!canView) {
       return NextResponse.json({ error: 'Forbidden: cannot view this interview' }, { status: 403 })
