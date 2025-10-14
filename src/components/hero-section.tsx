@@ -112,10 +112,10 @@ export default function HeroSection() {
 
     return (
         <>
-            <main className="overflow-hidden">
+            <main className="overflow-x-clip">
                 <section className="bg-background">
-                    <div className="relative pt-12 sm:pt-16 md:pt-24">
-                        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+                    <div className="relative pt-12 sm:pt-16 md:pt-24 px-4 sm:px-16 md:px-20 lg:px-24">
+                        <div className="mx-auto max-w-7xl">
                             <div className="text-center sm:mx-auto lg:mr-auto lg:mt-0">
                                 {/* Top Badge */}
                                 <div className="flex justify-center mb-6 sm:mb-8 animate-in fade-in slide-in-from-top-4 duration-1000">
@@ -127,9 +127,11 @@ export default function HeroSection() {
 
                                 {/* Headline with decorative badges */}
                                 <div ref={containerRef} className="relative mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-300 pointer-events-none select-none flex flex-col items-center">
-                                    <h1 className="relative text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-display-3 font-bold text-foreground text-center text-balance px-4">
-                                        <div className="whitespace-normal sm:whitespace-nowrap">Practice. Get Feedback.</div>
-                                        <div className="whitespace-normal sm:whitespace-nowrap">Pass Your Visa Interview</div>
+                                    <h1 className="relative text-[2.25rem] leading-[1.25] sm:text-4xl md:text-5xl lg:text-6xl xl:text-display-3 font-bold text-foreground text-center px-4 sm:leading-tight max-w-[95vw]">
+                                        <span className="block sm:inline-block">Practice.</span>{' '}
+                                        <span className="block sm:inline-block">Get Feedback.</span>
+                                        <br className="hidden sm:inline" />
+                                        <span className="block sm:inline-block">Pass Your Visa Interview</span>
                                     </h1>
                                     
                                     {/* Arrow-shaped badges beside first/last letters of each row */}
@@ -190,9 +192,8 @@ export default function HeroSection() {
                                     </div>
                                 </div>
 
-                                <p className="mx-auto mt-6 sm:mt-8 max-w-2xl text-pretty text-base sm:text-lg md:text-lead text-muted-foreground animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500 px-4">
-                                    Meet <span className="font-semibold text-foreground">Consularly</span> — an AI toolkit that helps <span className="font-semibold text-foreground">visa applicants</span>
-                                    <br />get clarity, feedback, and interview confidence
+                                <p className="mx-auto mt-6 sm:mt-8 max-w-2xl text-pretty text-base sm:text-lg md:text-lead text-muted-foreground animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500 px-4 leading-relaxed">
+                                    Meet <span className="font-semibold text-foreground">Consularly</span> — an AI toolkit that helps <span className="font-semibold text-foreground">visa applicants</span> get clarity, feedback, and interview confidence
                                 </p>
 
                                 <AnimatedGroup
