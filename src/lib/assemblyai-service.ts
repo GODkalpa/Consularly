@@ -15,6 +15,8 @@ export interface TranscriptionResult {
     end: number;
     confidence: number;
   }>;
+  language_code?: string;
+  language_confidence?: number;
 }
 
 export interface TranscriptionError {
@@ -27,6 +29,7 @@ export interface AssemblyAIConfig {
   sampleRate?: number;
   wordBoost?: string[];
   languageCode?: string;
+  enableLanguageDetection?: boolean;
 }
 
 export class AssemblyAIService {
@@ -76,9 +79,10 @@ export class AssemblyAIService {
 
       const { token } = await tokenResponse.json();
 
-      // Connect to Streaming v3 WebSocket
+      // Connect to Streaming v3 WebSocket with language detection enabled
       const sampleRate = this.config.sampleRate || 16000;
-      const socketUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=${sampleRate}&encoding=pcm_s16le&token=${token}`;
+      const enableLanguageDetection = this.config.enableLanguageDetection !== false; // Default to true
+      const socketUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=${sampleRate}&encoding=pcm_s16le&enable_extra_session_information=true&token=${token}`;
 
       this.socket = new WebSocket(socketUrl);
       
@@ -103,8 +107,16 @@ export class AssemblyAIService {
               is_final: isFinal,
               audio_start: 0,
               audio_end: 0,
-              words: []
+              words: [],
+              language_code: data.language_code,
+              language_confidence: data.language_confidence
             } as TranscriptionResult;
+            
+            // Log language detection for monitoring
+            if (isFinal && data.language_code && data.language_code !== 'en') {
+              console.warn(`🌐 Non-English language detected: ${data.language_code} (confidence: ${Math.round((data.language_confidence || 0) * 100)}%)`);
+            }
+            
             this.onTranscriptHandler?.(result);
           } else if (data.type === 'Termination') {
             console.log('AssemblyAI v3 session terminated');
@@ -268,6 +280,7 @@ export class AssemblyAIService {
 export function createAssemblyAIService(): AssemblyAIService {
   return new AssemblyAIService({
     sampleRate: 16000,
-    languageCode: 'en_us'
+    languageCode: 'en_us',
+    enableLanguageDetection: true // Enable language detection by default
   });
 }

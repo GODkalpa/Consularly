@@ -77,6 +77,8 @@ export default function InterviewRunner() {
   // Track ASR confidence from transcript segments (per-segment and aggregated)
   const asrConfidencesRef = useRef<number[]>([])
   const [latestAsrConfidence, setLatestAsrConfidence] = useState<number | null>(null)
+  // Track language detection data (for non-English detection)
+  const languageDataRef = useRef<{code: string; confidence: number}[]>([])
   const captureBodyScoreRef = useRef<(() => BodyLanguageScore | null) | null>(null)
   // Persist targets
   const firestoreInterviewIdRef = useRef<string | null>(null)
@@ -327,6 +329,8 @@ export default function InterviewRunner() {
       // Clear ASR confidence buffer for new answer
       asrConfidencesRef.current = []
       setLatestAsrConfidence(null) // Reset audio quality indicator
+      // Clear language detection buffer for new answer
+      languageDataRef.current = []
     }
     
     // Start smooth RAF-based timer
@@ -372,6 +376,8 @@ export default function InterviewRunner() {
     // Clear ASR confidence for new question
     asrConfidencesRef.current = []
     setLatestAsrConfidence(null)
+    // Clear language detection buffer for new question
+    languageDataRef.current = []
     
     // Use RAF-based timer for USA F1 as well
     timerStartTimeRef.current = performance.now()
@@ -486,12 +492,39 @@ export default function InterviewRunner() {
         ? asrConfidencesRef.current.reduce((sum, c) => sum + c, 0) / asrConfidencesRef.current.length
         : undefined
       
+      // Calculate most common language detected and its average confidence
+      let detectedLanguage: string | undefined;
+      let languageConfidence: number | undefined;
+      if (languageDataRef.current.length > 0) {
+        // Count occurrences of each language
+        const langCounts: Record<string, {count: number, totalConfidence: number}> = {};
+        languageDataRef.current.forEach(({code, confidence}) => {
+          if (!langCounts[code]) {
+            langCounts[code] = {count: 0, totalConfidence: 0};
+          }
+          langCounts[code].count++;
+          langCounts[code].totalConfidence += confidence;
+        });
+        
+        // Find most common language
+        let maxCount = 0;
+        for (const [code, data] of Object.entries(langCounts)) {
+          if (data.count > maxCount) {
+            maxCount = data.count;
+            detectedLanguage = code;
+            languageConfidence = data.totalConfidence / data.count;
+          }
+        }
+      }
+      
       console.log('📊 Scoring answer:', {
         transcriptLength: transcriptText.length,
         bodyScoreCaptured: !!capturedBodyScore,
         bodyScoreOverall: capturedBodyScore ? Math.round(capturedBodyScore.overallScore) : 'N/A',
         avgASRConfidence: avgConfidence ? Math.round(avgConfidence * 100) + '%' : 'N/A',
         confidenceSegments: asrConfidencesRef.current.length,
+        detectedLanguage: detectedLanguage || 'N/A',
+        languageConfidence: languageConfidence ? Math.round(languageConfidence * 100) + '%' : 'N/A',
       })
       
       // PERFORMANCE FIX: Run scoring and next question generation in PARALLEL
@@ -571,6 +604,9 @@ export default function InterviewRunner() {
             interviewContext: ic,
             // Pass session memory to enhance contradiction detection and fair scoring
             sessionMemory: apiSession?.sessionMemory,
+            // Pass language detection data
+            languageCode: detectedLanguage,
+            languageConfidence: languageConfidence,
           })
         }).then(async (resScore) => {
           if (resScore.ok) {
@@ -644,6 +680,8 @@ export default function InterviewRunner() {
       } : prev)
       // Clear ASR confidence buffer for next answer
       asrConfidencesRef.current = []
+      // Clear language detection buffer for next answer
+      languageDataRef.current = []
       
       // UK/France flow: new question => 30s prep again
       if (session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') {
@@ -703,6 +741,15 @@ export default function InterviewRunner() {
       asrConfidencesRef.current.push(t.confidence)
       setLatestAsrConfidence(t.confidence) // Update real-time audio quality indicator
       console.log('🎤 [STT] ASR confidence:', Math.round(t.confidence * 100) + '%', `(${asrConfidencesRef.current.length} segments)`)
+    }
+    
+    // Track language detection data
+    if (t.language_code && typeof t.language_confidence === 'number') {
+      languageDataRef.current.push({
+        code: t.language_code,
+        confidence: t.language_confidence
+      });
+      console.log('🌐 [STT] Language detected:', t.language_code, Math.round(t.language_confidence * 100) + '%');
     }
     
     const text = t.text.trim()

@@ -83,6 +83,22 @@ export interface PerAnswerScore {
   };
 }
 
+// Interview Response Interface (individual answer with metadata)
+export interface InterviewResponse {
+  question: string;
+  answer: string;
+  timestamp: string;
+  questionType?: string;
+  perf?: PerAnswerScore;
+  bodyLanguageOverall?: number | null;
+  asrConfidence?: number | null;
+  languageCode?: string; // Detected language code (e.g., 'en', 'es', 'zh')
+  languageConfidence?: number; // Confidence in language detection (0-100)
+  languageWarning?: string; // Warning if non-English detected
+  relevanceScore?: number; // Relevance to question (0-100)
+  relevanceWarning?: string; // Warning if off-topic
+}
+
 // Interview Interface
 export interface Interview {
   userId: string;

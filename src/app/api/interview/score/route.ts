@@ -4,6 +4,7 @@ import { scorePerformance } from '@/lib/performance-scoring'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
 import type { F1SessionMemory } from '@/lib/f1-mvp-session-memory'
 import { F1_MVP_SCORING_CONFIG } from '@/lib/f1-mvp-config'
+import { checkRelevance, generateRelevanceFeedback, type RelevanceResult } from '@/lib/relevance-checker'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +16,8 @@ export async function POST(request: NextRequest) {
       assemblyConfidence,
       interviewContext,
       sessionMemory,
+      languageCode,
+      languageConfidence,
     }: {
       question: string
       answer: string
@@ -22,10 +25,24 @@ export async function POST(request: NextRequest) {
       assemblyConfidence?: number
       interviewContext: AIScoringRequest['interviewContext']
       sessionMemory?: F1SessionMemory
+      languageCode?: string
+      languageConfidence?: number
     } = body
 
     if (!question || typeof answer !== 'string' || !interviewContext) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+    
+    // LANGUAGE DETECTION: Check if non-English speech was detected
+    let languageWarning: string | undefined;
+    let languagePenalty = 0;
+    const isNonEnglish = languageCode && languageCode !== 'en' && (languageConfidence || 0) > 0.2;
+    
+    if (isNonEnglish) {
+      const langConfidencePercent = Math.round((languageConfidence || 0) * 100);
+      languageWarning = `Non-English language detected: ${languageCode} (${langConfidencePercent}% confidence). Interview must be conducted in English.`;
+      languagePenalty = 50; // 50% reduction in content score for non-English
+      console.warn(`🌐 [Language Detection] ${languageWarning}`);
     }
 
     // CRITICAL FIX: If body language is missing, use penalty score instead of generous baseline
@@ -54,6 +71,19 @@ export async function POST(request: NextRequest) {
     
     // Define weights early for validation response
     const weights = F1_MVP_SCORING_CONFIG.weights
+    
+    // RELEVANCE CHECK: Determine if answer addresses the question
+    const relevanceCheck: RelevanceResult = checkRelevance(question, answer);
+    const relevanceFeedback = generateRelevanceFeedback(relevanceCheck);
+    
+    console.log('🎯 [Relevance Check]:', {
+      score: relevanceCheck.score,
+      overlap: Math.round(relevanceCheck.overlap * 100) + '%',
+      isOffTopic: relevanceCheck.isOffTopic,
+      penalty: relevanceCheck.penalty,
+      foundTerms: relevanceCheck.foundTerms.length,
+      missingTerms: relevanceCheck.missingTerms.length,
+    });
     
     // CRITICAL FIX: Count words to prevent scoring empty/minimal answers
     const wordCount = answer.trim().split(/\s+/).filter(w => w.length > 0).length
@@ -104,7 +134,55 @@ export async function POST(request: NextRequest) {
         overall: overallWithBodyOnly,
         categories: { content: 0, speech: 0, bodyLanguage: bodyOnlyScore },
         weights,
+        languageWarning,
+        relevanceCheck: relevanceCheck,
       }, { status: 200 }) // 200 status since it's a valid request, just poor answer
+    }
+    
+    // CRITICAL FIX: If answer is completely off-topic, apply severe penalty
+    if (relevanceCheck.isOffTopic) {
+      const bodyOnlyScore = bodyLanguageMissing ? 0 : Math.round(defaultBody!.overallScore)
+      const minimalContentScore = 15; // Maximum 15/100 for off-topic content
+      const minimalSpeechScore = perf.categories.speech > 50 ? 50 : perf.categories.speech; // Cap speech at 50 for off-topic
+      
+      const offTopicOverall = Math.round(
+        weights.content * minimalContentScore +
+        weights.speech * minimalSpeechScore +
+        weights.body * bodyOnlyScore
+      );
+      
+      console.warn(`⚠️ [Off-Topic] Answer does not address the question (${Math.round(relevanceCheck.overlap * 100)}% overlap)`);
+      
+      const allRecommendations = [
+        ...relevanceFeedback,
+        'Listen carefully to the question before answering',
+        'Address the specific points mentioned in the question',
+        'Include relevant details and examples related to the topic',
+      ];
+      
+      return NextResponse.json({
+        error: 'Off-topic answer',
+        rubric: { 
+          communication: 20, 
+          relevance: 10, 
+          specificity: 15, 
+          consistency: 50, 
+          academicPreparedness: 15, 
+          financialCapability: 15, 
+          intentToReturn: 15 
+        },
+        summary: relevanceCheck.warning || 'Your answer does not address the question. Please listen carefully and provide relevant information.',
+        recommendations: allRecommendations.slice(0, 5),
+        redFlags: ['Answer is off-topic or unrelated to the question asked', ...relevanceFeedback],
+        contentScore: minimalContentScore,
+        speechScore: minimalSpeechScore,
+        bodyScore: bodyOnlyScore,
+        overall: offTopicOverall,
+        categories: { content: minimalContentScore, speech: minimalSpeechScore, bodyLanguage: bodyOnlyScore },
+        weights,
+        languageWarning,
+        relevanceCheck: relevanceCheck,
+      }, { status: 200 })
     }
 
     // DEBUG: Log the answer being scored
@@ -132,9 +210,22 @@ export async function POST(request: NextRequest) {
       aiRes = null
     }
 
-    const contentScore = aiRes?.contentScore ?? perf.categories.content
+    let contentScore = aiRes?.contentScore ?? perf.categories.content
     const speechScore = perf.categories.speech
     const bodyScore = perf.categories.bodyLanguage
+    
+    // Apply language penalty to content score if non-English detected
+    if (languagePenalty > 0) {
+      contentScore = Math.round(contentScore * (1 - languagePenalty / 100));
+      console.log(`📉 Applied ${languagePenalty}% language penalty: ${aiRes?.contentScore ?? perf.categories.content} → ${contentScore}`);
+    }
+    
+    // Apply relevance penalty to content score
+    if (relevanceCheck.penalty > 0 && !relevanceCheck.isOffTopic) {
+      const originalContentScore = contentScore;
+      contentScore = Math.max(0, contentScore - relevanceCheck.penalty);
+      console.log(`📉 Applied relevance penalty: ${originalContentScore} → ${contentScore} (penalty: -${relevanceCheck.penalty})`);
+    }
     
     // CRITICAL FIX: If body language is missing, reduce its weight to 0 and redistribute
     // This prevents students from getting free points for missing data
@@ -153,15 +244,34 @@ export async function POST(request: NextRequest) {
       speech: speechScore,
       body: bodyScore,
       bodyMissing: bodyLanguageMissing,
+      languagePenalty,
+      relevancePenalty: relevanceCheck.penalty,
       weights: adjustedWeights,
       overall,
       usedLLM: !!aiRes,
     })
+    
+    // Combine red flags from AI, language detection, and relevance check
+    const allRedFlags = [
+      ...(aiRes?.redFlags ?? []),
+      ...(languageWarning ? [languageWarning] : []),
+      ...(relevanceCheck.warning && relevanceCheck.penalty > 20 ? [relevanceCheck.warning] : []),
+    ];
+    
+    // Combine recommendations
+    const allRecommendations = [
+      ...(aiRes?.recommendations ?? [
+        'Address all parts of the question directly.',
+        'Add specific numbers, names, and evidence.',
+        'Reduce filler words and maintain a steady pace.',
+      ]),
+      ...relevanceFeedback.slice(0, 2), // Add up to 2 relevance feedback items
+    ].slice(0, 5); // Limit to 5 recommendations
 
     return NextResponse.json({
       rubric: aiRes?.rubric ?? {
         communication: perf.details.speech.clarityScore,
-        relevance: 60,
+        relevance: Math.max(20, relevanceCheck.score),
         specificity: 50,
         consistency: 65,
         academicPreparedness: 60,
@@ -172,12 +282,8 @@ export async function POST(request: NextRequest) {
         perf.details.content.notes.concat(perf.details.speech.notes).join(' ') ||
         'Good effort. Improve structure, reduce fillers, and add concrete details.'
       ),
-      recommendations: aiRes?.recommendations ?? [
-        'Address all parts of the question directly.',
-        'Add specific numbers, names, and evidence.',
-        'Reduce filler words and maintain a steady pace.',
-      ],
-      redFlags: aiRes?.redFlags ?? [],
+      recommendations: allRecommendations,
+      redFlags: allRedFlags,
       contentScore,
       speechScore,
       bodyScore,
@@ -188,12 +294,22 @@ export async function POST(request: NextRequest) {
         bodyLanguage: bodyScore,
       },
       weights: adjustedWeights,
+      languageWarning,
+      relevanceCheck: {
+        score: relevanceCheck.score,
+        overlap: relevanceCheck.overlap,
+        penalty: relevanceCheck.penalty,
+        isOffTopic: relevanceCheck.isOffTopic,
+      },
       // Also return some diagnostics for transparency
       diagnostics: {
         heuristic: perf,
         usedLLM: !!aiRes,
         bodyLanguageMissing,
         asrConfidenceProvided: typeof assemblyConfidence === 'number',
+        languageDetected: languageCode,
+        languageConfidence: languageConfidence,
+        relevanceScore: relevanceCheck.score,
       },
     })
   } catch (error) {
