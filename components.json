@@ -19,6 +19,11 @@
     "hooks": "@/hooks"
   },
   "registries": {
-	  "@tailark": "https://tailark.com/r/{name}.json"
+	  "@tailark":{
+        "url": "https://tailark.com/r/{name}.json"
+    },
+    "@kibo-ui":{
+        "url": "https://www.kibo-ui.com/r/{name}.json"
+    }
 	}
 }

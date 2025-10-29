@@ -40,18 +40,13 @@ export async function POST(req: NextRequest) {
     const callerOrgId = callerData?.orgId || ''
 
     if (callerRole === 'admin') {
-      // Admins can only create regular users within their organization
-      if (role !== 'user') {
-        return NextResponse.json({ error: 'Admins can only create users with role "user"' }, { status: 403 })
-      }
+      // Admins can create any user within their organization
       if (!orgId) {
         orgId = callerOrgId
       }
       if (!orgId || orgId !== callerOrgId) {
         return NextResponse.json({ error: 'Admins can only create users in their own organization' }, { status: 403 })
       }
-    } else if (callerRole === 'super_admin') {
-      // Super admins may create any role; if creating admin, orgId is optional
     } else {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
