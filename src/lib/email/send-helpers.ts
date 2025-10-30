@@ -47,7 +47,6 @@ export async function sendAccountCreationEmail(params: {
   resetLink: string;
   role: string;
   orgName?: string;
-  createdBy: string;
 }) {
   const emailService = getEmailService();
   
@@ -59,7 +58,6 @@ export async function sendAccountCreationEmail(params: {
     resetLink: params.resetLink,
     role: params.role,
     orgName: params.orgName,
-    createdBy: params.createdBy,
     dashboardLink,
   });
 

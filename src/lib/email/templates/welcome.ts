@@ -13,8 +13,6 @@ interface WelcomeEmailData {
 export function generateWelcomeEmail(data: WelcomeEmailData): { subject: string; html: string; text: string } {
   const subject = `Welcome to Consularly, ${data.displayName}! 🎉`;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  
   const html = `
 <!DOCTYPE html>
 <html>
@@ -24,21 +22,21 @@ export function generateWelcomeEmail(data: WelcomeEmailData): { subject: string;
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
     .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-    .header { background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%); padding: 40px 20px; text-align: center; }
+    .header { background-color: #4840A3; padding: 40px 20px; text-align: center; }
     .header h1 { color: #ffffff; margin: 10px 0 0 0; font-size: 28px; }
-    .logo { max-width: 180px; height: auto; margin-bottom: 10px; }
+    .logo { max-width: 180px; height: auto; margin-bottom: 10px; background-color: white; padding: 8px; border-radius: 8px; }
     .content { padding: 40px 30px; }
-    .button { display: inline-block; padding: 14px 32px; background-color: #1d4ed8; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 0; }
-    .button:hover { background-color: #1e40af; }
-    .feature-box { background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px 20px; margin: 15px 0; }
+    .button { display: inline-block; padding: 14px 32px; background-color: #4840A3; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 0; }
+    .button:hover { background-color: #3a327d; }
+    .feature-box { background-color: #D8EFF7; border-left: 4px solid #9CBBFC; padding: 15px 20px; margin: 15px 0; }
     .footer { background-color: #f8fafc; padding: 30px; text-align: center; font-size: 14px; color: #64748b; }
-    .footer a { color: #1d4ed8; text-decoration: none; }
+    .footer a { color: #4840A3; text-decoration: none; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <img src="${appUrl}/Consularly.png" alt="Consularly" class="logo" />
+      <img src="https://res.cloudinary.com/dpkstuci5/image/upload/v1761822845/email-assets/consularly-logo.png" alt="Consularly" class="logo" />
       <h1>Welcome to Consularly! 🎉</h1>
     </div>
     
@@ -83,7 +81,7 @@ export function generateWelcomeEmail(data: WelcomeEmailData): { subject: string;
       If you have any questions or need assistance, just reply to this email or visit our dashboard for support resources.</p>
       
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${data.dashboardLink}" class="button" style="background-color: #059669;">Go to Dashboard</a>
+        <a href="${data.dashboardLink}" class="button">Go to Dashboard</a>
       </div>
       
       <p>Good luck with your visa interview preparation!</p>

@@ -17,8 +17,6 @@ interface OrgWelcomeEmailData {
 export function generateOrgWelcomeEmail(data: OrgWelcomeEmailData): { subject: string; html: string; text: string } {
   const subject = `Welcome to Consularly - ${data.orgName} is All Set! 🚀`;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
   const planFeatures = {
     basic: ['Logo customization', 'Primary color branding', 'Company name display'],
     premium: ['All Basic features', 'Secondary colors', 'Tagline & welcome message', 'Background images', 'Custom fonts', 'Social links'],
@@ -34,24 +32,24 @@ export function generateOrgWelcomeEmail(data: OrgWelcomeEmailData): { subject: s
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
     .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-    .header { background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); padding: 40px 20px; text-align: center; }
+    .header { background-color: #4840A3; padding: 40px 20px; text-align: center; }
     .header h1 { color: #ffffff; margin: 10px 0 0 0; font-size: 28px; }
-    .logo { max-width: 180px; height: auto; margin-bottom: 10px; }
+    .logo { max-width: 180px; height: auto; margin-bottom: 10px; background-color: white; padding: 8px; border-radius: 8px; }
     .content { padding: 40px 30px; }
-    .button { display: inline-block; padding: 14px 32px; background-color: #7c3aed; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 5px; }
-    .feature-box { background-color: #faf5ff; border-left: 4px solid #7c3aed; padding: 15px 20px; margin: 15px 0; }
-    .badge { display: inline-block; padding: 4px 12px; background-color: #7c3aed; color: #ffffff; border-radius: 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
-    .stat-box { background-color: #f0f9ff; border-radius: 8px; padding: 20px; text-align: center; margin: 10px; display: inline-block; min-width: 150px; }
-    .stat-number { font-size: 32px; font-weight: bold; color: #1d4ed8; }
+    .button { display: inline-block; padding: 14px 32px; background-color: #4840A3; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 5px; }
+    .feature-box { background-color: #D8EFF7; border-left: 4px solid #9CBBFC; padding: 15px 20px; margin: 15px 0; }
+    .badge { display: inline-block; padding: 4px 12px; background-color: #4840A3; color: #ffffff; border-radius: 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
+    .stat-box { background-color: #D8EFF7; border-radius: 8px; padding: 20px; text-align: center; margin: 10px; display: inline-block; min-width: 150px; }
+    .stat-number { font-size: 32px; font-weight: bold; color: #4840A3; }
     .footer { background-color: #f8fafc; padding: 30px; text-align: center; font-size: 14px; color: #64748b; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <img src="${appUrl}/Consularly.png" alt="Consularly" class="logo" />
+      <img src="https://res.cloudinary.com/dpkstuci5/image/upload/v1761822845/email-assets/consularly-logo.png" alt="Consularly" class="logo" />
       <h1>🎉 ${data.orgName} is Live!</h1>
-      <p style="color: #e9d5ff; margin: 10px 0;">Your organization is ready to start preparing students for visa interviews</p>
+      <p style="color: rgba(255,255,255,0.9); margin: 10px 0;">Your organization is ready to start preparing students for visa interviews</p>
     </div>
     
     <div class="content">
@@ -76,7 +74,7 @@ export function generateOrgWelcomeEmail(data: OrgWelcomeEmailData): { subject: s
         <strong>1. Customize Your Branding</strong><br>
         Add your logo, colors, and company information to create a branded experience for your students.
         <div style="margin-top: 10px;">
-          <a href="${data.brandingLink}" style="color: #7c3aed; text-decoration: none; font-weight: 600;">Customize Branding →</a>
+          <a href="${data.brandingLink}" style="color: #4840A3; text-decoration: none; font-weight: 600;">Customize Branding →</a>
         </div>
       </div>
       
@@ -84,7 +82,7 @@ export function generateOrgWelcomeEmail(data: OrgWelcomeEmailData): { subject: s
         <strong>2. Add Your First Students</strong><br>
         Create student accounts and start assigning interview practices.
         <div style="margin-top: 10px;">
-          <a href="${data.studentsLink}" style="color: #7c3aed; text-decoration: none; font-weight: 600;">Manage Students →</a>
+          <a href="${data.studentsLink}" style="color: #4840A3; text-decoration: none; font-weight: 600;">Manage Students →</a>
         </div>
       </div>
       
@@ -92,7 +90,7 @@ export function generateOrgWelcomeEmail(data: OrgWelcomeEmailData): { subject: s
         <strong>3. Start Interview Simulations</strong><br>
         Begin conducting AI-powered mock interviews for USA, UK, or France visa preparation.
         <div style="margin-top: 10px;">
-          <a href="${data.dashboardLink}" style="color: #7c3aed; text-decoration: none; font-weight: 600;">Go to Dashboard →</a>
+          <a href="${data.dashboardLink}" style="color: #4840A3; text-decoration: none; font-weight: 600;">Go to Dashboard →</a>
         </div>
       </div>
       
@@ -119,14 +117,14 @@ export function generateOrgWelcomeEmail(data: OrgWelcomeEmailData): { subject: s
         <li><strong>Monitor Quota:</strong> Keep an eye on your interview credits and plan upgrades proactively</li>
       </ol>
       
-      <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px 20px; margin: 20px 0;">
+      <div style="background-color: #FFF8E1; border-left: 4px solid #F9CD6A; padding: 15px 20px; margin: 20px 0;">
         <strong>📞 Need Help?</strong><br>
         Our support team is here to help you get the most out of Consularly. Reply to this email or contact us at support@consularly.com
       </div>
       
       <div style="text-align: center; margin: 40px 0;">
         <a href="${data.dashboardLink}" class="button">Go to Organization Dashboard</a>
-        <a href="${data.brandingLink}" class="button" style="background-color: #059669;">Customize Branding</a>
+        <a href="${data.brandingLink}" class="button" style="background-color: #F9CD6A; color: #000;">Customize Branding</a>
       </div>
       
       <p>We're excited to see ${data.orgName} help students achieve their visa interview goals!</p>
@@ -138,9 +136,9 @@ export function generateOrgWelcomeEmail(data: OrgWelcomeEmailData): { subject: s
     <div class="footer">
       <p>© ${new Date().getFullYear()} Consularly. All rights reserved.</p>
       <p>
-        <a href="${data.dashboardLink}" style="color: #7c3aed;">Dashboard</a> • 
-        <a href="mailto:support@consularly.com" style="color: #7c3aed;">Support</a> • 
-        <a href="#" style="color: #7c3aed;">Documentation</a>
+        <a href="${data.dashboardLink}" style="color: #4840A3;">Dashboard</a> • 
+        <a href="mailto:support@consularly.com" style="color: #4840A3;">Support</a> • 
+        <a href="#" style="color: #4840A3;">Documentation</a>
       </p>
     </div>
   </div>

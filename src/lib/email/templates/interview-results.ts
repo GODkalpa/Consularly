@@ -38,7 +38,7 @@ export function generateInterviewResultsEmail(data: InterviewResultsEmailData): 
     rejected: '#dc2626'
   }[data.decision];
 
-  const orgColor = data.orgBranding?.primaryColor || '#1d4ed8';
+  const orgColor = data.orgBranding?.primaryColor || '#4840A3';
   const orgName = data.orgName || 'Consularly';
 
   const subject = `${decisionEmoji} Your ${data.interviewType} Interview Results - ${data.overall}/100`;
@@ -52,7 +52,7 @@ export function generateInterviewResultsEmail(data: InterviewResultsEmailData): 
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
     .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-    .header { background: linear-gradient(135deg, ${orgColor} 0%, ${orgColor}dd 100%); padding: 40px 20px; text-align: center; }
+    .header { background-color: ${orgColor}; padding: 40px 20px; text-align: center; }
     .header h1 { color: #ffffff; margin: 0; font-size: 28px; }
     .content { padding: 40px 30px; }
     .score-badge { display: inline-block; padding: 20px 40px; background-color: ${decisionColor}; color: #ffffff; border-radius: 12px; font-size: 48px; font-weight: bold; margin: 20px 0; }
@@ -98,7 +98,7 @@ export function generateInterviewResultsEmail(data: InterviewResultsEmailData): 
         ${data.weaknesses.slice(0, 5).map(w => `<div class="weakness">• ${w}</div>`).join('')}
       ` : ''}
       
-      <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px 20px; margin: 25px 0;">
+      <div style="background-color: #D8EFF7; border-left: 4px solid #9CBBFC; padding: 15px 20px; margin: 25px 0;">
         <strong>💡 What's Next?</strong><br>
         ${data.decision === 'accepted' 
           ? 'Great job! You\'re well-prepared. Keep practicing to maintain this level of performance.'
@@ -130,7 +130,7 @@ export function generateInterviewResultsEmail(data: InterviewResultsEmailData): 
         ${data.decision !== 'accepted' ? '<li><strong>Seek guidance:</strong> Consult with your counselor about challenging areas</li>' : ''}
       </ol>
       
-      <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px 20px; margin: 20px 0;">
+      <div style="background-color: #FFF8E1; border-left: 4px solid #F9CD6A; padding: 15px 20px; margin: 20px 0;">
         <strong>💪 Remember:</strong> Every interview is a learning opportunity. Use this feedback to improve and build confidence for your actual visa interview!
       </div>
       

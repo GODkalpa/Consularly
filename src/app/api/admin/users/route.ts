@@ -99,7 +99,6 @@ export async function POST(req: NextRequest) {
         resetLink,
         role,
         orgName,
-        createdBy: callerData?.displayName || 'Administrator',
       }).catch((e) => {
         console.warn('[api/admin/users] Account creation email failed:', e)
       })

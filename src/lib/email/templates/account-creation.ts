@@ -9,7 +9,6 @@ interface AccountCreationEmailData {
   resetLink: string;
   role: string;
   orgName?: string;
-  createdBy: string;
   dashboardLink: string;
 }
 
@@ -18,8 +17,6 @@ export function generateAccountCreationEmail(data: AccountCreationEmailData): { 
   const subject = isOrgMember 
     ? `Your ${data.orgName} Account Has Been Created`
     : `Your Consularly Account Has Been Created`;
-
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
   const html = `
 <!DOCTYPE html>
@@ -30,20 +27,20 @@ export function generateAccountCreationEmail(data: AccountCreationEmailData): { 
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
     .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-    .header { background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%); padding: 40px 20px; text-align: center; }
+    .header { background-color: #4840A3; padding: 40px 20px; text-align: center; }
     .header h1 { color: #ffffff; margin: 10px 0 0 0; font-size: 28px; }
-    .logo { max-width: 180px; height: auto; margin-bottom: 10px; }
+    .logo { max-width: 180px; height: auto; margin-bottom: 10px; background-color: white; padding: 8px; border-radius: 8px; }
     .content { padding: 40px 30px; }
-    .button { display: inline-block; padding: 14px 32px; background-color: #1d4ed8; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 0; }
-    .info-box { background-color: #eff6ff; border: 2px solid #3b82f6; border-radius: 8px; padding: 20px; margin: 20px 0; }
-    .alert-box { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px 20px; margin: 20px 0; }
+    .button { display: inline-block; padding: 14px 32px; background-color: #4840A3; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 0; }
+    .info-box { background-color: #D8EFF7; border: 2px solid #9CBBFC; border-radius: 8px; padding: 20px; margin: 20px 0; }
+    .alert-box { background-color: #FFF8E1; border-left: 4px solid #F9CD6A; padding: 15px 20px; margin: 20px 0; }
     .footer { background-color: #f8fafc; padding: 30px; text-align: center; font-size: 14px; color: #64748b; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <img src="${appUrl}/Consularly.png" alt="Consularly" class="logo" />
+      <img src="https://res.cloudinary.com/dpkstuci5/image/upload/v1761822845/email-assets/consularly-logo.png" alt="Consularly" class="logo" />
       <h1>🎉 Account Created!</h1>
     </div>
     
@@ -51,9 +48,9 @@ export function generateAccountCreationEmail(data: AccountCreationEmailData): { 
       <h2>Hi ${data.displayName},</h2>
       
       ${isOrgMember ? `
-        <p><strong>${data.createdBy}</strong> has created an account for you on ${data.orgName}'s visa interview preparation platform powered by Consularly.</p>
+        <p>An account has been created for you on <strong>${data.orgName}</strong>'s visa interview preparation platform powered by Consularly.</p>
       ` : `
-        <p><strong>${data.createdBy}</strong> has created an account for you on Consularly.</p>
+        <p>An account has been created for you on <strong>Consularly</strong>.</p>
       `}
       
       <div class="info-box">
@@ -100,7 +97,7 @@ export function generateAccountCreationEmail(data: AccountCreationEmailData): { 
       If you have any questions or didn't request this account, please reply to this email or contact support.</p>
       
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${data.dashboardLink}" style="color: #1d4ed8; text-decoration: none;">View Dashboard →</a>
+        <a href="${data.dashboardLink}" style="color: #4840A3; text-decoration: none;">View Dashboard →</a>
       </div>
       
       <p>Best regards,<br>
@@ -110,8 +107,8 @@ export function generateAccountCreationEmail(data: AccountCreationEmailData): { 
     <div class="footer">
       <p>© ${new Date().getFullYear()} Consularly. All rights reserved.</p>
       <p>
-        <a href="${data.dashboardLink}" style="color: #1d4ed8;">Dashboard</a> • 
-        <a href="mailto:support@consularly.com" style="color: #1d4ed8;">Support</a>
+        <a href="${data.dashboardLink}" style="color: #4840A3;">Dashboard</a> • 
+        <a href="mailto:support@consularly.com" style="color: #4840A3;">Support</a>
       </p>
     </div>
   </div>
@@ -125,8 +122,8 @@ Account Created!
 Hi ${data.displayName},
 
 ${isOrgMember 
-  ? `${data.createdBy} has created an account for you on ${data.orgName}'s visa interview preparation platform powered by Consularly.`
-  : `${data.createdBy} has created an account for you on Consularly.`
+  ? `An account has been created for you on ${data.orgName}'s visa interview preparation platform powered by Consularly.`
+  : `An account has been created for you on Consularly.`
 }
 
 YOUR ACCOUNT DETAILS

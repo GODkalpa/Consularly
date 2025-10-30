@@ -149,7 +149,6 @@ export async function POST(req: NextRequest) {
               resetLink,
               role: 'Organization Admin',
               orgName: name,
-              createdBy: callerData?.displayName || 'System Administrator',
             })
             console.log('[api/admin/organizations] Account creation email sent to:', orgEmail)
           } catch (e: any) {

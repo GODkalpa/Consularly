@@ -25,8 +25,6 @@ export function generateQuotaAlertEmail(data: QuotaAlertEmailData): { subject: s
 
   const subject = `${urgency.emoji} ${data.orgName} - ${percentage}% Quota Used`;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
   const html = `
 <!DOCTYPE html>
 <html>
@@ -38,7 +36,7 @@ export function generateQuotaAlertEmail(data: QuotaAlertEmailData): { subject: s
     .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
     .header { background-color: ${urgency.color}; padding: 40px 20px; text-align: center; }
     .header h1 { color: #ffffff; margin: 10px 0 0 0; font-size: 28px; }
-    .logo { max-width: 180px; height: auto; margin-bottom: 10px; }
+    .logo { max-width: 180px; height: auto; margin-bottom: 10px; background-color: white; padding: 8px; border-radius: 8px; }
     .content { padding: 40px 30px; }
     .progress-bar { width: 100%; height: 30px; background-color: #e5e7eb; border-radius: 15px; overflow: hidden; margin: 20px 0; }
     .progress-fill { height: 100%; background-color: ${urgency.color}; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; transition: width 0.3s; }
@@ -53,7 +51,7 @@ export function generateQuotaAlertEmail(data: QuotaAlertEmailData): { subject: s
 <body>
   <div class="container">
     <div class="header">
-      <img src="${appUrl}/Consularly.png" alt="Consularly" class="logo" />
+      <img src="https://res.cloudinary.com/dpkstuci5/image/upload/v1761822845/email-assets/consularly-logo.png" alt="Consularly" class="logo" />
       <h1>${urgency.emoji} Quota ${urgency.level}</h1>
       <p style="color: rgba(255,255,255,0.9); margin: 10px 0;">${data.orgName}</p>
     </div>
@@ -105,10 +103,10 @@ export function generateQuotaAlertEmail(data: QuotaAlertEmailData): { subject: s
       
       <div style="text-align: center; margin: 40px 0;">
         <a href="${data.upgradeLink}" class="button">Upgrade Plan</a>
-        <a href="${data.dashboardLink}" class="button" style="background-color: #1d4ed8;">View Dashboard</a>
+        <a href="${data.dashboardLink}" class="button" style="background-color: #4840A3;">View Dashboard</a>
       </div>
       
-      <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px 20px; margin: 20px 0;">
+      <div style="background-color: #D8EFF7; border-left: 4px solid #9CBBFC; padding: 15px 20px; margin: 20px 0;">
         <strong>💡 Pro Tip:</strong> Set up automatic notifications in your dashboard to receive alerts before hitting quota limits. This helps you plan upgrades proactively.
       </div>
       
@@ -122,9 +120,9 @@ export function generateQuotaAlertEmail(data: QuotaAlertEmailData): { subject: s
     <div class="footer">
       <p>© ${new Date().getFullYear()} Consularly. All rights reserved.</p>
       <p>
-        <a href="${data.dashboardLink}" style="color: #1d4ed8;">Dashboard</a> • 
-        <a href="${data.upgradeLink}" style="color: #1d4ed8;">Upgrade</a> • 
-        <a href="mailto:support@consularly.com" style="color: #1d4ed8;">Support</a>
+        <a href="${data.dashboardLink}" style="color: #4840A3;">Dashboard</a> • 
+        <a href="${data.upgradeLink}" style="color: #4840A3;">Upgrade</a> • 
+        <a href="mailto:support@consularly.com" style="color: #4840A3;">Support</a>
       </p>
     </div>
   </div>
