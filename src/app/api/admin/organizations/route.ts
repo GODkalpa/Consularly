@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin'
-import { sendOrgWelcomeEmail } from '@/lib/email/send-helpers'
+import { sendOrgWelcomeEmail, sendAccountCreationEmail } from '@/lib/email/send-helpers'
 
 // POST /api/admin/organizations
 // Creates a new organization document in Firestore. Admin-only.
@@ -88,21 +88,109 @@ export async function POST(req: NextRequest) {
 
     const ref = await adminDb().collection('organizations').add(organizationDoc)
 
-    // Send organization welcome email (non-blocking)
-    if (callerData?.email) {
-      sendOrgWelcomeEmail({
-        to: callerData.email,
-        adminName: callerData.displayName || 'Administrator',
-        orgName: name,
-        orgId: ref.id,
-        plan,
-        quotaLimit,
-      }).catch((e) => {
-        console.warn('[api/admin/organizations] Org welcome email failed:', e)
-      })
+    // Create or assign user account for the organization email
+    let userCreated = false
+    let resetLink = ''
+    if (body.email) {
+      const orgEmail = String(body.email).trim()
+      const orgContactPerson = body.contactPerson ? String(body.contactPerson).trim() : 'Organization Admin'
+      
+      try {
+        // Check if user with this email already exists
+        const usersRef = adminDb().collection('users')
+        const existingUserSnap = await usersRef.where('email', '==', orgEmail).limit(1).get()
+        
+        if (!existingUserSnap.empty) {
+          // User exists - assign them to this organization
+          const existingUserDoc = existingUserSnap.docs[0]
+          const existingData = existingUserDoc.data()
+          
+          // Only update role if they're not already a system admin
+          const updates: any = {
+            orgId: ref.id,
+            updatedAt: FieldValue.serverTimestamp(),
+          }
+          
+          // Don't demote system admins to regular users
+          if (existingData?.role !== 'admin') {
+            updates.role = 'user'
+          }
+          
+          await usersRef.doc(existingUserDoc.id).update(updates)
+          console.log('[api/admin/organizations] Assigned existing user to org:', orgEmail)
+        } else {
+          // User doesn't exist - create new account
+          const authUser = await adminAuth().createUser({
+            email: orgEmail,
+            displayName: orgContactPerson,
+            emailVerified: false,
+          })
+          
+          // Create user document in Firestore
+          await usersRef.doc(authUser.uid).set({
+            email: orgEmail,
+            displayName: orgContactPerson,
+            role: 'user', // Organization admin is a regular user, not system admin
+            orgId: ref.id,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+          
+          // Generate password reset link
+          resetLink = await adminAuth().generatePasswordResetLink(orgEmail)
+          userCreated = true
+          console.log('[api/admin/organizations] Created new user for org:', orgEmail)
+          
+          // Send account creation email with password reset link
+          try {
+            await sendAccountCreationEmail({
+              to: orgEmail,
+              displayName: orgContactPerson,
+              resetLink,
+              role: 'Organization Admin',
+              orgName: name,
+              createdBy: callerData?.displayName || 'System Administrator',
+            })
+            console.log('[api/admin/organizations] Account creation email sent to:', orgEmail)
+          } catch (e: any) {
+            console.warn('[api/admin/organizations] Account creation email failed:', e.message)
+          }
+        }
+      } catch (e: any) {
+        console.warn('[api/admin/organizations] Failed to create/assign user:', e.message)
+        // Don't fail the org creation if user creation fails
+      }
     }
 
-    return NextResponse.json({ id: ref.id }, { status: 201 })
+    // Send organization welcome email to the org email (not the creating admin)
+    let emailError: string | null = null
+    const orgEmail = body.email ? String(body.email).trim() : null
+    const orgContactPerson = body.contactPerson ? String(body.contactPerson).trim() : 'Administrator'
+    
+    if (orgEmail) {
+      try {
+        await sendOrgWelcomeEmail({
+          to: orgEmail,
+          adminName: orgContactPerson,
+          orgName: name,
+          orgId: ref.id,
+          plan,
+          quotaLimit,
+        })
+        console.log('[api/admin/organizations] Welcome email sent to:', orgEmail)
+      } catch (e: any) {
+        emailError = e?.message || 'Email service error'
+        console.error('[api/admin/organizations] Org welcome email failed:', e)
+      }
+    }
+
+    return NextResponse.json({ 
+      id: ref.id,
+      emailSent: !emailError && !!orgEmail,
+      emailError: emailError || undefined,
+      userCreated,
+      resetLink: userCreated ? resetLink : undefined,
+    }, { status: 201 })
   } catch (e: any) {
     console.error('[api/admin/organizations] POST error', e)
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })

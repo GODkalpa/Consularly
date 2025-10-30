@@ -267,7 +267,35 @@ export function OrganizationManagement() {
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Failed to create organization')
 
-      toast.success('Organization created')
+      // Build success message based on what happened
+      let description = ''
+      if (data.userCreated) {
+        description = `✅ Account created for ${newEmail}\n`
+        if (data.resetLink) {
+          // Copy reset link to clipboard
+          try {
+            await navigator.clipboard.writeText(data.resetLink)
+            description += '📋 Password reset link copied to clipboard'
+          } catch {
+            description += `🔗 Reset link: ${data.resetLink.substring(0, 50)}...`
+          }
+        }
+      } else if (newEmail) {
+        description = `✅ Existing user ${newEmail} assigned to organization`
+      }
+      
+      // Add email status
+      if (data.emailSent) {
+        description += description ? '\n📧 Welcome email sent' : '📧 Welcome email sent'
+      } else if (data.emailError) {
+        description += description ? `\n⚠️ Email failed: ${data.emailError}` : `⚠️ Email failed: ${data.emailError}`
+      }
+
+      toast.success('Organization created successfully', { 
+        description: description || 'Organization is ready to use',
+        duration: 8000, // Longer duration so user can read the reset link message
+      })
+      
       setIsCreateDialogOpen(false)
       setNewName(''); setNewEmail(''); setNewContactPerson(''); setNewPhone(''); setNewType(''); setNewPlan(''); setNewQuota('')
     } catch (e: any) {

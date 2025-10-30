@@ -155,9 +155,8 @@ export function UserManagement() {
 
           const status: UserRow['status'] = data?.isActive === false ? 'inactive' : 'active'
 
-          // Admins should never show an organization - they are system-wide
-          const isAdminUser = data?.role === 'admin'
-          const organization = isAdminUser ? undefined : (data?.orgId ? (orgMap[data.orgId] || data.orgId) : undefined)
+          // Show organization for all users including admins (admins are now assigned to orgs they manage)
+          const organization = data?.orgId ? (orgMap[data.orgId] || data.orgId) : undefined
 
           return {
             id: data.id,
