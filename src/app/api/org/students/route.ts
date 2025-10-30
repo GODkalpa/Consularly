@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
         id: d.id,
         name: data?.name || data?.displayName || 'Unknown',
         email: data?.email || '',
+        interviewCountry: data?.interviewCountry || null,
         lastActive: lastActive ? lastActive.toISOString() : null,
         studentProfile: data?.studentProfile || null,
       }
@@ -90,6 +91,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const name = String(body?.name || '').trim()
     const email = body?.email ? String(body.email).trim() : ''
+    const interviewCountry = body?.interviewCountry || null
     const studentProfile = body?.studentProfile || null
     if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
@@ -99,6 +101,11 @@ export async function POST(req: NextRequest) {
       email,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+    }
+
+    // Include interview country if provided
+    if (interviewCountry) {
+      studentData.interviewCountry = interviewCountry
     }
 
     // Include student profile if provided

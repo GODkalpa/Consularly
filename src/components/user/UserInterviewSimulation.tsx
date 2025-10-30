@@ -23,7 +23,19 @@ import {
 export function UserInterviewSimulation() {
   const { user, userProfile } = useAuth()
   const router = useRouter()
-  const [route, setRoute] = useState<InterviewRoute>('usa_f1')
+  
+  // Get user's selected country and map to appropriate default route
+  const userCountry = userProfile?.interviewCountry || 'usa'
+  const getDefaultRoute = (country: 'usa' | 'uk' | 'france'): InterviewRoute => {
+    switch (country) {
+      case 'usa': return 'usa_f1'
+      case 'uk': return 'uk_student'
+      case 'france': return 'france_ema' // Default to EMA for France
+      default: return 'usa_f1'
+    }
+  }
+  
+  const [route, setRoute] = useState<InterviewRoute>(getDefaultRoute(userCountry))
   const [showQuotaDialog, setShowQuotaDialog] = useState(false)
   const [quotaMessage, setQuotaMessage] = useState('')
 
@@ -310,20 +322,31 @@ export function UserInterviewSimulation() {
                 {candidateName || '—'}
               </div>
             </div>
+            {/* Only show interview type selection if user selected France (has 2 university options) */}
+            {userCountry === 'france' && (
             <div className="space-y-2">
-              <Label>Interview Type</Label>
+              <Label>University</Label>
               <Select value={route} onValueChange={(v) => setRoute(v as InterviewRoute)}>
                 <SelectTrigger>
-                  <SelectValue placeholder='Select interview country/route' />
+                  <SelectValue placeholder='Select university' />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='usa_f1'>{routeDisplayName.usa_f1}</SelectItem>
-                  <SelectItem value='uk_student'>{routeDisplayName.uk_student}</SelectItem>
                   <SelectItem value='france_ema'>{routeDisplayName.france_ema}</SelectItem>
                   <SelectItem value='france_icn'>{routeDisplayName.france_icn}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            )}
+            
+            {/* For USA and UK, show the interview type as read-only info */}
+            {userCountry !== 'france' && (
+            <div className="space-y-2">
+              <Label>Interview Type</Label>
+              <div className="h-10 px-3 flex items-center rounded-md bg-muted/40 border text-sm">
+                {userCountry === 'usa' ? routeDisplayName.usa_f1 : routeDisplayName.uk_student}
+              </div>
+            </div>
+            )}
             <Button 
               onClick={startNewSession}
               disabled={!candidateName}

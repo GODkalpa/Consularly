@@ -27,6 +27,7 @@ export type OrgStudent = {
   id: string
   name: string
   email: string
+  interviewCountry?: 'usa' | 'uk' | 'france'
   lastActive?: Date
   interviewsCompleted?: number
   studentProfile?: {
@@ -52,8 +53,9 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
   const [error, setError] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState("")
-  const [newEmail, setNewEmail] = useState("")
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [newCountry, setNewCountry] = useState<'usa' | 'uk' | 'france' | ''>('')
   const [newProfile, setNewProfile] = useState({
     degreeLevel: '' as DegreeLevel | '',
     programName: '',
@@ -176,12 +178,26 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                   <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Full name" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Email (optional)</Label>
-                  <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="name@example.com" />
+                  <Label>Email <span className="text-destructive">*</span></Label>
+                  <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="name@example.com" required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Interview Country <span className="text-destructive">*</span></Label>
+                  <Select value={newCountry} onValueChange={(value) => setNewCountry(value as 'usa' | 'uk' | 'france')}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select interview country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="usa">🇺🇸 United States (F1 Visa)</SelectItem>
+                      <SelectItem value="uk">🇬🇧 United Kingdom</SelectItem>
+                      <SelectItem value="france">🇫🇷 France</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              {/* Profile Info */}
+              {/* Profile Info - USA Only */}
+              {newCountry === 'usa' && (
               <div className="space-y-4">
                 <h3 className="font-medium text-sm">Program Information</h3>
                 <div className="space-y-2">
@@ -252,6 +268,18 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                   />
                 </div>
               </div>
+              )}
+
+              {/* UK/France Info */}
+              {newCountry && newCountry !== 'usa' && (
+                <div className="bg-muted/50 border rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground">
+                    <strong className="text-foreground">
+                      {newCountry === 'uk' ? '🇬🇧 UK' : '🇫🇷 France'} Student:
+                    </strong> Name and email are sufficient. No additional profile information required.
+                  </p>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-4">
                 <Button variant="outline" onClick={() => {
@@ -271,40 +299,55 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                 <Button
                   onClick={async () => {
                     if (!newName.trim()) { toast.error('Name is required'); return }
-                    if (!newProfile.degreeLevel) { toast.error('Degree level is required'); return }
-                    if (!newProfile.programName.trim()) { toast.error('Program name is required'); return }
-                    if (!newProfile.universityName.trim()) { toast.error('University name is required'); return }
-                    if (!newProfile.programLength.trim()) { toast.error('Program length is required'); return }
-                    if (!newProfile.programCost.trim()) { toast.error('Program cost is required'); return }
+                    if (!newEmail.trim()) { toast.error('Email is required'); return }
+                    if (!newCountry) { toast.error('Interview country is required'); return }
+                    
+                    // Only validate profile fields for USA
+                    if (newCountry === 'usa') {
+                      if (!newProfile.degreeLevel) { toast.error('Degree level is required'); return }
+                      if (!newProfile.programName.trim()) { toast.error('Program name is required'); return }
+                      if (!newProfile.universityName.trim()) { toast.error('University name is required'); return }
+                      if (!newProfile.programLength.trim()) { toast.error('Program length is required'); return }
+                      if (!newProfile.programCost.trim()) { toast.error('Program cost is required'); return }
+                    }
                     
                     try {
                       setCreating(true)
                       const token = await auth.currentUser?.getIdToken()
                       if (!token) throw new Error('Not authenticated')
+                      // Build payload based on country
+                      const payload: any = {
+                        name: newName.trim(), 
+                        email: newEmail.trim(),
+                        interviewCountry: newCountry
+                      }
+                      
+                      // Only include profile for USA
+                      if (newCountry === 'usa') {
+                        payload.studentProfile = {
+                          degreeLevel: newProfile.degreeLevel,
+                          programName: newProfile.programName.trim(),
+                          universityName: newProfile.universityName.trim(),
+                          programLength: newProfile.programLength.trim(),
+                          programCost: newProfile.programCost.trim(),
+                          fieldOfStudy: newProfile.fieldOfStudy.trim() || undefined,
+                          intendedMajor: newProfile.intendedMajor.trim() || undefined,
+                          profileCompleted: true
+                        }
+                      }
+                      
                       const res = await fetch('/api/org/students', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify({ 
-                          name: newName.trim(), 
-                          email: newEmail.trim(),
-                          studentProfile: {
-                            degreeLevel: newProfile.degreeLevel,
-                            programName: newProfile.programName.trim(),
-                            universityName: newProfile.universityName.trim(),
-                            programLength: newProfile.programLength.trim(),
-                            programCost: newProfile.programCost.trim(),
-                            fieldOfStudy: newProfile.fieldOfStudy.trim() || undefined,
-                            intendedMajor: newProfile.intendedMajor.trim() || undefined,
-                            profileCompleted: true
-                          }
-                        })
+                        body: JSON.stringify(payload)
                       })
                       const data = await res.json()
                       if (!res.ok) throw new Error(data?.error || 'Failed to add student')
-                      toast.success('Student added with complete profile')
+                      toast.success('Student added successfully')
                       setAddOpen(false)
                       setNewName('')
                       setNewEmail('')
+                      setNewCountry('')
                       setNewProfile({
                         degreeLevel: '',
                         programName: '',

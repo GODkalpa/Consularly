@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { auth, firebaseEnabled } from "@/lib/firebase"
-import type { OrganizationWithId, InterviewAnalytics } from "@/types/firestore"
+import type { OrganizationWithId } from "@/types/firestore"
 
 import {
   Sidebar,
@@ -26,29 +26,40 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbS
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import {
   Home,
   BarChart3,
   Users,
-  PieChart,
   Settings,
   Building2,
   Search,
+  Trophy,
+  PlayCircle,
+  TrendingUp,
+  Calendar,
+  CheckCircle,
+  Clock,
+  ArrowRight,
+  Activity,
+  Zap,
+  Target,
+  Award,
 } from "lucide-react"
-import { PlayCircle } from "lucide-react"
 import { OrgStudentManagement } from "@/components/org/OrgStudentManagement"
 import { OrgInterviewSimulation } from "@/components/org/OrgInterviewSimulation"
+import { OrgStudentResults } from "@/components/org/OrgStudentResults"
+import { OrgBrandingSettings } from "@/components/org/OrgBrandingSettings"
 
 const menuItems = [
   { title: "Overview", icon: BarChart3, id: "overview" },
   { title: "Students", icon: Users, id: "students" },
   { title: "Interviews", icon: PlayCircle, id: "interviews" },
-  { title: "Analytics", icon: PieChart, id: "analytics" },
+  { title: "Results", icon: Trophy, id: "results" },
   { title: "Organization", icon: Building2, id: "organization" },
-  { title: "Settings", icon: Settings, id: "settings" },
+  { title: "Branding", icon: Settings, id: "branding" },
 ] as const
 
 export function OrganizationDashboard() {
@@ -57,15 +68,33 @@ export function OrganizationDashboard() {
 
   const [activeSection, setActiveSection] = useState<(typeof menuItems)[number]["id"]>("overview")
   const [org, setOrg] = useState<OrganizationWithId | null>(null)
-  const [analytics, setAnalytics] = useState<InterviewAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedStudentId, setSelectedStudentId] = useState<string | undefined>(undefined)
   const [selectedStudentName, setSelectedStudentName] = useState<string | undefined>(undefined)
+  const [statistics, setStatistics] = useState<{
+    totalStudents: number;
+    totalInterviews: number;
+    avgScore: number;
+    activeUsers: number;
+    recentInterviews: Array<{
+      id: string;
+      candidateName: string;
+      date: string;
+      score: number;
+      status: string;
+    }>;
+  } | null>(null)
 
-  // Default to global primary token so the dashboard inherits the site palette
-  const brandColor = org?.settings?.customBranding?.primaryColor || "hsl(var(--primary))"
-  const brandLogo = org?.settings?.customBranding?.logoUrl
-  const brandName = org?.settings?.customBranding?.companyName || org?.name || "Organization"
+  // Extract branding with fallbacks
+  const branding = org?.settings?.customBranding || {}
+  const brandColor = branding.primaryColor || "hsl(var(--primary))"
+  const brandSecondaryColor = branding.secondaryColor || "hsl(var(--secondary))"
+  const brandLogo = branding.logoUrl
+  const brandName = branding.companyName || org?.name || "Organization"
+  const brandTagline = branding.tagline
+  const brandWelcome = branding.welcomeMessage
+  const brandBackground = branding.backgroundImage
+  const brandFontFamily = branding.fontFamily || 'inter'
 
   const activeTitle = useMemo(
     () => menuItems.find((item) => item.id === activeSection)?.title || "Dashboard",
@@ -80,20 +109,24 @@ export function OrganizationDashboard() {
         const token = await auth.currentUser?.getIdToken()
         if (!token) throw new Error('Not authenticated')
 
-        const [orgRes, analyticsRes] = await Promise.all([
+        // Fetch organization data and statistics in parallel
+        const [orgRes, statsRes] = await Promise.all([
           fetch('/api/org/organization', { headers: { Authorization: `Bearer ${token}` } }),
-          fetch('/api/org/analytics', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/org/statistics', { headers: { Authorization: `Bearer ${token}` } }),
         ])
 
         const orgJson = await orgRes.json()
-        const analyticsJson = await analyticsRes.json()
         if (!orgRes.ok) throw new Error(orgJson?.error || `Organization fetch failed (${orgRes.status})`)
-        if (!analyticsRes.ok) throw new Error(analyticsJson?.error || `Analytics fetch failed (${analyticsRes.status})`)
         const orgDoc = orgJson.organization as OrganizationWithId
-        const orgAnalytics = analyticsJson.analytics as InterviewAnalytics
+
+        const statsJson = await statsRes.json()
+        if (statsRes.ok && statsJson.statistics) {
+          if (!mounted) return
+          setStatistics(statsJson.statistics)
+        }
+
         if (!mounted) return
         setOrg(orgDoc)
-        setAnalytics(orgAnalytics)
       } catch (e) {
         console.error("Failed to load org dashboard data", e)
       } finally {
@@ -109,144 +142,372 @@ export function OrganizationDashboard() {
     const quotaUsed = org?.quotaUsed || 0
     const quotaPct = quotaLimit > 0 ? Math.min(100, (quotaUsed / quotaLimit) * 100) : 0
 
+    // Use real statistics from API
+    const stats = statistics || {
+      totalStudents: 0,
+      totalInterviews: 0,
+      avgScore: 0,
+      activeUsers: 0,
+      recentInterviews: [],
+    }
+
     return (
       <div className="space-y-6">
-        {/* Branding hero */}
+        {/* Enhanced Branding Hero */}
         <div
-          className="rounded-xl p-5 text-primary-foreground"
-          style={{ background: brandColor }}
+          className="rounded-2xl p-8 md:p-10 text-primary-foreground relative overflow-hidden shadow-xl"
+          style={{ 
+            background: brandBackground 
+              ? `linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 100%), url(${brandBackground})`
+              : `linear-gradient(135deg, ${brandColor} 0%, ${brandSecondaryColor || brandColor} 100%)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
         >
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-lg bg-foreground/15 flex items-center justify-center overflow-hidden">
-              {brandLogo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={brandLogo} alt={brandName} className="h-full w-full object-contain" />
-              ) : (
-                <span className="font-semibold text-xl">{brandName?.slice(0,2).toUpperCase()}</span>
-              )}
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold">{brandName}</h2>
-              <p className="text-primary-foreground/80 text-sm">Organization Dashboard</p>
+          {/* Decorative Elements */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full -ml-24 -mb-24" />
+          
+          <div className="relative z-10">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="flex items-start gap-6">
+                <div className="h-20 w-20 rounded-2xl bg-white flex items-center justify-center overflow-hidden shadow-2xl shrink-0 ring-4 ring-white/20">
+                  {brandLogo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img 
+                      src={brandLogo} 
+                      alt={brandName} 
+                      className="max-h-16 max-w-[72px] object-contain p-2"
+                      style={{ imageRendering: 'auto' }}
+                    />
+                  ) : (
+                    <span className="font-bold text-2xl text-gray-700">{brandName?.slice(0,2).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-3xl md:text-4xl font-bold mb-2">{brandName}</h2>
+                  {brandTagline && (
+                    <p className="text-primary-foreground/90 text-base mb-2">{brandTagline}</p>
+                  )}
+                  {brandWelcome ? (
+                    <p className="text-primary-foreground/80 text-sm max-w-2xl leading-relaxed">{brandWelcome}</p>
+                  ) : (
+                    <p className="text-primary-foreground/80 text-sm leading-relaxed">
+                      Welcome back! Manage your visa interview simulations and track student performance.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => setActiveSection('interviews')}
+                  className="bg-white text-gray-900 hover:bg-white/90 shadow-lg"
+                >
+                  <PlayCircle className="h-4 w-4 mr-2" />
+                  Start Interview
+                </Button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* KPI cards */}
+        {/* Key Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold">{analytics?.totalInterviews ?? 0}</div>
-              <p className="text-sm text-muted-foreground">Total Interviews</p>
+          <Card className="border-l-4 hover:shadow-lg transition-shadow" style={{ borderLeftColor: brandColor }}>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Total Students</p>
+                  <p className="text-3xl font-bold">{stats.totalStudents}</p>
+                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                    <Users className="h-3 w-3" />
+                    Active learners
+                  </p>
+                </div>
+                <div className="h-12 w-12 rounded-xl flex items-center justify-center" style={{ background: `${brandColor}20` }}>
+                  <Users className="h-6 w-6" style={{ color: brandColor }} />
+                </div>
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold">{(analytics?.averageScore ?? 0).toFixed(1)}</div>
-              <p className="text-sm text-muted-foreground">Average Score</p>
+
+          <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Interviews Conducted</p>
+                  <p className="text-3xl font-bold">{stats.totalInterviews}</p>
+                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3 text-green-600" />
+                    This month
+                  </p>
+                </div>
+                <div className="h-12 w-12 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <PlayCircle className="h-6 w-6 text-blue-600" />
+                </div>
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold">{(analytics?.completionRate ?? 0).toFixed(0)}%</div>
-              <p className="text-sm text-muted-foreground">Completion Rate</p>
+
+          <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Avg Success Score</p>
+                  <p className="text-3xl font-bold">{stats.avgScore > 0 ? `${stats.avgScore}%` : '—'}</p>
+                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                    <Target className="h-3 w-3" />
+                    Overall performance
+                  </p>
+                </div>
+                <div className="h-12 w-12 rounded-xl bg-green-50 flex items-center justify-center">
+                  <Award className="h-6 w-6 text-green-600" />
+                </div>
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold">{(analytics?.averageDuration ?? 0).toFixed(0)}m</div>
-              <p className="text-sm text-muted-foreground">Avg. Duration</p>
+
+          <Card className="border-l-4 border-l-purple-500 hover:shadow-lg transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Quota Remaining</p>
+                  <p className="text-3xl font-bold">{quotaLimit - quotaUsed}</p>
+                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                    <Zap className="h-3 w-3" />
+                    of {quotaLimit} total
+                  </p>
+                </div>
+                <div className="h-12 w-12 rounded-xl bg-purple-50 flex items-center justify-center">
+                  <Activity className="h-6 w-6 text-purple-600" />
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Quota card */}
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Quota Usage - Enhanced */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5" />
+                    Quota Usage
+                  </CardTitle>
+                  <CardDescription>Monthly interview quota utilization</CardDescription>
+                </div>
+                <Badge variant="outline" className="capitalize">{org?.plan || 'Basic'}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-3xl font-bold" style={{ color: brandColor }}>
+                      {quotaUsed} <span className="text-lg text-muted-foreground font-normal">/ {quotaLimit}</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">Interviews completed</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold">{quotaPct.toFixed(0)}%</p>
+                    <p className="text-xs text-muted-foreground mt-1">Used</p>
+                  </div>
+                </div>
+                <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
+                  <div 
+                    className="h-full transition-all duration-500 ease-out rounded-full" 
+                    style={{ 
+                      width: `${Math.min(100, quotaPct)}%`, 
+                      background: quotaPct >= 95 
+                        ? 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)' 
+                        : quotaPct >= 85 
+                        ? 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)'
+                        : `linear-gradient(90deg, ${brandColor} 0%, ${brandSecondaryColor || brandColor} 100%)`
+                    }} 
+                  />
+                </div>
+              </div>
+
+              {quotaPct >= 95 && (
+                <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200">
+                  <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                    <Clock className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-red-900">Quota Limit Reached</p>
+                    <p className="text-xs text-red-700 mt-1">
+                      You&apos;ve used {quotaPct.toFixed(0)}% of your monthly quota. Upgrade your plan or contact support to continue.
+                    </p>
+                    <Button size="sm" variant="destructive" className="mt-3">
+                      Upgrade Plan
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {quotaPct >= 75 && quotaPct < 95 && (
+                <div className="flex items-start gap-3 p-4 rounded-xl bg-orange-50 border border-orange-200">
+                  <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                    <TrendingUp className="h-5 w-5 text-orange-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-orange-900">Approaching Quota Limit</p>
+                    <p className="text-xs text-orange-700 mt-1">
+                      You&apos;ve used {quotaPct.toFixed(0)}% of your monthly quota. Consider upgrading for unlimited access.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {quotaPct < 50 && quotaLimit > 0 && (
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <div>
+                      <p className="text-sm font-medium text-green-900">You&apos;re all set!</p>
+                      <p className="text-xs text-green-700">Plenty of quota remaining this month</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Quick Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5" />
+                Quick Actions
+              </CardTitle>
+              <CardDescription>Common tasks</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button 
+                variant="outline" 
+                className="w-full justify-between hover:bg-accent"
+                onClick={() => setActiveSection('students')}
+              >
+                <span className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Manage Students
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full justify-between hover:bg-accent"
+                onClick={() => setActiveSection('interviews')}
+              >
+                <span className="flex items-center gap-2">
+                  <PlayCircle className="h-4 w-4" />
+                  New Interview
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full justify-between hover:bg-accent"
+                onClick={() => setActiveSection('results')}
+              >
+                <span className="flex items-center gap-2">
+                  <Trophy className="h-4 w-4" />
+                  View Results
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full justify-between hover:bg-accent"
+                onClick={() => setActiveSection('branding')}
+              >
+                <span className="flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  Customize Branding
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Activity */}
         <Card>
           <CardHeader>
-            <CardTitle>Quota Usage</CardTitle>
-            <CardDescription>Monthly quota utilization for your plan</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Recent Activity
+                </CardTitle>
+                <CardDescription>Latest interviews and updates</CardDescription>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setActiveSection('results')}>
+                View All
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium" style={{ color: brandColor }}>
-                  {quotaUsed} / {quotaLimit}
-                </span>
-                <span className="text-muted-foreground">{quotaPct.toFixed(0)}%</span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                <div 
-                  className="h-full transition-all" 
-                  style={{ 
-                    width: `${Math.min(100, quotaPct)}%`, 
-                    background: quotaPct >= 95 ? '#ef4444' : quotaPct >= 85 ? '#f59e0b' : brandColor 
-                  }} 
-                />
-              </div>
-              {quotaPct >= 95 && (
-                <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
-                  <svg className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-destructive">Quota Limit Reached</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      You have used {quotaPct.toFixed(0)}% of your monthly quota. Please contact your administrator to increase your limit.
-                    </p>
+            {stats.recentInterviews && stats.recentInterviews.length > 0 ? (
+              <div className="space-y-3">
+                {stats.recentInterviews.map((interview) => (
+                  <div
+                    key={interview.id}
+                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                        <span className="text-sm font-medium">
+                          {interview.candidateName.slice(0, 2).toUpperCase()}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{interview.candidateName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(interview.date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {interview.score > 0 && (
+                        <Badge variant={interview.score >= 70 ? 'default' : 'secondary'}>
+                          {interview.score}%
+                        </Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setActiveSection('results')}
+                      >
+                        View
+                      </Button>
+                    </div>
                   </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="h-16 w-16 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
+                  <Activity className="h-8 w-8 text-muted-foreground" />
                 </div>
-              )}
-              {quotaPct >= 85 && quotaPct < 95 && (
-                <div className="flex items-start gap-2 p-3 rounded-md bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/50">
-                  <svg className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-orange-900 dark:text-orange-200">Approaching Quota Limit</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      You have used {quotaPct.toFixed(0)}% of your monthly quota. Consider requesting an increase soon.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
+                <p className="text-sm font-medium text-muted-foreground mb-2">No recent activity</p>
+                <p className="text-xs text-muted-foreground mb-4">Get started by conducting your first interview</p>
+                <Button onClick={() => setActiveSection('interviews')} style={{ background: brandColor }}>
+                  <PlayCircle className="h-4 w-4 mr-2" />
+                  Start First Interview
+                </Button>
+              </div>
+            )}
           </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  const renderAnalytics = () => {
-    const dist = analytics?.scoreDistribution
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Excellent</CardTitle>
-            <CardDescription>Scores 90-100</CardDescription>
-          </CardHeader>
-          <CardContent><div className="text-3xl font-bold">{dist?.excellent ?? 0}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Good</CardTitle>
-            <CardDescription>Scores 80-89</CardDescription>
-          </CardHeader>
-          <CardContent><div className="text-3xl font-bold">{dist?.good ?? 0}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Average</CardTitle>
-            <CardDescription>Scores 70-79</CardDescription>
-          </CardHeader>
-          <CardContent><div className="text-3xl font-bold">{dist?.average ?? 0}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Needs Improvement</CardTitle>
-            <CardDescription>Scores below 70</CardDescription>
-          </CardHeader>
-          <CardContent><div className="text-3xl font-bold">{dist?.needsImprovement ?? 0}</div></CardContent>
         </Card>
       </div>
     )
@@ -273,92 +534,133 @@ export function OrganizationDashboard() {
     )
   }
 
+  const renderResults = () => {
+    return <OrgStudentResults />
+  }
+
   const renderOrganization = () => {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Branding</CardTitle>
-            <CardDescription>Company identity used across your dashboard</CardDescription>
+            <CardTitle>Organization Overview</CardTitle>
+            <CardDescription>Your organization details and subscription</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-lg bg-muted overflow-hidden flex items-center justify-center">
-                {brandLogo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={brandLogo} alt={brandName} className="h-full w-full object-contain" />
-                ) : (
-                  <span className="font-semibold">{brandName.slice(0,2).toUpperCase()}</span>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Company Identity</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="h-14 w-14 rounded-lg bg-white border shadow-sm overflow-hidden flex items-center justify-center shrink-0">
+                      {brandLogo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img 
+                          src={brandLogo} 
+                          alt={brandName} 
+                          className="max-h-12 max-w-[52px] object-contain p-1.5"
+                          style={{ imageRendering: 'auto' }}
+                        />
+                      ) : (
+                        <span className="font-semibold text-lg" style={{ color: brandColor }}>
+                          {brandName.slice(0,2).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium">{brandName}</div>
+                      {brandTagline && <div className="text-sm text-muted-foreground truncate">{brandTagline}</div>}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Brand Colors</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full border" style={{ background: brandColor }} />
+                    <span className="text-sm">{brandColor}</span>
+                  </div>
+                  {brandSecondaryColor && (
+                    <div className="flex items-center gap-3 mt-2">
+                      <div className="h-8 w-8 rounded-full border" style={{ background: brandSecondaryColor }} />
+                      <span className="text-sm">{brandSecondaryColor}</span>
+                    </div>
+                  )}
+                </div>
+
+                {branding.socialLinks && (
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Social Links</h3>
+                    <div className="space-y-1">
+                      {branding.socialLinks.website && (
+                        <a href={branding.socialLinks.website} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline block">
+                          🌐 {branding.socialLinks.website}
+                        </a>
+                      )}
+                      {branding.socialLinks.linkedin && (
+                        <a href={branding.socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline block">
+                          💼 LinkedIn
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
-              <div>
-                <div className="font-medium">{brandName}</div>
-                <div className="text-sm text-muted-foreground">Logo and primary color</div>
+
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Subscription Plan</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Plan</span>
+                      <Badge className="capitalize">{org?.plan ?? '-'}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Monthly Quota</span>
+                      <span className="font-medium">{org?.quotaLimit ?? 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Used This Month</span>
+                      <span className="font-medium">{org?.quotaUsed ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Settings</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Self Registration</span>
+                      <span className="text-sm">{org?.settings?.allowSelfRegistration ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Metrics Collection</span>
+                      <span className="text-sm">{org?.settings?.enableMetricsCollection ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Interview Duration</span>
+                      <span className="text-sm">{org?.settings?.defaultInterviewDuration ?? 30} min</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-full border" style={{ background: brandColor }} />
-              <span className="text-sm">{brandColor}</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Branding is managed by the platform admin. Contact your platform administrator to update logo or colors.
-            </p>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Subscription</CardTitle>
-            <CardDescription>Your plan and quotas</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Plan</span>
-              <span className="font-medium capitalize">{org?.plan ?? '-'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Monthly Quota</span>
-              <span className="font-medium">{org?.quotaLimit ?? 0}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Used This Month</span>
-              <span className="font-medium">{org?.quotaUsed ?? 0}</span>
-            </div>
+            <p className="text-xs text-muted-foreground pt-4 border-t">
+              To customize your branding, visit the <button onClick={() => setActiveSection('branding')} className="text-primary hover:underline">Branding</button> section.
+            </p>
           </CardContent>
         </Card>
       </div>
     )
   }
 
-  const renderSettings = () => {
-    const allowSelfRegistration = org?.settings?.allowSelfRegistration
-    const enableMetricsCollection = org?.settings?.enableMetricsCollection
-    const defaultInterviewDuration = org?.settings?.defaultInterviewDuration
-
+  const renderBranding = () => {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Organization Settings</CardTitle>
-          <CardDescription>View-only settings for your organization</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Self Registration</span>
-            <span className="font-medium">{allowSelfRegistration ? 'Enabled' : 'Disabled'}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Metrics Collection</span>
-            <span className="font-medium">{enableMetricsCollection ? 'Enabled' : 'Disabled'}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Default Interview Duration</span>
-            <span className="font-medium">{defaultInterviewDuration ?? 30} minutes</span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Settings changes require assistance from platform admin. Your dashboard does not allow account creation or settings edits.
-          </p>
-        </CardContent>
-      </Card>
+      <OrgBrandingSettings 
+        organizationPlan={org?.plan || 'basic'}
+        initialBranding={org?.settings?.customBranding}
+      />
     )
   }
 
@@ -370,12 +672,12 @@ export function OrganizationDashboard() {
         return renderStudents()
       case "interviews":
         return renderInterviews()
-      case "analytics":
-        return renderAnalytics()
+      case "results":
+        return renderResults()
       case "organization":
         return renderOrganization()
-      case "settings":
-        return renderSettings()
+      case "branding":
+        return renderBranding()
       default:
         return renderOverview()
     }
@@ -397,12 +699,19 @@ export function OrganizationDashboard() {
       <Sidebar variant="inset" collapsible="icon">
         <SidebarHeader>
           <div className="flex items-center gap-3 rounded-md px-2 py-1.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md text-primary-foreground font-semibold" style={{ background: brandColor }}>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-sm border shrink-0">
               {brandLogo ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={brandLogo} alt={brandName} className="h-7 w-7 object-contain" />
+                <img 
+                  src={brandLogo} 
+                  alt={brandName} 
+                  className="max-h-8 max-w-[36px] object-contain p-1"
+                  style={{ imageRendering: 'auto' }}
+                />
               ) : (
-                brandName.slice(0,2).toUpperCase()
+                <span className="font-bold text-sm" style={{ color: brandColor }}>
+                  {brandName.slice(0,2).toUpperCase()}
+                </span>
               )}
             </div>
             <div className="grid leading-tight group-data-[collapsible=icon]:hidden">

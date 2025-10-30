@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { ProfileSetupForm } from '@/components/profile/ProfileSetupForm'
-import { updateStudentProfile, type StudentProfileInfo } from '@/lib/database'
+import { updateStudentProfile, updateUserProfile, type StudentProfileInfo } from '@/lib/database'
 import { toast } from 'sonner'
 import { Loader2, GraduationCap, Sparkles } from 'lucide-react'
 
@@ -24,9 +24,14 @@ export default function ProfileSetupPage() {
     // Check if user already has a completed profile
     if (userProfile) {
       setIsCheckingProfile(false)
-      if (userProfile.studentProfile?.profileCompleted) {
-        // Already completed, redirect to dashboard
-        router.push('/dashboard')
+      const hasCountry = userProfile.interviewCountry
+      const hasProfile = userProfile.studentProfile?.profileCompleted
+      
+      // If country is set and either (UK/France) or (USA with profile), redirect to dashboard
+      if (hasCountry) {
+        if (hasCountry !== 'usa' || hasProfile) {
+          router.push('/dashboard')
+        }
       }
     } else {
       // Still loading profile
@@ -34,7 +39,7 @@ export default function ProfileSetupPage() {
     }
   }, [user, userProfile, router])
 
-  const handleSubmit = async (data: StudentProfileInfo) => {
+  const handleSubmit = async (data: StudentProfileInfo & { interviewCountry: 'usa' | 'uk' | 'france' }) => {
     if (!user) {
       toast.error('You must be signed in to complete your profile')
       return
@@ -42,14 +47,23 @@ export default function ProfileSetupPage() {
 
     setIsLoading(true)
     try {
-      await updateStudentProfile(user.uid, data)
-      toast.success('Profile completed successfully!', {
-        description: 'You can now access your personalized dashboard'
+      const { interviewCountry, ...profileData } = data
+      
+      // Always save the interview country
+      await updateUserProfile(user.uid, { interviewCountry })
+      
+      // Only save profile for USA
+      if (interviewCountry === 'usa') {
+        await updateStudentProfile(user.uid, profileData)
+      }
+      
+      toast.success('Setup completed successfully!', {
+        description: 'You can now access your dashboard and start practicing'
       })
       router.push('/dashboard')
     } catch (error: any) {
       console.error('Error updating profile:', error)
-      toast.error('Failed to save profile', {
+      toast.error('Failed to save setup', {
         description: error.message || 'Please try again'
       })
     } finally {
@@ -121,13 +135,14 @@ export default function ProfileSetupPage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
         <ProfileSetupForm
           initialData={userProfile?.studentProfile}
+          initialCountry={userProfile?.interviewCountry}
           onSubmit={handleSubmit}
           isLoading={isLoading}
           showCard={true}
-          title={isExistingUser ? "Your Program Information" : "Tell Us About Your Program"}
+          title={isExistingUser ? "Your Program Information" : "Get Started"}
           description={isExistingUser 
             ? "Provide your program details to get started with personalized interview preparation."
-            : "This information helps us tailor interview questions to your specific degree level and program."
+            : "Select your interview country to begin your preparation journey."
           }
         />
       </div>

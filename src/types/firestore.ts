@@ -140,16 +140,50 @@ export interface InterviewMetrics {
   segmentEnd: number; // seconds
 }
 
+// Organization Custom Branding Interface
+export interface OrganizationBranding {
+  // Logo variants
+  logoUrl?: string;              // Main logo
+  logoLight?: string;            // Light mode logo
+  logoDark?: string;             // Dark mode logo
+  favicon?: string;              // Favicon URL
+  
+  // Colors
+  primaryColor?: string;         // Primary brand color (CSS)
+  secondaryColor?: string;       // Secondary/accent color
+  backgroundColor?: string;      // Custom background
+  
+  // Text branding
+  companyName?: string;
+  tagline?: string;              // Company tagline/slogan
+  welcomeMessage?: string;       // Custom dashboard greeting
+  footerText?: string;           // Footer copyright/disclaimer
+  
+  // Visual assets
+  backgroundImage?: string;      // Hero/background image URL
+  
+  // Typography
+  fontFamily?: 'inter' | 'poppins' | 'roboto' | 'montserrat' | 'system';
+  
+  // Social links
+  socialLinks?: {
+    website?: string;
+    linkedin?: string;
+    twitter?: string;
+    facebook?: string;
+  };
+  
+  // Advanced (enterprise)
+  customCSS?: string;            // Custom CSS overrides
+  whiteLabel?: boolean;          // Hide platform branding
+}
+
 // Organization Settings Interface
 export interface OrganizationSettings {
   allowSelfRegistration: boolean;
   defaultInterviewDuration: number; // minutes
   enableMetricsCollection: boolean;
-  customBranding: {
-    logoUrl?: string;
-    primaryColor?: string;
-    companyName?: string;
-  };
+  customBranding: OrganizationBranding;
   notifications: {
     emailReports: boolean;
     weeklyDigest: boolean;

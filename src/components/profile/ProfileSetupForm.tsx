@@ -12,12 +12,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { GraduationCap, School, Calendar, DollarSign, BookOpen, Target, CheckCircle2 } from 'lucide-react'
+import { GraduationCap, School, Calendar, DollarSign, BookOpen, Target, CheckCircle2, Globe } from 'lucide-react'
 import type { DegreeLevel, StudentProfileInfo } from '@/lib/database'
 
 interface ProfileSetupFormProps {
   initialData?: StudentProfileInfo
-  onSubmit: (data: StudentProfileInfo) => void | Promise<void>
+  initialCountry?: 'usa' | 'uk' | 'france'
+  onSubmit: (data: StudentProfileInfo & { interviewCountry: 'usa' | 'uk' | 'france' }) => void | Promise<void>
   isLoading?: boolean
   showCard?: boolean // Whether to wrap in a card
   title?: string
@@ -26,12 +27,14 @@ interface ProfileSetupFormProps {
 
 export function ProfileSetupForm({
   initialData,
+  initialCountry,
   onSubmit,
   isLoading = false,
   showCard = true,
   title = "Complete Your Profile",
   description = "Please provide information about your intended program to get personalized interview questions."
 }: ProfileSetupFormProps) {
+  const [selectedCountry, setSelectedCountry] = useState<'usa' | 'uk' | 'france' | undefined>(initialCountry)
   const [formData, setFormData] = useState<StudentProfileInfo>({
     degreeLevel: initialData?.degreeLevel || undefined,
     programName: initialData?.programName || '',
@@ -47,20 +50,23 @@ export function ProfileSetupForm({
   const validateForm = (): boolean => {
     const newErrors: Partial<Record<keyof StudentProfileInfo, string>> = {}
 
-    if (!formData.degreeLevel) {
-      newErrors.degreeLevel = 'Degree level is required'
-    }
-    if (!formData.programName?.trim()) {
-      newErrors.programName = 'Program name is required'
-    }
-    if (!formData.universityName?.trim()) {
-      newErrors.universityName = 'University name is required'
-    }
-    if (!formData.programLength?.trim()) {
-      newErrors.programLength = 'Program length is required'
-    }
-    if (!formData.programCost?.trim()) {
-      newErrors.programCost = 'Program cost is required'
+    // Only validate profile fields for USA
+    if (selectedCountry === 'usa') {
+      if (!formData.degreeLevel) {
+        newErrors.degreeLevel = 'Degree level is required'
+      }
+      if (!formData.programName?.trim()) {
+        newErrors.programName = 'Program name is required'
+      }
+      if (!formData.universityName?.trim()) {
+        newErrors.universityName = 'University name is required'
+      }
+      if (!formData.programLength?.trim()) {
+        newErrors.programLength = 'Program length is required'
+      }
+      if (!formData.programCost?.trim()) {
+        newErrors.programCost = 'Program cost is required'
+      }
     }
 
     setErrors(newErrors)
@@ -69,8 +75,12 @@ export function ProfileSetupForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!selectedCountry) return
     if (!validateForm()) return
-    await onSubmit(formData)
+    
+    // For UK/France, pass empty profile. For USA, pass full profile
+    const submitData = selectedCountry === 'usa' ? formData : {}
+    await onSubmit({ ...submitData, interviewCountry: selectedCountry, profileCompleted: true })
   }
 
   const handleInputChange = (field: keyof StudentProfileInfo, value: string) => {
@@ -83,8 +93,41 @@ export function ProfileSetupForm({
 
   const formContent = (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Required Fields Section */}
+      {/* Country Selection - Always shown first */}
       <div className="space-y-5">
+        <div className="flex items-center gap-2 pb-2">
+          <div className="h-1 w-1 rounded-full bg-primary" />
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Select Interview Country</h3>
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor="country" className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-primary" />
+            Which country interview would you like to prepare for? <span className="text-destructive">*</span>
+          </Label>
+          <Select
+            value={selectedCountry}
+            onValueChange={(value) => setSelectedCountry(value as 'usa' | 'uk' | 'france')}
+          >
+            <SelectTrigger className="h-11 border-muted-foreground/20">
+              <SelectValue placeholder="Select interview country" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="usa">🇺🇸 United States (F1 Student Visa)</SelectItem>
+              <SelectItem value="uk">🇬🇧 United Kingdom (Student Visa)</SelectItem>
+              <SelectItem value="france">🇫🇷 France (Student Visa)</SelectItem>
+            </SelectContent>
+          </Select>
+          {!selectedCountry && (
+            <p className="text-sm text-muted-foreground">Select a country to continue</p>
+          )}
+        </div>
+      </div>
+
+      {/* USA-specific Profile Fields */}
+      {selectedCountry === 'usa' && (
+      <>
+      <div className="space-y-5 pt-2 border-t">
         <div className="flex items-center gap-2 pb-2">
           <div className="h-1 w-1 rounded-full bg-primary" />
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Required Information</h3>
@@ -201,7 +244,7 @@ export function ProfileSetupForm({
         </div>
       </div>
 
-      {/* Optional Fields Section */}
+      {/* Optional Fields Section - USA only */}
       <div className="space-y-5 pt-2">
         <div className="flex items-center gap-2 pb-2 border-t pt-6">
           <div className="h-1 w-1 rounded-full bg-muted-foreground" />
@@ -236,8 +279,21 @@ export function ProfileSetupForm({
           />
         </div>
       </div>
+      </>
+      )}
 
-      <Button type="submit" className="w-full h-12 text-base font-semibold" disabled={isLoading}>
+      {/* UK/France: Show info message */}
+      {selectedCountry && selectedCountry !== 'usa' && (
+        <div className="bg-muted/50 border border-muted-foreground/20 rounded-lg p-4">
+          <p className="text-sm text-muted-foreground">
+            <strong className="text-foreground">
+              {selectedCountry === 'uk' ? '🇬🇧 UK' : '🇫🇷 France'} Interview:
+            </strong> No additional profile information needed. You can proceed directly to your dashboard and start practicing!
+          </p>
+        </div>
+      )}
+
+      <Button type="submit" className="w-full h-12 text-base font-semibold" disabled={isLoading || !selectedCountry}>
         {isLoading ? (
           <>
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
@@ -246,7 +302,7 @@ export function ProfileSetupForm({
         ) : (
           <>
             <CheckCircle2 className="h-5 w-5 mr-2" />
-            Complete Profile
+            {selectedCountry === 'usa' ? 'Complete Profile' : 'Continue to Dashboard'}
           </>
         )}
       </Button>
@@ -263,7 +319,11 @@ export function ProfileSetupForm({
         <div className="flex items-start justify-between">
           <div className="space-y-1.5">
             <CardTitle className="text-2xl font-bold">{title}</CardTitle>
-            <CardDescription className="text-base">{description}</CardDescription>
+            <CardDescription className="text-base">
+              {selectedCountry === 'usa' 
+                ? 'Please provide information about your intended program to get personalized interview questions.'
+                : 'Select your interview country to get started.'}
+            </CardDescription>
           </div>
         </div>
         

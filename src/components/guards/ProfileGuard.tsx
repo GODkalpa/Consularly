@@ -32,13 +32,21 @@ export function ProfileGuard({ children }: ProfileGuardProps) {
       return
     }
 
-    // Check if profile is completed
+    // Check if profile is completed based on selected country
     if (userProfile) {
+      const hasCountry = userProfile.interviewCountry
       const profileCompleted = userProfile.studentProfile?.profileCompleted
 
-      if (!profileCompleted) {
-        // Profile not completed - redirect to setup
-        console.log('[ProfileGuard] Profile incomplete, redirecting to setup')
+      // If no country selected, redirect to profile setup
+      if (!hasCountry) {
+        console.log('[ProfileGuard] No country selected, redirecting to setup')
+        router.push('/profile-setup')
+        return
+      }
+
+      // USA requires full profile, UK/France only need country selection
+      if (hasCountry === 'usa' && !profileCompleted) {
+        console.log('[ProfileGuard] USA user with incomplete profile, redirecting to setup')
         router.push('/profile-setup')
         return
       }

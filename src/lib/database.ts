@@ -42,6 +42,7 @@ export interface UserProfile {
   role: 'user' | 'admin' | 'super_admin';
   createdAt: string;
   lastLoginAt: string;
+  interviewCountry?: 'usa' | 'uk' | 'france'; // Selected country for interview (for individual users)
   preferences?: {
     notifications: boolean;
     theme: 'light' | 'dark';
@@ -52,7 +53,7 @@ export interface UserProfile {
     startDate: string;
     endDate?: string;
   };
-  studentProfile?: StudentProfileInfo; // Pre-interview profile information
+  studentProfile?: StudentProfileInfo; // Pre-interview profile information (USA only)
 }
 
 export const createUserProfile = async (uid: string, userData: Partial<UserProfile>) => {
