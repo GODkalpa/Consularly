@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin'
+import { sendInterviewResultsEmail } from '@/lib/email/send-helpers'
 
 // PATCH /api/org/interviews/[id]
 // Body: { status?: 'scheduled'|'in_progress'|'completed'|'cancelled', endTime?: string ISO, score?: number, scoreDetails?: Partial<{communication:number;technical:number;confidence:number;overall:number}> }
@@ -68,6 +69,56 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     await adminDb().collection('interviews').doc(interviewId).update(updates)
+
+    // Send interview results email if interview is completed with a final report
+    if (body.status === 'completed' && body.finalReport) {
+      try {
+        // Get student and organization details for email
+        const studentId = interviewSnap.get('userId')
+        const orgId = interview?.orgId
+        const route = interviewSnap.get('route') || 'USA F1'
+
+        if (studentId && orgId) {
+          const [studentSnap, orgSnap] = await Promise.all([
+            adminDb().collection('orgStudents').doc(studentId).get(),
+            adminDb().collection('organizations').doc(orgId).get(),
+          ])
+
+          const studentData = studentSnap.data()
+          const orgData = orgSnap.data()
+          const studentEmail = studentData?.email
+
+          if (studentEmail) {
+            const finalReport = body.finalReport
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+            sendInterviewResultsEmail({
+              to: studentEmail,
+              studentName: studentData?.name || 'Student',
+              interviewType: route,
+              overall: finalReport.overall || 0,
+              decision: finalReport.decision || 'borderline',
+              summary: finalReport.summary || 'Interview completed',
+              strengths: finalReport.strengths || [],
+              weaknesses: finalReport.weaknesses || [],
+              reportLink: `${appUrl}/org/results?id=${interviewId}`,
+              orgName: orgData?.name,
+              orgBranding: orgData?.settings?.customBranding,
+              interviewDate: new Date().toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              }),
+            }).catch((e) => {
+              console.warn('[api/org/interviews/[id]] Results email failed:', e)
+            })
+          }
+        }
+      } catch (emailError) {
+        console.warn('[api/org/interviews/[id]] Email preparation failed:', emailError)
+      }
+    }
+
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     console.error('[api/org/interviews/[id]] PATCH error', e)

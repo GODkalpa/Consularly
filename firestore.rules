@@ -8,28 +8,15 @@ service cloud.firestore {
       // This must be the FIRST rule and use NO helper functions to avoid circular dependency
       allow read, write: if request.auth != null && request.auth.uid == userId;
       
-      // Admins can read all users in their organization
+      // Admins can read all users
       allow read: if request.auth != null && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == resource.data.orgId;
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
       
-      // Super admins can read all users
-      allow read: if request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
-      
-      // Admins can update users in their organization (except role changes)
+      // Admins can update any user including role changes
       allow update: if request.auth != null && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == resource.data.orgId &&
-        request.resource.data.role == resource.data.role;
-      
-      // Super admins can update any user including role changes
-      allow update: if request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
     // Interviews collection - admin-level access control
@@ -42,27 +29,15 @@ service cloud.firestore {
       allow create: if request.auth != null && 
         request.resource.data.userId == request.auth.uid;
       
-      // Admins can read all interviews in their organization
+      // Admins can read all interviews
       allow read: if request.auth != null && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == resource.data.orgId;
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
       
-      // Super admins can read all interviews
-      allow read: if request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
-      
-      // Admins can create, update, and delete interviews in their organization
+      // Admins have full write access to all interviews
       allow write: if request.auth != null && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == request.resource.data.orgId;
-      
-      // Super admins have full access
-      allow write: if request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
       
       // Interview metrics sub-collection
       match /metrics/{metricId} {
@@ -70,27 +45,15 @@ service cloud.firestore {
         allow read, write: if request.auth != null && 
           get(/databases/$(database)/documents/interviews/$(interviewId)).data.userId == request.auth.uid;
         
-        // Admins can read metrics for interviews in their organization
+        // Admins can read all metrics
         allow read: if request.auth != null && 
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == get(/databases/$(database)/documents/interviews/$(interviewId)).data.orgId;
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
         
-        // Super admins can read all metrics
-        allow read: if request.auth != null && 
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
-        
-        // Admins can write metrics in their organization
+        // Admins have full write access to all metrics
         allow write: if request.auth != null && 
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == get(/databases/$(database)/documents/interviews/$(interviewId)).data.orgId;
-        
-        // Super admins have full access
-        allow write: if request.auth != null && 
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
       }
 
       // Interview responses sub-collection
@@ -99,63 +62,36 @@ service cloud.firestore {
         allow read, write: if request.auth != null &&
           get(/databases/$(database)/documents/interviews/$(interviewId)).data.userId == request.auth.uid;
 
-        // Admins can read responses for interviews in their organization
+        // Admins can read all responses
         allow read: if request.auth != null &&
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == get(/databases/$(database)/documents/interviews/$(interviewId)).data.orgId;
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
 
-        // Super admins can read all responses
-        allow read: if request.auth != null &&
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
-
-        // Admins can write responses in their organization
+        // Admins have full write access to all responses
         allow write: if request.auth != null &&
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == get(/databases/$(database)/documents/interviews/$(interviewId)).data.orgId;
-
-        // Super admins have full access
-        allow write: if request.auth != null &&
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
       }
     }
     
     // Organizations collection - admin access only
     match /organizations/{orgId} {
-      // Admins can read their own organization
+      // Admins can read all organizations
       allow read: if request.auth != null && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == orgId;
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
       
-      // Super admins can read all organizations
-      allow read: if request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
-      
-      // Admins can update their own organization (limited fields)
-      allow update: if request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == orgId &&
-        request.resource.data.keys().hasAll(['name', 'settings']) &&
-        request.resource.data.quotaLimit == resource.data.quotaLimit &&
-        request.resource.data.plan == resource.data.plan;
-      
-      // Super admins have full access
+      // Admins have full write access to all organizations
       allow write: if request.auth != null && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
-    // System settings - super admin only
+    // System settings - admin only
     match /systemSettings/{settingId} {
       allow read, write: if request.auth != null && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
     // orgStudents collection - org members and admins
@@ -165,16 +101,10 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == resource.data.orgId;
       
-      // Org admins can write students in their org
-      allow write: if request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId == request.resource.data.orgId;
-      
-      // Super admins have full access
+      // Admins have full read/write access to all org students
       allow read, write: if request.auth != null && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
     // Legacy collections for backward compatibility

@@ -39,7 +39,7 @@ export interface UserProfile {
   // Organization membership (optional for personal users)
   orgId?: string;
   photoURL?: string;
-  role: 'user' | 'admin' | 'super_admin';
+  role: 'user' | 'admin';
   createdAt: string;
   lastLoginAt: string;
   interviewCountry?: 'usa' | 'uk' | 'france'; // Selected country for interview (for individual users)
@@ -248,14 +248,14 @@ export const getUserProgress = async (userId: string): Promise<UserProgress | nu
 export const isUserAdmin = async (uid: string): Promise<boolean> => {
   try {
     const userProfile = await getUserProfile(uid);
-    return userProfile?.role === 'admin' || userProfile?.role === 'super_admin';
+    return userProfile?.role === 'admin';
   } catch (error) {
     console.error('Error checking admin status:', error);
     return false;
   }
 };
 
-export const getUserRole = async (uid: string): Promise<'user' | 'admin' | 'super_admin' | null> => {
+export const getUserRole = async (uid: string): Promise<'user' | 'admin' | null> => {
   try {
     const userProfile = await getUserProfile(uid);
     return userProfile?.role || null;
@@ -265,7 +265,7 @@ export const getUserRole = async (uid: string): Promise<'user' | 'admin' | 'supe
   }
 };
 
-export const updateUserRole = async (uid: string, role: 'user' | 'admin' | 'super_admin') => {
+export const updateUserRole = async (uid: string, role: 'user' | 'admin') => {
   try {
     await updateDoc(doc(db, 'users', uid), {
       role: role,

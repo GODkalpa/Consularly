@@ -474,7 +474,7 @@ export const getOrganization = async (orgId: string): Promise<OrganizationWithId
 export const isUserAdmin = async (uid: string): Promise<boolean> => {
   try {
     const userProfile = await getUserProfile(uid);
-    return userProfile?.role === 'admin' || userProfile?.role === 'super_admin';
+    return userProfile?.role === 'admin';
   } catch (error) {
     console.error('Error checking admin status:', error);
     return false;
@@ -499,10 +499,10 @@ export const canAccessOrganization = async (
     const userProfile = await getUserProfile(uid);
     if (!userProfile) return false;
     
-    // Super admins can access any organization
-    if (userProfile.role === 'super_admin') return true;
+    // Admins can access any organization
+    if (userProfile.role === 'admin') return true;
     
-    // Users and admins can only access their own organization
+    // Regular users can only access their own organization
     return userProfile.orgId === orgId;
   } catch (error) {
     console.error('Error checking organization access:', error);

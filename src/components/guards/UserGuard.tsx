@@ -11,7 +11,7 @@ interface UserGuardProps {
 /**
  * UserGuard protects routes that should only be accessible to authenticated regular users.
  * Redirects:
- * - Admins/super_admins to /admin
+ * - Admins to /admin
  * - Org members to /org
  * - Unauthenticated users to /signin
  */
@@ -30,7 +30,7 @@ export function UserGuard({ children }: UserGuardProps) {
     if (!userProfile) return
 
     // Redirect admins to their dashboard
-    if (userProfile.role === 'admin' || userProfile.role === 'super_admin') {
+    if (userProfile.role === 'admin') {
       router.push('/admin')
       return
     }
@@ -57,7 +57,7 @@ export function UserGuard({ children }: UserGuardProps) {
   }
 
   // Don't render for admins or org members
-  if (userProfile.role === 'admin' || userProfile.role === 'super_admin' || (userProfile as any).orgId) {
+  if (userProfile.role === 'admin' || (userProfile as any).orgId) {
     return null
   }
 

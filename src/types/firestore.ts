@@ -4,7 +4,7 @@
 import { Timestamp } from 'firebase/firestore';
 
 // User roles enum
-export type UserRole = 'user' | 'admin' | 'super_admin';
+export type UserRole = 'user' | 'admin';
 
 // Interview status enum
 export type InterviewStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';

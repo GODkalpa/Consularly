@@ -84,10 +84,15 @@ export function QuotaManagement() {
         const token = await auth.currentUser?.getIdToken()
         if (!token) throw new Error('Not authenticated')
 
-        // Fetch organizations via API
-        const orgsRes = await fetch('/api/admin/organizations/list', {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        // Fetch organizations and users in parallel for better performance
+        const [orgsRes, usersRes] = await Promise.all([
+          fetch('/api/admin/organizations/list', {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          fetch('/api/admin/users/list?type=signup', {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ])
         
         if (orgsRes.ok) {
           const orgsJson = await orgsRes.json()
@@ -102,7 +107,7 @@ export function QuotaManagement() {
 
             return {
               organizationId: org.id,
-              organizationName: org.name || 'Unknown',
+              organizationName: org.name || org.id,
               currentQuota: quotaLimit,
               usedQuota: quotaUsed,
               plan: org.plan || 'basic',
@@ -115,11 +120,6 @@ export function QuotaManagement() {
           console.error('Failed to load organizations', error)
           toast.error('Failed to load organizations: ' + (error.error || 'Unknown error'))
         }
-
-        // Fetch signup users via API
-        const usersRes = await fetch('/api/admin/users/list?type=signup', {
-          headers: { Authorization: `Bearer ${token}` }
-        })
         
         if (usersRes.ok) {
           const usersJson = await usersRes.json()
@@ -157,11 +157,8 @@ export function QuotaManagement() {
       }
     }
 
-    // Initial load
+    // Initial load only - remove aggressive polling to improve performance
     loadData()
-
-    // Refresh data every 30 seconds for near-realtime updates
-    intervalId = setInterval(loadData, 30000)
 
     return () => { 
       if (intervalId) clearInterval(intervalId)

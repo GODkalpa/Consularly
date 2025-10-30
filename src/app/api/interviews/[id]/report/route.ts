@@ -27,7 +27,7 @@ export async function GET(
     }
 
     const caller = callerSnap.data() as { role?: string; orgId?: string } | undefined
-    const isAdmin = caller?.role === 'admin' || caller?.role === 'super_admin'
+    const isAdmin = caller?.role === 'admin'
 
     // Load interview
     const interviewSnap = await adminDb().collection('interviews').doc(interviewId).get()

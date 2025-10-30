@@ -54,6 +54,20 @@ export function UserManagement() {
   const [newOrgId, setNewOrgId] = useState("")
   const [orgNames, setOrgNames] = useState<Record<string, string>>({})
   const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string }>>([])
+  
+  // Edit dialog state
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState<UserRow | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editRole, setEditRole] = useState<string>("")
+  const [editOrgId, setEditOrgId] = useState("")
+  const [editActive, setEditActive] = useState(true)
+  const [editing, setEditing] = useState(false)
+  
+  // Delete dialog state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [deletingUser, setDeletingUser] = useState<UserRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Load users via API (avoids Firestore permission issues)
   useEffect(() => {
@@ -67,10 +81,18 @@ export function UserManagement() {
         const token = await auth.currentUser?.getIdToken()
         if (!token) return
 
-        // Fetch users via API
-        const usersRes = await fetch('/api/admin/users/list?type=all', {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        // Fetch users and organizations in parallel for better performance
+        const [usersRes, orgsRes] = await Promise.all([
+          fetch('/api/admin/users/list?type=all', {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          fetch('/api/admin/organizations/list', {
+            headers: { Authorization: `Bearer ${token}` }
+          }).catch(e => {
+            console.warn('Failed to load organizations for dropdown', e)
+            return null
+          })
+        ])
 
         if (!usersRes.ok) {
           const error = await usersRes.json()
@@ -84,22 +106,14 @@ export function UserManagement() {
         let orgMap: Record<string, string> = {}
         const opts: Array<{ id: string; name: string }> = []
 
-        try {
-          const orgsRes = await fetch('/api/admin/organizations/list', {
-            headers: { Authorization: `Bearer ${token}` }
+        if (orgsRes && orgsRes.ok) {
+          const orgsJson = await orgsRes.json()
+          const orgs = orgsJson.organizations || []
+          orgs.forEach((org: any) => {
+            const name = org.name || org.id
+            orgMap[org.id] = name
+            opts.push({ id: org.id, name })
           })
-
-          if (orgsRes.ok) {
-            const orgsJson = await orgsRes.json()
-            const orgs = orgsJson.organizations || []
-            orgs.forEach((org: any) => {
-              const name = org.name || org.id
-              orgMap[org.id] = name
-              opts.push({ id: org.id, name })
-            })
-          }
-        } catch (e) {
-          console.warn('Failed to load organizations for dropdown', e)
         }
 
         setOrgNames(orgMap)
@@ -135,11 +149,15 @@ export function UserManagement() {
             console.warn('Failed to parse lastActive', e)
           }
 
-          const derivedRole: UserRow['role'] = data?.role === 'admin' || data?.role === 'super_admin'
+          const derivedRole: UserRow['role'] = data?.role === 'admin'
             ? 'admin'
             : (data?.orgId ? 'organization' : 'student')
 
           const status: UserRow['status'] = data?.isActive === false ? 'inactive' : 'active'
+
+          // Admins should never show an organization - they are system-wide
+          const isAdminUser = data?.role === 'admin'
+          const organization = isAdminUser ? undefined : (data?.orgId ? (orgMap[data.orgId] || data.orgId) : undefined)
 
           return {
             id: data.id,
@@ -147,7 +165,7 @@ export function UserManagement() {
             email: data?.email || '',
             role: derivedRole,
             status,
-            organization: data?.orgId ? (orgMap[data.orgId] || data.orgId) : undefined,
+            organization,
             joinDate: createdAt.toISOString(),
             lastActive: lastActive.toISOString(),
             testsCompleted: 0,
@@ -162,12 +180,11 @@ export function UserManagement() {
       }
     }
 
-    // Initial load
+    // Initial load only - remove aggressive polling to improve performance
+    // Users can refresh the page manually if they need updated data
     loadUsers()
 
-    // Refresh every 30 seconds for near real-time updates
-    intervalId = setInterval(loadUsers, 30000)
-
+    // Cleanup function
     return () => {
       if (intervalId) clearInterval(intervalId)
     }
@@ -286,6 +303,86 @@ export function UserManagement() {
     }
   }
 
+  function openEditDialog(user: UserRow) {
+    setEditingUser(user)
+    setEditName(user.name)
+    setEditRole(user.role)
+    setEditOrgId(user.organization ? Object.keys(orgNames).find(k => orgNames[k] === user.organization) || '' : '')
+    setEditActive(user.status === 'active')
+    setIsEditDialogOpen(true)
+  }
+
+  async function handleEditUser() {
+    if (!editingUser || !editName) {
+      toast.error('Please fill in the name')
+      return
+    }
+    if (editRole === 'organization' && !editOrgId) {
+      toast.error('Please select an organization')
+      return
+    }
+    try {
+      setEditing(true)
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
+      const backendRole = editRole === 'admin' ? 'admin' : 'user'
+      const res = await fetch(`/api/admin/users/${editingUser.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          displayName: editName,
+          role: backendRole,
+          isActive: editActive,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Failed to update user')
+
+      toast.success('User updated successfully')
+      setIsEditDialogOpen(false)
+      setEditingUser(null)
+    } catch (e: any) {
+      toast.error('Update user failed', { description: e?.message })
+    } finally {
+      setEditing(false)
+    }
+  }
+
+  function openDeleteDialog(user: UserRow) {
+    setDeletingUser(user)
+    setIsDeleteDialogOpen(true)
+  }
+
+  async function handleDeleteUser() {
+    if (!deletingUser) return
+    try {
+      setDeleting(true)
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch(`/api/admin/users/${deletingUser.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Failed to delete user')
+
+      toast.success('User deleted successfully')
+      setIsDeleteDialogOpen(false)
+      setDeletingUser(null)
+    } catch (e: any) {
+      toast.error('Delete user failed', { description: e?.message })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
@@ -363,6 +460,11 @@ export function UserManagement() {
                         <SelectItem value="admin">Admin</SelectItem>
                       </SelectContent>
                     </Select>
+                    {newRole === 'admin' && (
+                      <p className="text-xs text-muted-foreground text-blue-600">
+                        ℹ️ Admin users are system-wide and not tied to any specific organization.
+                      </p>
+                    )}
                   </div>
                   {newRole === 'organization' && (
                     <div className="space-y-2">
@@ -480,10 +582,10 @@ export function UserManagement() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(user)}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-red-600">
+                        <Button variant="ghost" size="sm" className="text-red-600" onClick={() => openDeleteDialog(user)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -501,6 +603,99 @@ export function UserManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit User Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>Update user information and permissions</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Name</label>
+              <Input placeholder="Enter full name" value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Role</label>
+              <Select value={editRole} onValueChange={setEditRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="student">Student</SelectItem>
+                  <SelectItem value="organization">Organization Member</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {editRole === 'organization' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Organization</label>
+                <Select value={editOrgId} onValueChange={setEditOrgId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select organization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {orgOptions.map(o => (
+                      <SelectItem key={o.id} value={o.id}>{o.name} ({o.id.slice(0,6)}…)</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="edit-active"
+                checked={editActive}
+                onChange={(e) => setEditActive(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <label htmlFor="edit-active" className="text-sm font-medium cursor-pointer">
+                Active Status
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={editing}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditUser} disabled={editing}>
+                {editing ? 'Updating…' : 'Update User'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>Are you sure you want to delete this user? This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          {deletingUser && (
+            <div className="py-4">
+              <div className="rounded-lg border p-4 space-y-2">
+                <div className="font-medium">{deletingUser.name}</div>
+                <div className="text-sm text-muted-foreground">{deletingUser.email}</div>
+                <div className="text-sm">
+                  <span className="font-medium">Role:</span> {deletingUser.role}
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteUser} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete User'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

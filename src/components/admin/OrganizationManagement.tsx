@@ -21,7 +21,7 @@ import {
   CheckCircle,
   Pause
 } from "lucide-react"
-import { collection, onSnapshot, orderBy, query, where, getCountFromServer, documentId } from "firebase/firestore"
+import { collection, onSnapshot, orderBy, query, where, getCountFromServer, documentId, getDocs } from "firebase/firestore"
 import type { QuerySnapshot, DocumentData, QueryDocumentSnapshot } from "firebase/firestore"
 import { auth, db, firebaseEnabled } from "@/lib/firebase"
 import { toast } from "sonner"
@@ -60,31 +60,51 @@ export function OrganizationManagement() {
   const [newType, setNewType] = useState<string>("")
   const [newPlan, setNewPlan] = useState<string>("")
   const [newQuota, setNewQuota] = useState<string>("")
+  
+  // Edit dialog state
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingOrg, setEditingOrg] = useState<OrgRow | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editEmail, setEditEmail] = useState("")
+  const [editContactPerson, setEditContactPerson] = useState("")
+  const [editPhone, setEditPhone] = useState("")
+  const [editType, setEditType] = useState<string>("")
+  const [editStatus, setEditStatus] = useState<string>("")
+  const [editPlan, setEditPlan] = useState<string>("")
+  const [editQuota, setEditQuota] = useState<string>("")
+  const [editing, setEditing] = useState(false)
+  
+  // Delete dialog state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [deletingOrg, setDeletingOrg] = useState<OrgRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Real-time subscription to organizations
   useEffect(() => {
     if (!firebaseEnabled) return
-
-    // Super admins see all orgs; admins see only their org
-    const baseCol = collection(db, 'organizations')
-    const isSuper = userProfile?.role === 'super_admin'
-    const orgId = (userProfile as any)?.orgId as string | undefined
-
-    // Build query: super admins see all; admins see their org by id if known,
-    // otherwise fall back to orgs where they are listed as an admin user.
-    let q: any
-    if (isSuper) {
-      q = query(baseCol, orderBy('createdAt', 'desc'))
-    } else if (orgId) {
-      q = query(baseCol, where(documentId(), '==', orgId))
-    } else if (user?.uid) {
-      q = query(baseCol, where('adminUsers', 'array-contains', user.uid))
-    } else {
+    if (!userProfile || !user) {
       setOrganizations([])
       setUserCounts({})
       return
     }
-    const unsub = onSnapshot(q, async (snap: QuerySnapshot<DocumentData>) => {
+
+    // All admins see all organizations
+    const baseCol = collection(db, 'organizations')
+    const isAdmin = userProfile?.role === 'admin'
+
+    if (!isAdmin) {
+      // Not an admin, no access
+      setOrganizations([])
+      setUserCounts({})
+      return
+    }
+
+    // Admins see all organizations
+    const q = query(baseCol, orderBy('createdAt', 'desc'))
+
+    const unsub = onSnapshot(
+      q, 
+      async (snap: QuerySnapshot<DocumentData>) => {
       const orgs: OrgRow[] = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => {
         const data = d.data() as any
         const createdAt = (data?.createdAt?.toDate?.() as Date | undefined)
@@ -105,22 +125,50 @@ export function OrganizationManagement() {
       })
       setOrganizations(orgs)
 
-      // Fetch per-org user counts efficiently
+      // Fetch per-org user counts efficiently using getCountFromServer (doesn't download documents)
       try {
         const entries = await Promise.all(
           orgs.map(async (o) => {
             try {
-              const countSnap = await getCountFromServer(query(collection(db, 'users'), where('orgId', '==', o.id)))
-              return [o.id, Number((countSnap.data() as any)?.count || 0)] as const
-            } catch {
+              // Use count aggregation instead of fetching all documents
+              const totalCount = await getCountFromServer(
+                query(collection(db, 'users'), where('orgId', '==', o.id))
+              )
+              
+              // Get admin count for this org
+              const adminCount = await getCountFromServer(
+                query(
+                  collection(db, 'users'), 
+                  where('orgId', '==', o.id),
+                  where('role', '==', 'admin')
+                )
+              )
+              
+              // Non-admin count = total - admins
+              const nonAdminCount = totalCount.data().count - adminCount.data().count
+              return [o.id, nonAdminCount] as const
+            } catch (err) {
+              console.warn(`[OrganizationManagement] Failed to count users for org ${o.id}:`, err)
               return [o.id, 0] as const
             }
           })
         )
         setUserCounts(Object.fromEntries(entries))
-      } catch {
+      } catch (err) {
+        console.error('[OrganizationManagement] Failed to fetch user counts:', err)
         // ignore count errors
       }
+    },
+    (error) => {
+      // Handle snapshot errors
+      console.error('[OrganizationManagement] Snapshot error:', error)
+      if (error.code === 'permission-denied') {
+        toast.error('Permission denied', { 
+          description: 'Unable to load organizations. Please check your permissions.' 
+        })
+      }
+      setOrganizations([])
+      setUserCounts({})
     })
 
     return () => unsub()
@@ -226,6 +274,89 @@ export function OrganizationManagement() {
       toast.error('Create organization failed', { description: e?.message })
     } finally {
       setCreating(false)
+    }
+  }
+
+  function openEditDialog(org: OrgRow) {
+    setEditingOrg(org)
+    setEditName(org.name)
+    setEditEmail(org.email || '')
+    setEditContactPerson(org.contactPerson || '')
+    setEditPhone(org.phone || '')
+    setEditType(org.type)
+    setEditStatus(org.status)
+    setEditPlan(org.subscriptionPlan)
+    setEditQuota(org.monthlyQuota.toString())
+    setIsEditDialogOpen(true)
+  }
+
+  async function handleEditOrganization() {
+    if (!editingOrg || !editName || !editPlan || !editQuota) {
+      toast.error('Please fill in organization name, plan and quota')
+      return
+    }
+    try {
+      setEditing(true)
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch(`/api/admin/organizations/${editingOrg.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          quotaLimit: Number(editQuota),
+          plan: editPlan,
+          settings: {
+            customBranding: {
+              companyName: editName
+            }
+          }
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Failed to update organization')
+
+      toast.success('Organization updated successfully')
+      setIsEditDialogOpen(false)
+      setEditingOrg(null)
+    } catch (e: any) {
+      toast.error('Update organization failed', { description: e?.message })
+    } finally {
+      setEditing(false)
+    }
+  }
+
+  function openDeleteDialog(org: OrgRow) {
+    setDeletingOrg(org)
+    setIsDeleteDialogOpen(true)
+  }
+
+  async function handleDeleteOrganization() {
+    if (!deletingOrg) return
+    try {
+      setDeleting(true)
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch(`/api/admin/organizations/${deletingOrg.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Failed to delete organization')
+
+      toast.success('Organization deleted successfully')
+      setIsDeleteDialogOpen(false)
+      setDeletingOrg(null)
+    } catch (e: any) {
+      toast.error('Delete organization failed', { description: e?.message })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -452,10 +583,15 @@ export function OrganizationManagement() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={() => openEditDialog(org)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="text-red-600">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-red-600" 
+                            onClick={() => openDeleteDialog(org)}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -478,6 +614,129 @@ export function OrganizationManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Organization Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Organization</DialogTitle>
+            <DialogDescription>Update organization information and quota</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Organization Name</label>
+              <Input placeholder="Enter organization name" value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input type="email" placeholder="Enter email address" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} disabled />
+              <p className="text-xs text-muted-foreground">Email cannot be changed</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Contact Person</label>
+              <Input placeholder="Enter contact person name" value={editContactPerson} onChange={(e) => setEditContactPerson(e.target.value)} disabled />
+              <p className="text-xs text-muted-foreground">Contact info cannot be changed via edit</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Phone</label>
+              <Input placeholder="Enter phone number" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} disabled />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Organization Type</label>
+              <Select value={editType} onValueChange={setEditType} disabled>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="visa_consultancy">Visa Consultancy</SelectItem>
+                  <SelectItem value="educational">Educational Institution</SelectItem>
+                  <SelectItem value="corporate">Corporate Training</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Type cannot be changed</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select value={editStatus} onValueChange={setEditStatus} disabled>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="suspended">Suspended</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Use separate API for status changes</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Subscription Plan</label>
+              <Select value={editPlan} onValueChange={setEditPlan}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="basic">Basic (100 tests/month)</SelectItem>
+                  <SelectItem value="premium">Premium (500 tests/month)</SelectItem>
+                  <SelectItem value="enterprise">Enterprise (1000 tests/month)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Monthly Test Quota</label>
+              <Input type="number" placeholder="Enter monthly quota" value={editQuota} onChange={(e) => setEditQuota(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={editing}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditOrganization} disabled={editing}>
+              {editing ? 'Updating…' : 'Update Organization'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Organization Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Organization</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this organization? This action cannot be undone.
+              All users must be deleted or reassigned before deleting an organization.
+            </DialogDescription>
+          </DialogHeader>
+          {deletingOrg && (
+            <div className="py-4">
+              <div className="rounded-lg border p-4 space-y-2">
+                <div className="font-medium">{deletingOrg.name}</div>
+                <div className="text-sm text-muted-foreground">{deletingOrg.email}</div>
+                <div className="text-sm">
+                  <span className="font-medium">Type:</span> {deletingOrg.type.replace('_', ' ')}
+                </div>
+                <div className="text-sm">
+                  <span className="font-medium">Users:</span> {userCounts[deletingOrg.id] ?? 0}
+                </div>
+                {(userCounts[deletingOrg.id] ?? 0) > 0 && (
+                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                    ⚠️ This organization has {userCounts[deletingOrg.id]} user(s). Please delete or reassign them first.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteOrganization} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete Organization'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

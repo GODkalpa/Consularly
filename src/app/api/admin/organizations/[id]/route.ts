@@ -24,7 +24,7 @@ export async function PATCH(
     const callerSnap = await adminDb().collection('users').doc(callerUid).get()
     const callerData = callerSnap.data() as { role?: string; orgId?: string } | undefined
     const callerRole = callerData?.role
-    const isAdmin = callerRole === 'admin' || callerRole === 'super_admin'
+    const isAdmin = callerRole === 'admin'
     if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -34,6 +34,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
     }
 
+    // Check if organization exists and get its data
+    const orgSnap = await adminDb().collection('organizations').doc(orgId).get()
+    if (!orgSnap.exists) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    }
+
+    const orgData = orgSnap.data()
     const body = await req.json()
     const update: Record<string, any> = {
       updatedAt: FieldValue.serverTimestamp(),
@@ -54,8 +61,7 @@ export async function PATCH(
 
     // Update settings (partial merge)
     if (body.settings && typeof body.settings === 'object') {
-      const currentOrg = await adminDb().collection('organizations').doc(orgId).get()
-      const currentSettings = currentOrg.data()?.settings || {}
+      const currentSettings = orgData?.settings || {}
       update.settings = { ...currentSettings, ...body.settings }
     }
 
@@ -69,6 +75,68 @@ export async function PATCH(
     return NextResponse.json({ success: true }, { status: 200 })
   } catch (e: any) {
     console.error('[api/admin/organizations/[id]] PATCH error', e)
+    return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
+  }
+}
+
+// DELETE /api/admin/organizations/[id]
+// Deletes an organization and all its related data. Admin only.
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await ensureFirebaseAdmin()
+
+    const authHeader = req.headers.get('authorization') || ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized: missing token' }, { status: 401 })
+    }
+
+    const decoded = await adminAuth().verifyIdToken(token)
+    const callerUid = decoded.uid
+
+    // Check caller is admin
+    const callerSnap = await adminDb().collection('users').doc(callerUid).get()
+    const callerData = callerSnap.data() as { role?: string; orgId?: string } | undefined
+    const callerRole = callerData?.role
+    const isAdmin = callerRole === 'admin'
+    
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
+    }
+
+    const orgId = params.id
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
+    }
+
+    // Check if organization exists
+    const orgSnap = await adminDb().collection('organizations').doc(orgId).get()
+    if (!orgSnap.exists) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    }
+
+    // Check if organization has users (excluding admin users who shouldn't be tied to orgs)
+    const usersSnap = await adminDb().collection('users').where('orgId', '==', orgId).get()
+    const nonAdminUsers = usersSnap.docs.filter(doc => {
+      const role = doc.data()?.role
+      return role !== 'admin'
+    })
+    
+    if (nonAdminUsers.length > 0) {
+      return NextResponse.json({ 
+        error: `Cannot delete organization with existing users. Please delete or reassign all ${nonAdminUsers.length} user(s) first.` 
+      }, { status: 400 })
+    }
+
+    // Delete organization
+    await adminDb().collection('organizations').doc(orgId).delete()
+
+    return NextResponse.json({ success: true }, { status: 200 })
+  } catch (e: any) {
+    console.error('[api/admin/organizations/[id]] DELETE error', e)
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
   }
 }

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin'
+import { sendOrgWelcomeEmail } from '@/lib/email/send-helpers'
 
 // POST /api/admin/organizations
-// Creates a new organization document in Firestore. Admin-only (super_admin recommended).
+// Creates a new organization document in Firestore. Admin-only.
 // Body: {
 //   name: string,
 //   domain?: string,
@@ -35,9 +36,9 @@ export async function POST(req: NextRequest) {
 
     // Check caller is admin
     const callerSnap = await adminDb().collection('users').doc(callerUid).get()
-    const callerData = callerSnap.data() as { role?: string; orgId?: string } | undefined
+    const callerData = callerSnap.data() as { role?: string; orgId?: string; displayName?: string; email?: string } | undefined
     const callerRole = callerData?.role
-    const isAdmin = callerRole === 'admin' || callerRole === 'super_admin'
+    const isAdmin = callerRole === 'admin'
     if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -52,13 +53,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'name, plan and positive quotaLimit are required' }, { status: 400 })
     }
 
+    // Add the creator to adminUsers array so they can see the organization
+    // Note: Regular admins are NOT assigned orgId (they remain system-wide)
+    // but we track which orgs they manage via adminUsers array
+    const adminUsers = callerRole === 'admin' ? [callerUid] : []
+
     const organizationDoc: Record<string, any> = {
       name,
       domain: body.domain ? String(body.domain) : '',
       plan,
       quotaLimit,
       quotaUsed: 0,
-      adminUsers: [],
+      adminUsers, // Include creator for access control
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       settings: {
@@ -82,19 +88,18 @@ export async function POST(req: NextRequest) {
 
     const ref = await adminDb().collection('organizations').add(organizationDoc)
 
-    // If the caller is a regular admin without an org assignment yet,
-    // automatically assign them to this newly created organization so
-    // they can read/manage it per Firestore rules.
-    if (callerRole === 'admin' && !callerData?.orgId) {
-      try {
-        await Promise.all([
-          adminDb().collection('users').doc(callerUid).set({ orgId: ref.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true }),
-          adminDb().collection('organizations').doc(ref.id).set({ adminUsers: [callerUid] }, { merge: true }),
-        ])
-      } catch (e) {
-        // non-fatal: assignment can be done later by a super admin
-        console.warn('[api/admin/organizations] Failed to auto-assign admin to org', e)
-      }
+    // Send organization welcome email (non-blocking)
+    if (callerData?.email) {
+      sendOrgWelcomeEmail({
+        to: callerData.email,
+        adminName: callerData.displayName || 'Administrator',
+        orgName: name,
+        orgId: ref.id,
+        plan,
+        quotaLimit,
+      }).catch((e) => {
+        console.warn('[api/admin/organizations] Org welcome email failed:', e)
+      })
     }
 
     return NextResponse.json({ id: ref.id }, { status: 201 })

@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     }
 
     const caller = callerSnap.data() as { role?: string } | undefined
-    const isAdmin = caller?.role === 'admin' || caller?.role === 'super_admin'
+    const isAdmin = caller?.role === 'admin'
     
     if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden: admin access required' }, { status: 403 })

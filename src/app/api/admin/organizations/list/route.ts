@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     const callerSnap = await adminDb().collection('users').doc(callerUid).get()
     const callerData = callerSnap.data() as { role?: string; orgId?: string } | undefined
     const callerRole = callerData?.role
-    const isAdmin = callerRole === 'admin' || callerRole === 'super_admin'
+    const isAdmin = callerRole === 'admin'
     if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -31,35 +31,18 @@ export async function GET(req: NextRequest) {
 
     const db = adminDb()
     
-    // Super admins can see all organizations
-    // Regular admins can only see their own organization
-    if (callerRole === 'admin' && callerData?.orgId) {
-      // Regular admin - only their org
-      const orgSnap = await db.collection('organizations').doc(callerData.orgId).get()
-      if (!orgSnap.exists) {
-        return NextResponse.json({ organizations: [] }, { status: 200 })
-      }
-      const organizations = [{
-        id: orgSnap.id,
-        ...orgSnap.data()
-      }]
-      const response = NextResponse.json({ organizations }, { status: 200 })
-      response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
-      return response
-    } else {
-      // Super admin - all orgs with pagination
-      const snapshot = await db.collection('organizations')
-        .limit(limit)
-        .get()
-      
-      const organizations = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
-      const response = NextResponse.json({ organizations, total: organizations.length }, { status: 200 })
-      response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
-      return response
-    }
+    // All admins can see all organizations
+    const snapshot = await db.collection('organizations')
+      .limit(limit)
+      .get()
+    
+    const organizations = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }))
+    const response = NextResponse.json({ organizations, total: organizations.length }, { status: 200 })
+    response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return response
   } catch (e: any) {
     console.error('[api/admin/organizations/list] GET error', e)
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })

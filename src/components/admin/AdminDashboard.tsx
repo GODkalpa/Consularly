@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, lazy, Suspense } from "react"
 import {
   Users,
   Building2,
@@ -13,7 +13,8 @@ import {
   PieChart,
   Mic,
   Search,
-  Home
+  Home,
+  Loader2
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -40,15 +41,28 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
 
-import { UserManagement } from "./UserManagement"
-import { OrganizationManagement } from "./OrganizationManagement"
-import { QuotaManagement } from "./QuotaManagement"
-import { PlatformAnalytics } from "./PlatformAnalytics"
-import { BillingManagement } from "./BillingManagement"
-import { GlobalSettings } from "./GlobalSettings"
-import { SupportCenter } from "./SupportCenter"
-import { DashboardOverview } from "./DashboardOverview"
-import { InterviewSimulation } from "./InterviewSimulation"
+// Lazy load all admin components to improve initial load time
+const UserManagement = lazy(() => import("./UserManagement").then(m => ({ default: m.UserManagement })))
+const OrganizationManagement = lazy(() => import("./OrganizationManagement").then(m => ({ default: m.OrganizationManagement })))
+const QuotaManagement = lazy(() => import("./QuotaManagement").then(m => ({ default: m.QuotaManagement })))
+const PlatformAnalytics = lazy(() => import("./PlatformAnalytics").then(m => ({ default: m.PlatformAnalytics })))
+const BillingManagement = lazy(() => import("./BillingManagement").then(m => ({ default: m.BillingManagement })))
+const GlobalSettings = lazy(() => import("./GlobalSettings").then(m => ({ default: m.GlobalSettings })))
+const SupportCenter = lazy(() => import("./SupportCenter").then(m => ({ default: m.SupportCenter })))
+const DashboardOverview = lazy(() => import("./DashboardOverview").then(m => ({ default: m.DashboardOverview })))
+const InterviewSimulation = lazy(() => import("./InterviewSimulation").then(m => ({ default: m.InterviewSimulation })))
+
+// Loading fallback component
+function ComponentLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="text-center space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  )
+}
 
 const menuItems = [
   {
@@ -255,7 +269,9 @@ export function AdminDashboard() {
         </header>
 
         <main className="flex-1 overflow-auto p-4 md:p-6">
-          {renderContent()}
+          <Suspense fallback={<ComponentLoader />}>
+            {renderContent()}
+          </Suspense>
         </main>
       </SidebarInset>
     </SidebarProvider>

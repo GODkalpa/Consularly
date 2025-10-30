@@ -16,6 +16,7 @@ import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { auth, db, firebaseEnabled } from '@/lib/firebase';
 import { getUserProfile, isUserAdmin, UserProfile } from '@/lib/database';
+import { sendWelcomeEmail } from '@/lib/email/send-helpers';
 
 interface AuthContextType {
   user: User | null;
@@ -82,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const latest = (snap.data() as UserProfile | undefined) || null;
               console.log('📡 Profile snapshot update:', latest);
               setUserProfile(latest);
-              const isAdminUser = latest?.role === 'admin' || latest?.role === 'super_admin';
+              const isAdminUser = latest?.role === 'admin';
               setIsAdmin(isAdminUser);
 
               // Auto-redirect to profile setup if profile incomplete (only for non-admin users)
@@ -158,6 +159,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
+      // Send welcome email (non-blocking)
+      sendWelcomeEmail({
+        to: email,
+        displayName: displayName,
+        userId: user.uid,
+      }).catch((e) => {
+        console.warn('[AuthContext] Welcome email failed:', e);
+      });
+
       // Always send password setup email so the user can set/confirm their password via email link
       try {
         await sendPasswordResetEmail(auth, email);
@@ -224,7 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user || !userProfile) return;
     
     // Redirect based on user role
-    if (userProfile.role === 'admin' || userProfile.role === 'super_admin') {
+    if (userProfile.role === 'admin') {
       router.push('/admin');
     } else if ((userProfile as any).orgId) {
       router.push('/org');

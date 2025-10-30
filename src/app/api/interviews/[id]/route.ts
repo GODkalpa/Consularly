@@ -28,7 +28,7 @@ export async function PATCH(
     }
 
     const caller = callerSnap.data() as { role?: string; orgId?: string } | undefined
-    const isAdmin = caller?.role === 'admin' || caller?.role === 'super_admin'
+    const isAdmin = caller?.role === 'admin'
 
     // Load interview to verify ownership
     const interviewSnap = await adminDb().collection('interviews').doc(interviewId).get()
@@ -38,7 +38,7 @@ export async function PATCH(
 
     const interview = interviewSnap.data() as { userId?: string; orgId?: string } | undefined
     
-    // Authorization: user can only update their own interviews, or org admin can update org interviews, or super admin can update any
+    // Authorization: user can only update their own interviews, or admin can update any
     const canUpdate = isAdmin || interview?.userId === callerUid
     
     if (!canUpdate) {
@@ -123,7 +123,7 @@ export async function GET(
     }
 
     const caller = callerSnap.data() as { role?: string; orgId?: string } | undefined
-    const isAdmin = caller?.role === 'admin' || caller?.role === 'super_admin'
+    const isAdmin = caller?.role === 'admin'
 
     // Load interview
     const interviewSnap = await adminDb().collection('interviews').doc(interviewId).get()
