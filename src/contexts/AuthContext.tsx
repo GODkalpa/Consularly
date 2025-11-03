@@ -86,9 +86,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const isAdminUser = latest?.role === 'admin';
               setIsAdmin(isAdminUser);
 
-              // Auto-redirect to profile setup if profile incomplete (only for non-admin users)
-              // Admins don't need student profiles
-              if (latest && !isAdminUser && !latest.studentProfile?.profileCompleted) {
+              // Auto-redirect to profile setup if profile incomplete
+              // Skip for: admins (role=admin) and org members (users with orgId)
+              const needsProfileSetup = latest && 
+                !isAdminUser && 
+                !latest.orgId && 
+                !latest.studentProfile?.profileCompleted;
+              
+              if (needsProfileSetup) {
                 const currentPath = window.location.pathname;
                 const allowedPaths = ['/profile-setup', '/signin', '/signup', '/'];
                 

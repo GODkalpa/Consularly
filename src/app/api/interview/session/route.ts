@@ -5,7 +5,7 @@ import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/fireb
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, userId, visaType, studentProfile, sessionId, answer, route } = body;
+    const { action, userId, visaType, studentProfile, sessionId, answer, route, firestoreInterviewId } = body;
 
     // Build absolute origin for server-side fetches
     const origin = request.nextUrl?.origin || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
@@ -193,13 +193,15 @@ export async function POST(request: NextRequest) {
         );
 
         // If quota check created an interview for signup users, return its id for persistence
+        // For org users, use the firestoreInterviewId passed in from the client
         const createdInterviewId = (request as any).__createdInterviewId as string | undefined;
-        console.log('[Session Start] Returning response with interviewId:', createdInterviewId);
+        const finalInterviewId = firestoreInterviewId || createdInterviewId;
+        console.log('[Session Start] Returning response with interviewId:', finalInterviewId, '(org:', !!firestoreInterviewId, 'signup:', !!createdInterviewId, ')');
         
         return NextResponse.json({
           session,
           question: firstQuestion,
-          interviewId: createdInterviewId,
+          interviewId: finalInterviewId,
           message: 'Interview session started successfully'
         });
 

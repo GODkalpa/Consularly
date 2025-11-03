@@ -43,7 +43,15 @@ export async function POST(req: NextRequest) {
     if (!studentSnap.exists) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 })
     }
-    const student = studentSnap.data() as { orgId?: string } | undefined
+    const student = studentSnap.data() as { 
+      orgId?: string
+      interviewCountry?: 'usa' | 'uk' | 'france'
+      studentProfile?: {
+        universityName?: string
+        programName?: string
+        degreeLevel?: string
+      }
+    } | undefined
     if ((student?.orgId || '') !== callerOrgId) {
       return NextResponse.json({ error: 'Forbidden: student not in your organization' }, { status: 403 })
     }
@@ -67,7 +75,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create interview document (server timestamps)
-    const interviewDoc = await adminDb().collection('interviews').add({
+    const interviewData: any = {
       userId: studentId,
       orgId: callerOrgId,
       startTime: FieldValue.serverTimestamp(),
@@ -81,12 +89,29 @@ export async function POST(req: NextRequest) {
         overall: 0,
       },
       interviewType,
-      route,
-      university: route?.startsWith('france_') ? route.split('_')[1] : undefined,
       duration,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    })
+    }
+
+    // Only include route if provided
+    if (route) {
+      interviewData.route = route
+    }
+
+    // Only include university for USA F1 interviews (from student profile)
+    if (student?.interviewCountry === 'usa' && student?.studentProfile?.universityName) {
+      interviewData.university = student.studentProfile.universityName
+      // Also include program information if available
+      if (student.studentProfile.programName) {
+        interviewData.programName = student.studentProfile.programName
+      }
+      if (student.studentProfile.degreeLevel) {
+        interviewData.degreeLevel = student.studentProfile.degreeLevel
+      }
+    }
+
+    const interviewDoc = await adminDb().collection('interviews').add(interviewData)
 
     // Increment organization quota usage
     await adminDb().collection('organizations').doc(callerOrgId).update({

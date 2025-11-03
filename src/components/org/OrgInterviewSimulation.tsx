@@ -425,13 +425,17 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
 
       const res = await fetch('/api/interview/session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           action: 'start',
           userId: studentId,
           visaType: defaultVisaTypeForRoute(route),
           route,
-          studentProfile: studentProfilePayload
+          studentProfile: studentProfilePayload,
+          firestoreInterviewId: created.id  // Pass the interview ID we just created
         })
       })
       if (!res.ok) {
@@ -575,9 +579,13 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       let nextPromise: Promise<void> | null = null
       if (apiSession) {
         nextPromise = (async () => {
+          const token = await auth.currentUser?.getIdToken()
+          const headers: any = { 'Content-Type': 'application/json' }
+          if (token) headers['Authorization'] = `Bearer ${token}`
+          
           const res = await fetch('/api/interview/session', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({
               action: 'answer',
               sessionId: apiSession.id,
