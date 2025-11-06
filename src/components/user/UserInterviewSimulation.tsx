@@ -319,39 +319,43 @@ export function UserInterviewSimulation() {
 
   return (
     <>
-      <div className="space-y-6">
-        <Accordion type="multiple" defaultValue={["candidate", "modes"]} className="space-y-4">
-          {/* Candidate & Country Selection */}
-          <AccordionItem value="candidate" className="border-2 rounded-xl shadow-lg overflow-hidden">
-            <AccordionTrigger className="px-6 py-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/20 dark:to-purple-950/20 hover:no-underline">
-              <div className='flex items-center gap-3'>
-                <div className='p-2 bg-indigo-600 text-white rounded-lg'>
-                  <User className='h-5 w-5' />
-                </div>
-                <div className="text-left">
-                  <div className='text-xl font-semibold'>Candidate Information</div>
-                  {candidateName && (
-                    <div className="text-sm text-muted-foreground font-normal mt-0.5">
-                      {candidateName} • {routeDisplayName[route as keyof typeof routeDisplayName]}
-                    </div>
-                  )}
+      <div className="space-y-8">
+        {/* Header */}
+        <div>
+          <h2 className="text-2xl font-semibold">Interview Setup</h2>
+          <p className="text-sm text-muted-foreground mt-1">Configure your interview session parameters and launch when ready</p>
+        </div>
+
+        {/* Candidate Information Card */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2.5 mb-6">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <User className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium">Candidate Information</h3>
+                <p className="text-xs text-muted-foreground">Your profile and interview destination</p>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className='text-sm font-medium'>Candidate</Label>
+                <div className="h-10 px-3 flex items-center rounded-md bg-muted/40 border text-sm">
+                  {candidateName || '—'}
                 </div>
               </div>
-            </AccordionTrigger>
-            <AccordionContent className='px-6 pb-6'>
-              <div className="space-y-4">
+              
+              {/* Only show interview type selection if user selected France (has 2 university options) */}
+              {userCountry === 'france' ? (
                 <div className="space-y-2">
-                  <Label className='text-sm font-semibold text-foreground'>Candidate</Label>
-                  <div className="h-11 px-3 flex items-center rounded-md bg-muted/40 border-2 text-sm font-medium">
-                    {candidateName || '—'}
-                  </div>
-                </div>
-                {/* Only show interview type selection if user selected France (has 2 university options) */}
-                {userCountry === 'france' && (
-                <div className="space-y-2">
-                  <Label className='text-sm font-semibold text-foreground'>University</Label>
+                  <Label htmlFor="university-select" className='text-sm font-medium flex items-center gap-1.5'>
+                    <Globe className="h-3.5 w-3.5" />
+                    University
+                  </Label>
                   <Select value={route} onValueChange={(v) => setRoute(v as InterviewRoute)}>
-                    <SelectTrigger className='h-11 border-2'>
+                    <SelectTrigger id="university-select">
                       <SelectValue placeholder='Select university' />
                     </SelectTrigger>
                     <SelectContent>
@@ -360,67 +364,41 @@ export function UserInterviewSimulation() {
                     </SelectContent>
                   </Select>
                 </div>
-                )}
-                
-                {/* For USA and UK, show the interview type as read-only info */}
-                {userCountry !== 'france' && (
+              ) : (
                 <div className="space-y-2">
-                  <Label className='text-sm font-semibold text-foreground'>Interview Type</Label>
-                  <div className="h-11 px-3 flex items-center rounded-md bg-muted/40 border-2 text-sm font-medium">
+                  <Label className='text-sm font-medium flex items-center gap-1.5'>
+                    <Globe className="h-3.5 w-3.5" />
+                    Interview Type
+                  </Label>
+                  <div className="h-10 px-3 flex items-center rounded-md bg-muted/40 border text-sm">
                     {userCountry === 'usa' ? routeDisplayName.usa_f1 : routeDisplayName.uk_student}
                   </div>
                 </div>
-                )}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Interview Mode & Difficulty Selector - Only for USA routes */}
-          {route === 'usa_f1' && (
-            <AccordionItem value="modes" className="border-2 rounded-xl shadow-lg overflow-hidden">
-              <AccordionTrigger className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 hover:no-underline">
-                <div className='flex items-center gap-3'>
-                  <div className='p-2 bg-blue-600 text-white rounded-lg'>
-                    <Target className='h-5 w-5' />
-                  </div>
-                  <div className="text-left">
-                    <div className='text-xl font-semibold'>Interview Configuration</div>
-                    <div className="text-sm text-muted-foreground font-normal mt-0.5">
-                      {mode === 'practice' && 'Practice Mode'}
-                      {mode === 'standard' && 'Standard Mode'}
-                      {mode === 'comprehensive' && 'Comprehensive Mode'}
-                      {mode === 'stress_test' && 'Stress Test Mode'}
-                      {' • '}
-                      {difficulty === 'easy' && 'Beginner'}
-                      {difficulty === 'medium' && 'Intermediate'}
-                      {difficulty === 'hard' && 'Advanced'}
-                      {difficulty === 'expert' && 'Master'}
-                    </div>
-                  </div>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className='px-6 pb-6'>
-                <InterviewModeSelector
-                  selectedMode={mode}
-                  selectedDifficulty={difficulty}
-                  selectedTopic={topic}
-                  onModeChange={setMode}
-                  onDifficultyChange={setDifficulty}
-                  onTopicChange={setTopic}
-                />
-              </AccordionContent>
-            </AccordionItem>
-          )}
-        </Accordion>
+        {/* Interview Mode & Difficulty Selector - Only for USA routes */}
+        {route === 'usa_f1' && (
+          <InterviewModeSelector
+            selectedMode={mode}
+            selectedDifficulty={difficulty}
+            selectedTopic={topic}
+            onModeChange={setMode}
+            onDifficultyChange={setDifficulty}
+            onTopicChange={setTopic}
+          />
+        )}
 
         {/* Start Button */}
         <Button 
           onClick={startNewSession}
           disabled={!candidateName}
-          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all"
+          className="w-full"
           size="lg"
         >
-          <Play className="h-5 w-5 mr-2" />
+          <Play className="h-4 w-4 mr-2" />
           Start Interview
         </Button>
       </div>
