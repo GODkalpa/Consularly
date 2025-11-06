@@ -383,7 +383,9 @@
         "major",
         "degree"
       ],
-      "followUpTriggers": []
+      "followUpTriggers": [],
+      "requiresContext": ["has_completed_bachelors"],
+      "inappropriateFor": ["undergraduate"]
     },
     {
       "id": "USA_031",
@@ -481,7 +483,9 @@
         "major",
         "degree"
       ],
-      "followUpTriggers": []
+      "followUpTriggers": [],
+      "requiresContext": ["has_completed_bachelors"],
+      "inappropriateFor": ["undergraduate"]
     },
     {
       "id": "USA_039",
@@ -714,7 +718,8 @@
       "keywords": [
         "general"
       ],
-      "followUpTriggers": []
+      "followUpTriggers": [],
+      "requiresContext": ["is_doctorate", "has_completed_bachelors"]
     },
     {
       "id": "USA_058",
@@ -725,7 +730,8 @@
       "keywords": [
         "general"
       ],
-      "followUpTriggers": []
+      "followUpTriggers": [],
+      "requiresContext": ["is_doctorate"]
     },
     {
       "id": "USA_059",
@@ -1344,7 +1350,9 @@
         "plans",
         "future"
       ],
-      "followUpTriggers": []
+      "followUpTriggers": [],
+      "requiresContext": ["is_graduate"],
+      "inappropriateFor": ["doctorate"]
     },
     {
       "id": "USA_105",
@@ -1441,7 +1449,9 @@
       "keywords": [
         "general"
       ],
-      "followUpTriggers": []
+      "followUpTriggers": [],
+      "requiresContext": ["has_completed_bachelors"],
+      "inappropriateFor": ["undergraduate"]
     },
     {
       "id": "USA_113",

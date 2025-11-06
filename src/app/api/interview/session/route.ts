@@ -5,7 +5,7 @@ import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/fireb
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, userId, visaType, studentProfile, sessionId, answer, route, firestoreInterviewId } = body;
+    const { action, userId, visaType, studentProfile, sessionId, answer, route, firestoreInterviewId, mode, difficulty, officerPersona, targetTopic } = body;
 
     // Build absolute origin for server-side fetches
     const origin = request.nextUrl?.origin || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
@@ -189,7 +189,13 @@ export async function POST(request: NextRequest) {
           userId,
           visaType,
           studentProfile,
-          route
+          route,
+          {
+            mode: mode || 'standard',
+            difficulty: difficulty || undefined,
+            officerPersona: officerPersona || undefined,
+            targetTopic: targetTopic || undefined,
+          }
         );
 
         // If quota check created an interview for signup users, return its id for persistence

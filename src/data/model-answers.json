@@ -1,0 +1,220 @@
+{
+  "modelAnswers": [
+    {
+      "questionPattern": "why.*study.*us",
+      "category": "academic",
+      "goodExample": "I chose to study in the US because of the advanced research facilities and specialized curriculum not available in Nepal. Specifically, the program at [University Name] offers hands-on experience with cutting-edge technology in [field], and the faculty includes Professor [Name] who is a leading expert in [specific area]. This specialized training will enable me to contribute to Nepal's growing [industry] sector when I return.",
+      "poorExample": "Because the US has the best education system in the world and I want to achieve my dreams.",
+      "keyElements": [
+        "Specific program features (not just reputation)",
+        "How it relates to home country needs",
+        "Concrete examples (professor names, specific courses)",
+        "Clear connection to return plans"
+      ],
+      "commonMistakes": [
+        "Generic statements about 'world-class' or 'best'",
+        "No specific program details",
+        "Sounds memorized or coached",
+        "Doesn't explain why Nepal alternatives won't work"
+      ]
+    },
+    {
+      "questionPattern": "who.*sponsor|pay|fund",
+      "category": "financial",
+      "goodExample": "My father will be my primary sponsor. He is a civil engineer with an annual income of $45,000. He has saved $25,000 specifically for my first year, which is shown in our bank statements from the last 6 months. For the remaining $23,000 needed over two years, we have a sanctioned education loan from [Bank Name] at 7.5% interest, which will be repaid over 7 years after I graduate.",
+      "poorExample": "My parents will pay for everything. They have enough money.",
+      "keyElements": [
+        "Exact dollar amounts for all costs",
+        "Sponsor's specific occupation and income",
+        "Clear breakdown of fund sources",
+        "Timeline and evidence (bank statements)"
+      ],
+      "commonMistakes": [
+        "Vague terms like 'enough' or 'sufficient'",
+        "No specific dollar amounts",
+        "Can't explain source of funds",
+        "Recent large deposits without explanation"
+      ]
+    },
+    {
+      "questionPattern": "plans.*after|return|graduation",
+      "category": "post_study",
+      "goodExample": "I plan to return to Nepal immediately after graduation to work as a [specific position] at companies like [Company A] or [Company B], which are actively expanding their [department]. My uncle currently works at [Company A] and has informed me about upcoming positions. With my US degree in [field], I'll be qualified for senior roles with estimated starting salary around NPR [amount]. I'm also committed to returning because my parents are getting older and I'm their only child, plus we own family property in [city] that I'll eventually manage.",
+      "poorExample": "I will definitely return to Nepal because I love my country. I'll find some job there.",
+      "keyElements": [
+        "Specific companies or organizations",
+        "Exact position or role you're targeting",
+        "Concrete family/property ties",
+        "Realistic salary expectations (don't compare to US)",
+        "Timeline (immediately after graduation)"
+      ],
+      "commonMistakes": [
+        "Vague 'I'll find a job'",
+        "Mentioning US job market or salaries",
+        "Uncertain language ('maybe', 'thinking about')",
+        "No specific ties to home country"
+      ]
+    },
+    {
+      "questionPattern": "why.*this university",
+      "category": "academic",
+      "goodExample": "I chose [University Name] specifically because it offers a unique concentration in [specialization] within the [degree] program. The curriculum includes courses like [Course 1] and [Course 2] which directly align with my career goal of [specific goal]. Additionally, the university has strong industry partnerships with companies in [industry], providing internship opportunities. I also researched Professor [Name]'s work on [topic], which is exactly what I want to study. The location in [city] also provides access to [specific resources or opportunities].",
+      "poorExample": "This university has a good ranking and reputation. It's one of the best schools.",
+      "keyElements": [
+        "Specific program features unique to this university",
+        "Mentioned courses or professors by name",
+        "Clear fit with career goals",
+        "Evidence of independent research"
+      ],
+      "commonMistakes": [
+        "Only mentioning ranking or reputation",
+        "Can't name any professors or specific courses",
+        "Same answer could apply to any university",
+        "Admitting consultant chose it for you"
+      ]
+    },
+    {
+      "questionPattern": "loan|education loan",
+      "category": "financial",
+      "goodExample": "I have a sanctioned education loan of $35,000 from [Bank Name], approved on [date]. The interest rate is 7.5% per annum, and the repayment period is 7 years starting 6 months after I complete my degree. My father is the co-applicant, and we pledged our family property as collateral. The EMI will be approximately $580 per month, which is manageable based on expected salaries in my field in Nepal, which range from NPR 80,000-120,000 monthly.",
+      "poorExample": "Yes, I have a loan. The bank will give me money for my education.",
+      "keyElements": [
+        "Exact loan amount",
+        "Interest rate and repayment terms",
+        "Who is co-applicant",
+        "What collateral was used",
+        "Realistic repayment plan based on Nepal salaries"
+      ],
+      "commonMistakes": [
+        "Doesn't know if loan is approved",
+        "Can't state exact amount or interest rate",
+        "No clear repayment plan",
+        "Mentioning US job to repay (immigration intent!)"
+      ]
+    },
+    {
+      "questionPattern": "relatives.*us|family.*america",
+      "category": "personal",
+      "goodExample": "Yes, my uncle lives in California. He moved there 15 years ago and is now a US citizen. However, he will not be providing any financial support for my education - my father is my sole sponsor. I may visit my uncle once during holidays, but my ties to Nepal are much stronger as my parents, siblings, and all our property are there. My uncle and I stay in touch, but I have no plans to rely on him or stay with him.",
+      "poorExample": "Yes, my uncle is in the US. He's doing very well there and told me I should come study.",
+      "keyElements": [
+        "Acknowledge relationship honestly",
+        "Clarify no financial support from them",
+        "Emphasize stronger ties to home country",
+        "Mention briefly, don't elaborate unless asked"
+      ],
+      "commonMistakes": [
+        "Hiding the relationship (dishonesty)",
+        "Talking too much about their success in US",
+        "Suggesting they influenced your decision",
+        "Not clarifying financial independence"
+      ]
+    }
+  ],
+  "scoringCriteria": {
+    "excellent": {
+      "range": "90-100",
+      "characteristics": [
+        "Highly specific with exact numbers/names/dates",
+        "Well-structured and concise (30-60 seconds)",
+        "Natural delivery, not memorized",
+        "Directly answers the question",
+        "Shows genuine knowledge and preparation",
+        "Confident tone without arrogance"
+      ]
+    },
+    "good": {
+      "range": "75-89",
+      "characteristics": [
+        "Specific in most areas",
+        "Generally well-organized",
+        "Mostly natural with minor hesitations",
+        "Answers the question with some tangents",
+        "Shows adequate preparation",
+        "Reasonably confident"
+      ]
+    },
+    "needsImprovement": {
+      "range": "50-74",
+      "characteristics": [
+        "Some specific details but mostly vague",
+        "Somewhat disorganized or rambling",
+        "Sounds partly memorized",
+        "Partially addresses question",
+        "Limited preparation evident",
+        "Lacks confidence"
+      ]
+    },
+    "poor": {
+      "range": "0-49",
+      "characteristics": [
+        "Very vague, no specific details",
+        "Disorganized, hard to follow",
+        "Clearly memorized or made up",
+        "Doesn't answer the question",
+        "No preparation evident",
+        "Very nervous or evasive"
+      ]
+    }
+  },
+  "improvementStrategies": {
+    "specificity": {
+      "problem": "Answers are too vague or general",
+      "exercises": [
+        "Practice stating exact dollar amounts for all costs",
+        "Memorize 3-5 specific course names from your program",
+        "Write down exact timeline dates (when you start, when you graduate)",
+        "Name 3 specific companies in Nepal you could work for",
+        "Know your sponsor's exact occupation and income"
+      ],
+      "beforeAfter": {
+        "before": "My parents will pay for my education",
+        "after": "My father, who is a civil engineer earning $45,000 annually, will pay the $48,500 total cost using $25,000 from savings and a $23,500 education loan"
+      }
+    },
+    "conciseness": {
+      "problem": "Answers are too long or rambling",
+      "exercises": [
+        "Practice answering in exactly 45 seconds (use a timer)",
+        "Use the formula: Direct answer + One supporting detail + Connection",
+        "Eliminate filler words (um, uh, like, you know, basically)",
+        "Pause instead of using filler words",
+        "End answers definitively - don't trail off"
+      ],
+      "beforeAfter": {
+        "before": "Well, um, I want to study in the US because, you know, it's like the best education and, uh, I've always dreamed of, basically, getting world-class education and...",
+        "after": "I chose the US specifically for [University]'s advanced [specialization] program, which offers [specific feature] not available in Nepal. This training will enable me to [specific career goal] when I return."
+      }
+    },
+    "confidence": {
+      "problem": "Delivery lacks confidence",
+      "exercises": [
+        "Record yourself and watch for nervous habits",
+        "Practice maintaining eye contact with camera",
+        "Sit upright with shoulders back",
+        "Speak 10% louder than feels natural",
+        "Pause confidently when thinking (not 'um')",
+        "Practice in front of family/friends"
+      ],
+      "beforeAfter": {
+        "before": "I think maybe I might want to, uh, work in Kathmandu probably?",
+        "after": "I will work as a [specific role] at [Company A] or [Company B] in Kathmandu, where demand for my specialization is growing."
+      }
+    },
+    "relevance": {
+      "problem": "Answers go off-topic",
+      "exercises": [
+        "Listen carefully to the complete question before answering",
+        "Start your answer by directly addressing the question",
+        "Stay focused - save other information for follow-up questions",
+        "If you realize you've gone off-topic, acknowledge and redirect",
+        "Practice with a friend who signals when you drift"
+      ],
+      "beforeAfter": {
+        "before": "Q: Why this university? A: Well, I've always been interested in computer science since I was young, and my father is also in IT...",
+        "after": "Q: Why this university? A: I chose [University] specifically because it offers [unique program feature] and Professor [Name]'s research in [area] aligns perfectly with my goals."
+      }
+    }
+  }
+}
+

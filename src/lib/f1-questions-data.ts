@@ -8,6 +8,74 @@ export interface F1QuestionCategory {
   questions: string[];
 }
 
+export type DegreeLevel = 'undergraduate' | 'graduate' | 'doctorate' | 'other';
+
+/**
+ * Check if a question from the F1 bank is appropriate for a given degree level
+ */
+export function isF1QuestionAppropriateForDegreeLevel(
+  question: string,
+  degreeLevel: DegreeLevel | undefined
+): boolean {
+  if (!degreeLevel) return true; // No filtering if unknown
+  
+  const q = question.toLowerCase();
+  
+  // Questions that should ONLY be asked to graduate/doctorate students (about PAST education)
+  const graduateOnlyQuestions = [
+    'what is your undergraduate degree',
+    'in what year did you get your bachelor',
+    'what year did you graduate', // with "undergraduate" context
+    'undergraduate projects',
+    'during your undergraduate',
+    'you already have a master',
+  ];
+  
+  // For UNDERGRADUATE students: Filter OUT past bachelor's questions
+  if (degreeLevel === 'undergraduate') {
+    for (const badQ of graduateOnlyQuestions) {
+      if (q.includes(badQ)) {
+        return false;
+      }
+    }
+  }
+  
+  // PhD-only questions
+  const phdOnlyQuestions = [
+    'publish any papers',
+    'present at any conferences',
+    'research proposal',
+    'advisor',
+    'dissertation',
+  ];
+  
+  // For non-PhD: Filter OUT PhD questions (except "plan to do PhD" for Master's)
+  if (degreeLevel !== 'doctorate') {
+    for (const phdQ of phdOnlyQuestions) {
+      if (q.includes(phdQ)) {
+        // Exception: Master's students can be asked about future PhD plans
+        if (degreeLevel === 'graduate' && q.includes('plan') && q.includes('phd')) {
+          return true;
+        }
+        return false;
+      }
+    }
+  }
+  
+  return true;
+}
+
+/**
+ * Filter F1 questions by degree level appropriateness
+ */
+export function filterF1QuestionsByDegreeLevel(
+  questions: string[],
+  degreeLevel: DegreeLevel | undefined
+): string[] {
+  if (!degreeLevel) return questions;
+  return questions.filter(q => isF1QuestionAppropriateForDegreeLevel(q, degreeLevel));
+}
+
 export const F1_VISA_QUESTIONS: F1QuestionCategory[] = [
   {
     category: "Study plans",

@@ -33,6 +33,8 @@ interface StudentContext {
     university?: string;
     course?: string;
     degree?: string;
+    degreeLevel?: 'undergraduate' | 'graduate' | 'doctorate' | 'other'; // For degree-specific filtering
+    programName?: string;
   };
   history: Array<{
     question: string;
@@ -43,6 +45,10 @@ interface StudentContext {
   categoryCoverage: Record<string, number>;
   askedClusters?: string[]; // Track semantic clusters already covered
   contextFlags?: Record<string, boolean>; // Context availability for questions
+  priorityCategory?: string; // Topic focus: prioritize questions from this category
+  targetDifficulty?: 'easy' | 'medium' | 'hard' | 'expert'; // Preferred difficulty level
+  difficultyDistribution?: { easy: number; medium: number; hard: number }; // % distribution from mode
+  categoryRequirements?: Array<{ category: string; minQuestions: number; maxQuestions: number }>; // From mode config
 }
 
 interface QuestionResult {
@@ -54,15 +60,27 @@ interface QuestionResult {
 
 /**
  * Semantic clusters for detecting questions with same essence
+ * Expanded to 15 clusters for comprehensive coverage
  */
 const SEMANTIC_CLUSTERS: Record<string, string[]> = {
-  return_intent: ['return', 'come back', 'go back', 'plans after', 'after graduation', 'after studies', 'after completing'],
-  finance_sponsor: ['sponsor', 'pay', 'fund', 'finance', 'cost', 'tuition', 'afford', 'expenses'],
-  failure_grades: ['fail', 'backlog', 'poor grades', 'low gpa', 'reject', 'arrear', 'bad marks'],
-  us_relatives: ['relatives', 'family', 'friends in us', 'uncle', 'aunt', 'cousin'],
-  university_choice: ['why this university', 'why choose', 'selected this', 'picked this'],
-  study_reason: ['why study', 'why us', 'why america', 'reason for studying'],
-  career_plans: ['career', 'job plans', 'work plans', 'professional goals'],
+  // Core clusters (original 7)
+  return_intent: ['return', 'come back', 'go back', 'plans after', 'after graduation', 'after studies', 'after completing', 'when graduation', 'post-graduation'],
+  finance_sponsor: ['sponsor', 'pay', 'fund', 'finance', 'cost', 'tuition', 'afford', 'expenses', 'funding', 'financial'],
+  failure_grades: ['fail', 'backlog', 'poor grades', 'low gpa', 'reject', 'arrear', 'bad marks', 'academic issues'],
+  us_relatives: ['relatives', 'family', 'friends in us', 'uncle', 'aunt', 'cousin', 'connections in us', 'family in america'],
+  university_choice: ['why this university', 'why choose', 'selected this', 'picked this', 'university decision', 'this school'],
+  study_reason: ['why study', 'why us', 'why america', 'reason for studying', 'why abroad', 'why not home country'],
+  career_plans: ['career', 'job plans', 'work plans', 'professional goals', 'career goals', 'future job'],
+  
+  // New clusters (8 additional)
+  university_ranking: ['ranking', 'reputation', 'prestige', 'tier', 'top university', 'best school', 'famous university'],
+  multiple_universities: ['how many universities', 'applied to', 'other schools', 'rejected by', 'acceptance rate', 'multiple admits'],
+  semester_timing: ['semester', 'fall', 'spring', 'intake', 'when start', 'academic calendar', 'term beginning'],
+  living_arrangements: ['where live', 'accommodation', 'housing', 'dormitory', 'on campus', 'off campus', 'residence'],
+  test_scores: ['gre', 'toefl', 'ielts', 'sat', 'test score', 'exam result', 'standardized test'],
+  work_experience: ['work experience', 'previous job', 'employment', 'current job', 'years working', 'professional background'],
+  loan_details: ['loan', 'education loan', 'borrowed', 'debt', 'repayment', 'interest rate', 'bank loan'],
+  ties_home_country: ['ties', 'property', 'assets', 'obligations', 'roots', 'connections home', 'family business', 'land'],
 };
 
 /**
@@ -79,6 +97,66 @@ function getSemanticCluster(question: string): string | null {
 }
 
 /**
+ * Check if a question is appropriate for the student's degree level (USA F1 only)
+ * Returns false if the question should be filtered out
+ */
+function isQuestionAppropriateForDegreeLevel(
+  question: string,
+  degreeLevel?: 'undergraduate' | 'graduate' | 'doctorate' | 'other'
+): boolean {
+  if (!degreeLevel) return true; // No filtering if degree level unknown
+  
+  const q = question.toLowerCase();
+  
+  // Questions that should ONLY be asked to graduate/doctorate students (about their PAST bachelor's)
+  const graduateOnlyPatterns = [
+    /what is your undergraduate degree/i,
+    /in what year did you get your bachelor'?s degree/i,
+    /what year did you graduate.*undergraduate/i,
+    /tell me about your bachelor'?s degree/i,
+    /undergraduate projects/i,
+    /during your undergraduate/i,
+    /you already have a master'?s.*why.*mba|ms/i, // Only for those who ALREADY have master's
+  ];
+  
+  // For UNDERGRADUATE students: Filter OUT questions about past bachelor's
+  if (degreeLevel === 'undergraduate') {
+    for (const pattern of graduateOnlyPatterns) {
+      if (pattern.test(q)) {
+        console.log(`[Question Filter] Filtering OUT for undergrad: "${question.substring(0, 60)}..."`);
+        return false; // Don't ask undergrads about their "undergraduate degree"
+      }
+    }
+  }
+  
+  // Questions that should ONLY be asked to PhD students
+  const phdOnlyPatterns = [
+    /publish.*papers/i,
+    /research proposal/i,
+    /advisor/i,
+    /dissertation/i,
+    /thesis defense/i,
+    /do you plan to do a phd after/i,
+  ];
+  
+  // For non-PhD students: Filter OUT PhD-specific questions
+  if (degreeLevel !== 'doctorate') {
+    for (const pattern of phdOnlyPatterns) {
+      if (pattern.test(q)) {
+        // Exception: "Do you plan to do a PhD after your master's?" is OK for Master's students
+        if (degreeLevel === 'graduate' && /do you plan to do a phd/i.test(q)) {
+          return true;
+        }
+        console.log(`[Question Filter] Filtering OUT non-PhD question: "${question.substring(0, 60)}..."`);
+        return false;
+      }
+    }
+  }
+  
+  return true; // Question is appropriate
+}
+
+/**
  * Build context flags from profile and conversation history
  */
 function buildContextFlags(
@@ -88,6 +166,11 @@ function buildContextFlags(
   const allAnswers = history.map(h => h.answer).join(' ').toLowerCase();
   const profileStr = JSON.stringify(profile).toLowerCase();
   
+  // Degree level flags for question filtering
+  const isUndergraduate = profile.degreeLevel === 'undergraduate';
+  const isGraduate = profile.degreeLevel === 'graduate';
+  const isDoctorate = profile.degreeLevel === 'doctorate';
+  
   return {
     has_failures: /fail|backlog|arrear|poor.*grade|low.*gpa/i.test(allAnswers + profileStr),
     has_us_relatives: /relative|uncle|aunt|cousin|friend.*(in|living|stay).*(us|usa|america|united states)/i.test(allAnswers),
@@ -95,6 +178,11 @@ function buildContextFlags(
     low_gpa: /gpa.*(2\.|1\.)|low.*gpa|poor.*grade/i.test(allAnswers + profileStr),
     has_work_experience: /work|job|employee|experience.*(year|month)/i.test(allAnswers + profileStr),
     mentioned_return_plans: /return|come back|go back|plan.*after/i.test(allAnswers),
+    // Degree level context flags
+    is_undergraduate: isUndergraduate,
+    is_graduate: isGraduate,
+    is_doctorate: isDoctorate,
+    has_completed_bachelors: isGraduate || isDoctorate, // Master's/PhD students have bachelor's
   };
 }
 
@@ -400,6 +488,73 @@ export class SmartQuestionSelector {
       }
       return true;
     });
+    
+    // CRITICAL: Filter by degree level appropriateness for USA F1
+    if (context.route === 'usa_f1') {
+      availableQuestions = availableQuestions.filter((q) => {
+        const isAppropriate = isQuestionAppropriateForDegreeLevel(q.question, context.profile.degreeLevel);
+        if (!isAppropriate) {
+          console.log(`[Question Selector] Degree filter: Skipping ${q.id} for ${context.profile.degreeLevel || 'unknown'} student`);
+        }
+        return isAppropriate;
+      });
+    }
+    
+    // Filter by category requirements (enforce max questions per category)
+    if (context.categoryRequirements) {
+      availableQuestions = availableQuestions.filter((q) => {
+        const requirement = context.categoryRequirements!.find(r => r.category === q.category);
+        if (requirement) {
+          const currentCount = context.categoryCoverage[q.category] || 0;
+          if (currentCount >= requirement.maxQuestions) {
+            console.log(`[Question Selector] Category limit: Skipping ${q.id} - ${q.category} has reached max (${currentCount}/${requirement.maxQuestions})`);
+            return false;
+          }
+        }
+        return true;
+      });
+    }
+    
+    // Apply difficulty distribution filtering
+    if (context.difficultyDistribution || context.targetDifficulty) {
+      const totalAsked = context.history.length;
+      
+      // If specific difficulty is set, prefer that
+      if (context.targetDifficulty) {
+        console.log(`[Question Selector] Difficulty filter: Targeting ${context.targetDifficulty} questions`);
+        
+        // Filter to target difficulty first, but keep others as backup
+        const targetQuestions = availableQuestions.filter(q => q.difficulty === context.targetDifficulty);
+        if (targetQuestions.length > 0) {
+          availableQuestions = targetQuestions;
+        }
+      } 
+      // Otherwise use distribution percentages (for progressive difficulty)
+      else if (context.difficultyDistribution && totalAsked < 10) {
+        const dist = context.difficultyDistribution;
+        
+        // Calculate which difficulty to prioritize based on progress
+        let targetDiff: 'easy' | 'medium' | 'hard' = 'easy';
+        if (totalAsked < 3) {
+          // Early questions: favor easy (60% easy, 30% medium, 10% hard)
+          targetDiff = Math.random() < 0.6 ? 'easy' : (Math.random() < 0.75 ? 'medium' : 'hard');
+        } else if (totalAsked < 6) {
+          // Mid questions: balanced (30% easy, 50% medium, 20% hard)
+          targetDiff = Math.random() < 0.3 ? 'easy' : (Math.random() < 0.625 ? 'medium' : 'hard');
+        } else {
+          // Late questions: favor hard (20% easy, 40% medium, 40% hard)
+          targetDiff = Math.random() < 0.2 ? 'easy' : (Math.random() < 0.5 ? 'medium' : 'hard');
+        }
+        
+        console.log(`[Question Selector] Difficulty distribution: Question ${totalAsked + 1} targeting ${targetDiff}`);
+        
+        // Filter to target difficulty, keep others as backup
+        const targetQuestions = availableQuestions.filter(q => q.difficulty === targetDiff);
+        if (targetQuestions.length > 0) {
+          availableQuestions = targetQuestions;
+        }
+      }
+    }
 
     if (availableQuestions.length === 0) {
       return {
@@ -478,8 +633,25 @@ export class SmartQuestionSelector {
           .map(([k]) => k)
           .join(', ') || 'none'
       : 'none';
+    
+    // Build degree level summary for USA F1
+    const degreeLevelInfo = context.route === 'usa_f1' && context.profile.degreeLevel
+      ? `\nDegree Level: ${context.profile.degreeLevel} (${context.profile.programName || 'program not specified'})`
+      : '';
 
-    const systemPrompt = `You are an expert visa interview question selector. Your task is to select the most relevant next question from a question bank.
+    // Build topic focus hint
+    const topicFocusHint = context.priorityCategory 
+      ? `\n- TOPIC FOCUS: Prioritize ${context.priorityCategory} questions (70% preference)` 
+      : '';
+    
+    // Build difficulty preference hint
+    const difficultyHint = context.targetDifficulty 
+      ? `\n- DIFFICULTY TARGET: Prefer ${context.targetDifficulty} difficulty questions`
+      : context.difficultyDistribution
+        ? `\n- DIFFICULTY DISTRIBUTION: Progressive difficulty - early questions easier, later questions harder`
+        : '';
+
+    const systemPrompt = `You are an expert visa interview question selector. Your task is to select the most relevant next question from a question bank.${degreeLevelInfo}
 
 ${routeGuidance}
 
@@ -489,7 +661,7 @@ Current interview state:
 - ${clustersSummary}
 - Detected red flags: ${context.detectedRedFlags.join(', ') || 'none'}
 - Student profile: ${context.profile.course || 'unknown'} at ${context.profile.university || 'unknown'}
-- Context available: ${contextSummary}
+- Context available: ${contextSummary}${topicFocusHint}${difficultyHint}
 
 CRITICAL ANTI-REPETITION RULES:
 1. NEVER select a question that is semantically similar to already-asked questions
@@ -500,12 +672,23 @@ CRITICAL ANTI-REPETITION RULES:
 3. NEVER ask assumption-based questions without evidence in profile or answers
 4. If uncertain about context appropriateness, choose a general question instead
 
+CRITICAL DEGREE-LEVEL FILTERING RULES (USA F1 ONLY):
+${context.route === 'usa_f1' ? `
+- Student's degree level: ${context.profile.degreeLevel || 'not specified'}
+- UNDERGRADUATE students: Ask about high school background, basic career goals, why US education
+- GRADUATE (Master's) students: Ask about their COMPLETED bachelor's degree, career advancement, specialization
+- DOCTORATE (PhD) students: Ask about research proposals, advisor fit, publications, academic career goals
+- NEVER ask "What is your undergraduate degree?" to undergrad students about their CURRENT program
+- NEVER ask bachelor's-level questions to Master's/PhD students about their CURRENT studies
+- Questions about bachelor's degree are appropriate ONLY as PAST education context for grad students
+` : ''}
+
 Selection criteria (in priority order):
 1. Avoid semantic clusters already covered
-2. Only select questions appropriate for available context
-3. Cover under-represented categories (financial, academic, intent, personal, post_study)
-4. Match student profile relevance
-5. Progressive difficulty (start easy, increase gradually)
+2. ${context.priorityCategory ? `PRIORITIZE ${context.priorityCategory} category questions (topic focus mode active)` : 'Balance category coverage'}
+3. Only select questions appropriate for available context
+4. ${context.targetDifficulty ? `Prefer ${context.targetDifficulty} difficulty level` : 'Progressive difficulty (start easy, increase gradually)'}
+5. Match student profile relevance
 6. Follow up on red flags if detected
 
 Return JSON: {"questionId": "selected_id", "reasoning": "brief explanation"}`;
@@ -560,19 +743,51 @@ Select the best next question ID.`;
       return Math.abs(h);
     };
 
-    // USA: strictly follow Nepal F1 stage flow
+    // Topic Focus: If priorityCategory is set, prefer questions from that category (70% of the time)
+    if (context.priorityCategory && Math.random() < 0.7) {
+      const topicQuestions = availableQuestions.filter(q => q.category === context.priorityCategory);
+      if (topicQuestions.length > 0) {
+        const selected = topicQuestions[Math.floor(Math.random() * topicQuestions.length)];
+        console.log(`[Question Selector] path=rule route=${context.route} id=${selected.id} reason=topic-focus:${context.priorityCategory}`);
+        return {
+          question: selected.question,
+          type: 'bank',
+          questionId: selected.id,
+          reasoning: `Topic focus: ${context.priorityCategory}`,
+        };
+      }
+    }
+
+    // USA: strictly follow Nepal F1 stage flow (with category requirement awareness)
     if (context.route === 'usa_f1') {
       const step = context.history.length + 1;
       const stage = this.getUsaStage(step);
-      const pool = this.filterUsaQuestionsByStage(availableQuestions, stage);
+      let pool = this.filterUsaQuestionsByStage(availableQuestions, stage);
       const stagePool = pool.length ? pool : availableQuestions;
+      
+      // If category requirements exist and a category is below minimum, prioritize it
+      if (context.categoryRequirements) {
+        const belowMin = context.categoryRequirements.find(req => {
+          const count = context.categoryCoverage[req.category] || 0;
+          return count < req.minQuestions;
+        });
+        
+        if (belowMin) {
+          const categoryPool = stagePool.filter(q => q.category === belowMin.category);
+          if (categoryPool.length > 0) {
+            pool = categoryPool;
+            console.log(`[Question Selector] USA F1: Prioritizing ${belowMin.category} to meet minimum (${context.categoryCoverage[belowMin.category] || 0}/${belowMin.minQuestions})`);
+          }
+        }
+      }
+      
       // Seed selection using earliest available stable signal; vary across sessions when empty
       const seedBase = context.history[0]?.question || `${Date.now()}`;
-      const seededIndex = stagePool.length > 0 ? hashString(seedBase) % stagePool.length : 0;
+      const seededIndex = pool.length > 0 ? hashString(seedBase) % pool.length : 0;
       // Prefer non-hard, but start from seeded index to introduce variety
-      let selected = stagePool[seededIndex] || stagePool[0] || availableQuestions[0];
+      let selected = pool[seededIndex] || pool[0] || availableQuestions[0];
       if (selected?.difficulty === 'hard') {
-        const nonHard = stagePool.find((q) => q.difficulty !== 'hard');
+        const nonHard = pool.find((q) => q.difficulty !== 'hard');
         if (nonHard) selected = nonHard;
       }
       if (selected) {
@@ -586,14 +801,40 @@ Select the best next question ID.`;
       };
     }
 
-    // UK, France, and others: least-covered-category heuristic
+    // UK, France, and others: least-covered-category heuristic (with minimum requirement awareness)
     const categories: Array<'financial' | 'academic' | 'intent' | 'personal' | 'post_study'> = 
       ['financial', 'academic', 'intent', 'personal', 'post_study'];
-    const leastCoveredCategory = categories.reduce((min, cat) => {
-      const count = context.categoryCoverage[cat] || 0;
-      const minCount = context.categoryCoverage[min] || 0;
-      return count < minCount ? cat : min;
-    });
+    
+    // If category requirements exist, prioritize categories below their minimum
+    let leastCoveredCategory: string = categories[0];
+    
+    if (context.categoryRequirements) {
+      // Find categories that haven't met minimum requirement yet
+      const belowMin = context.categoryRequirements.find(req => {
+        const count = context.categoryCoverage[req.category] || 0;
+        return count < req.minQuestions;
+      });
+      
+      if (belowMin) {
+        leastCoveredCategory = belowMin.category;
+        console.log(`[Question Selector] Category requirement: ${leastCoveredCategory} needs ${belowMin.minQuestions - (context.categoryCoverage[belowMin.category] || 0)} more questions to meet minimum`);
+      } else {
+        // All minimums met, find least covered
+        leastCoveredCategory = categories.reduce((min, cat) => {
+          const count = context.categoryCoverage[cat] || 0;
+          const minCount = context.categoryCoverage[min] || 0;
+          return count < minCount ? cat : min;
+        });
+      }
+    } else {
+      // No requirements, just find least covered
+      leastCoveredCategory = categories.reduce((min, cat) => {
+        const count = context.categoryCoverage[cat] || 0;
+        const minCount = context.categoryCoverage[min] || 0;
+        return count < minCount ? cat : min;
+      });
+    }
+    
     const categoryQuestions = availableQuestions.filter((q) => q.category === leastCoveredCategory);
     const selected = categoryQuestions.find((q) => q.difficulty !== 'hard') || categoryQuestions[0] || availableQuestions[0];
     

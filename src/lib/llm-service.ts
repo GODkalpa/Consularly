@@ -30,13 +30,18 @@ interface QuestionGenerationRequest {
       answer: string;
       timestamp: string;
     }>;
+    // Interview mode configuration
+    interviewMode?: 'practice' | 'standard' | 'comprehensive' | 'stress_test';
+    difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
+    officerPersona?: 'professional' | 'skeptical' | 'friendly' | 'strict';
+    targetTopic?: 'financial' | 'academic' | 'intent' | 'weak_areas';
   };
 }
 
 interface QuestionGenerationResponse {
   question: string;
   questionType: 'academic' | 'financial' | 'intent' | 'background' | 'follow-up';
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: 'easy' | 'medium' | 'hard' | 'expert';
   expectedAnswerLength: 'short' | 'medium' | 'long';
   tips?: string;
 }
@@ -125,7 +130,15 @@ export class LLMQuestionService {
     }
 
     const route = request.interviewContext.route || 'usa_f1';
-    const { studentProfile, conversationHistory, currentQuestionNumber } = request.interviewContext;
+    const { studentProfile, conversationHistory, currentQuestionNumber, interviewMode, difficulty, officerPersona, targetTopic } = request.interviewContext;
+
+    // Log interview configuration
+    console.log('[Question Generation] Configuration:', { 
+      mode: interviewMode || 'standard', 
+      difficulty: difficulty || 'medium', 
+      persona: officerPersona || 'professional', 
+      topic: targetTopic || 'balanced' 
+    });
 
     // Try smart question selector first
     if (this.questionSelector) {
@@ -166,6 +179,44 @@ export class LLMQuestionService {
           if (match) askedIds.push(match.id)
         }
 
+        // Apply topic focus filtering if specified
+        let priorityCategory: string | undefined = undefined;
+        if (targetTopic) {
+          const topicToCategoryMap: Record<typeof targetTopic, string> = {
+            'financial': 'financial',
+            'academic': 'academic',
+            'intent': 'post_study',
+            'weak_areas': 'general', // Will be determined dynamically later
+          };
+          priorityCategory = topicToCategoryMap[targetTopic];
+          console.log(`[Topic Focus] Prioritizing ${priorityCategory} questions (topic: ${targetTopic})`);
+        }
+        
+        // Get mode configuration for difficulty distribution and category requirements
+        let difficultyDist: { easy: number; medium: number; hard: number } | undefined;
+        let categoryReqs: Array<{ category: string; minQuestions: number; maxQuestions: number }> | undefined;
+        
+        if (interviewMode) {
+          try {
+            const { getModeConfig } = await import('./interview-modes');
+            const modeConfig = getModeConfig(interviewMode);
+            
+            // Extract difficulty distribution
+            if (modeConfig.difficultyDistribution) {
+              difficultyDist = modeConfig.difficultyDistribution;
+            }
+            
+            // Extract category requirements
+            if (modeConfig.categoryRequirements) {
+              categoryReqs = modeConfig.categoryRequirements;
+            }
+            
+            console.log(`[Mode Config] Using ${interviewMode} mode: ${modeConfig.questionCount} questions, difficulty dist:`, difficultyDist);
+          } catch (error) {
+            console.error('[Mode Config] Failed to load mode config:', error);
+          }
+        }
+
         const context = {
           route: route as LLMRoute,
           profile: {
@@ -173,6 +224,8 @@ export class LLMQuestionService {
             university: studentProfile.intendedUniversity,
             course: studentProfile.fieldOfStudy,
             degree: studentProfile.previousEducation,
+            degreeLevel: studentProfile.degreeLevel,
+            programName: studentProfile.programName,
           },
           history: conversationHistory.map(h => ({
             question: h.question,
@@ -181,6 +234,10 @@ export class LLMQuestionService {
           askedQuestionIds: askedIds,
           detectedRedFlags: this.detectRedFlags(conversationHistory),
           categoryCoverage,
+          priorityCategory, // Pass topic focus to selector
+          targetDifficulty: difficulty, // Pass difficulty setting
+          difficultyDistribution: difficultyDist, // Pass mode's difficulty distribution
+          categoryRequirements: categoryReqs, // Pass mode's category requirements
           // Context flags and semantic clusters will be built in smart-question-selector
         };
 
@@ -188,10 +245,19 @@ export class LLMQuestionService {
         
         console.log(`[Question Service] ${result.type} question selected:`, result.reasoning);
 
+        // Apply difficulty from configuration
+        const effectiveDifficulty = difficulty || 'medium';
+        
+        // Apply persona-based question phrasing if configured
+        let finalQuestion = result.question;
+        if (officerPersona) {
+          finalQuestion = this.applyPersonaPhrasing(result.question, officerPersona);
+        }
+
         return {
-          question: result.question,
+          question: finalQuestion,
           questionType: this.inferQuestionType(result.question),
-          difficulty: 'medium',
+          difficulty: effectiveDifficulty,
           expectedAnswerLength: 'medium',
           tips: result.reasoning,
         };
@@ -225,9 +291,43 @@ export class LLMQuestionService {
     return 'follow-up';
   }
 
-  private getSystemPrompt(route?: InterviewRoute): string {
+  /**
+   * Apply persona-based phrasing to question based on officer type
+   */
+  private applyPersonaPhrasing(question: string, persona: 'professional' | 'skeptical' | 'friendly' | 'strict'): string {
+    // For now, return question as-is. Persona affects tone in scoring/follow-ups more than base questions
+    // This can be expanded to add prefixes/suffixes based on persona in the future
+    switch (persona) {
+      case 'skeptical':
+        // Could add "I need to understand..." or "Explain precisely..."
+        return question;
+      case 'friendly':
+        // Could soften with "I'd like to know..." or "Can you tell me..."
+        return question;
+      case 'strict':
+        // Could make more direct: "Answer: ..." or just keep terse
+        return question;
+      case 'professional':
+      default:
+        return question;
+    }
+  }
+
+  private getSystemPrompt(route?: InterviewRoute, persona?: 'professional' | 'skeptical' | 'friendly' | 'strict'): string {
+    // Add persona-specific tone instructions
+    let personaInstructions = '';
+    if (persona) {
+      const personaDescriptions: Record<typeof persona, string> = {
+        'professional': 'Maintain a balanced, professional tone. Be methodical and thorough but fair.',
+        'skeptical': 'Be skeptical and probing. Question vague answers and look for inconsistencies. Use phrases like "I need to understand...", "That doesn\'t add up...", "Show me evidence..."',
+        'friendly': 'Be warm and encouraging. Help the student feel at ease while still being thorough. Use supportive language.',
+        'strict': 'Be direct and demanding. Have high standards and low patience. Be terse and no-nonsense.'
+      };
+      personaInstructions = `\n\nOFFICER PERSONA: ${personaDescriptions[persona]}\n`;
+    }
+    
     if (route === 'uk_student') {
-      return `You are an expert UK university credibility (pre-CAS) interviewer. Conduct realistic pre-CAS style interviews to assess genuine student intent, course and university fit, financial requirements (28-day funds and maintenance), accommodation planning, compliance history, and post-study intentions.
+      return `You are an expert UK university credibility (pre-CAS) interviewer. Conduct realistic pre-CAS style interviews to assess genuine student intent, course and university fit, financial requirements (28-day funds and maintenance), accommodation planning, compliance history, and post-study intentions.${personaInstructions}
 
 Key Guidelines (UK pre-CAS):
 1. Ask concise, officer-like questions specific to UK study route
@@ -333,12 +433,33 @@ Student Profile:
 
 Interview Progress: Question ${currentQuestionNumber}
 
+CRITICAL DEGREE-LEVEL FILTERING RULES:
+Current student is pursuing: ${studentProfile.degreeLevel || 'UNKNOWN'} degree
+
+${studentProfile.degreeLevel === 'undergraduate' ? `
+✓ APPROPRIATE: High school background, basic career goals, why US education, family support
+✗ NEVER ASK: "What is your undergraduate degree?", "Your bachelor's degree", "Undergraduate projects"
+✗ NEVER ASK: Questions implying they already have a bachelor's degree
+` : ''}${studentProfile.degreeLevel === 'graduate' ? `
+✓ APPROPRIATE: Their COMPLETED bachelor's degree (as PAST education), career advancement, specialization, why Master's
+✓ APPROPRIATE: "Tell me about your bachelor's degree that you completed", "What did you study in undergrad?"
+✗ NEVER ASK: "What is your undergraduate degree?" (implies current program - wrong context)
+✗ NEVER ASK: High school background questions (too basic for Master's level)
+✗ NEVER ASK: Research publications or PhD-level questions
+` : ''}${studentProfile.degreeLevel === 'doctorate' ? `
+✓ APPROPRIATE: Research proposals, advisor fit, publications, academic career goals, dissertation plans
+✓ APPROPRIATE: Their COMPLETED bachelor's AND master's degrees (as background)
+✗ NEVER ASK: Basic career questions (too simple for PhD level)
+✗ NEVER ASK: "Do you plan to do a PhD?" (they ARE doing a PhD!)
+` : ''}
 IMPORTANT: Use the degree level (${studentProfile.degreeLevel || 'not specified'}) and program details to tailor questions:
 - For undergraduate: Questions should focus on basic career goals, high school background, why they need a US education
-- For graduate (Master's): Ask about their existing degree, why further study is necessary, career advancement plans
-- For doctorate (PhD): Emphasize research, why this specific program/advisor, post-completion plans
+- For graduate (Master's): Ask about their COMPLETED bachelor's degree, career advancement, why further study is necessary
+- For doctorate (PhD): Emphasize research, why this specific program/advisor, post-completion plans, publications
 - Reference the specific program (${studentProfile.programName || 'their program'}) and cost (${studentProfile.programCost || 'program costs'}) in questions when relevant
-- Use university name (${studentProfile.universityName || studentProfile.intendedUniversity || 'this university'}) to ask why they chose this specific institution`
+- Use university name (${studentProfile.universityName || studentProfile.intendedUniversity || 'this university'}) to ask why they chose this specific institution
+
+CRITICAL: The student's degree level is ${studentProfile.degreeLevel || 'UNKNOWN'}. Ensure every question matches this level.`
 
     let prompt = isUK ? headerUK : headerUS;
 
@@ -360,7 +481,16 @@ IMPORTANT: Use the degree level (${studentProfile.degreeLevel || 'not specified'
 - You may adapt wording slightly to be more contextual, but keep the core question intent
 - Generate contextual follow-ups based on the student's specific answer (reference details they mentioned or omitted)
 - Do NOT repeat questions already asked
-- Ensure smooth transitions between categories (Study Plans → University → Academic → Financial → Post-grad)`
+- Ensure smooth transitions between categories (Study Plans → University → Academic → Financial → Post-grad)
+
+DEGREE-LEVEL VALIDATION (CRITICAL):
+Before finalizing your question, verify:
+1. If student is ${studentProfile.degreeLevel || 'UNKNOWN'} level
+2. Does this question make sense for their level?
+3. Am I asking about PAST education correctly (bachelor's for Master's students)?
+4. Am I NOT asking them about a degree level they're currently pursuing?
+
+If any check fails, select a different question from the appropriate category.`
     } else if (route === 'france_ema' || route === 'france_icn') {
       // France: Question 1 is always fixed, provide remaining questions for hybrid selection
       const university: FranceUniversity = route === 'france_ema' ? 'ema' : 'icn';

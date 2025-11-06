@@ -42,6 +42,22 @@ export interface UserProfile {
   quotaLimit?: number; // Individual user quota limit (for signup users)
   quotaUsed?: number; // Individual user quota used (for signup users)
   studentProfile?: StudentProfileInfo; // Pre-interview profile information
+  // Interview statistics and progress tracking
+  interviewStats?: {
+    totalCompleted: number;
+    averageScore: number;
+    highestScore: number;
+    improvementTrend: number; // Percentage change from first to latest
+    weakestCategory: string;
+    strongestCategory: string;
+    achievements: string[];
+    lastInterviewDate?: Timestamp;
+    scoreHistory: {
+      date: Timestamp;
+      score: number;
+      mode: string;
+    }[];
+  };
 }
 
 // Score Details Interface
@@ -124,6 +140,33 @@ export interface Interview {
     timestamp?: string;
     questionType?: string;
   }>;
+  // Interview mode and difficulty settings
+  interviewMode?: 'practice' | 'standard' | 'comprehensive' | 'stress_test';
+  difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
+  officerPersona?: 'professional' | 'skeptical' | 'friendly' | 'strict';
+  targetTopic?: 'financial' | 'academic' | 'intent' | 'weak_areas';
+  questionCount?: number; // Actual number of questions asked
+  // Enhanced scoring dimensions (12-dimension system)
+  detailedScores?: {
+    // Content dimensions
+    clarity?: number;          // 0-100
+    specificity?: number;      // 0-100
+    relevance?: number;        // 0-100
+    depth?: number;            // 0-100
+    consistency?: number;      // 0-100
+    // Delivery dimensions
+    fluency?: number;          // 0-100
+    confidence?: number;       // 0-100
+    pace?: number;             // 0-100
+    articulation?: number;     // 0-100
+    // Non-verbal dimensions
+    posture?: number;          // 0-100
+    eyeContact?: number;       // 0-100
+    composure?: number;        // 0-100
+  };
+  // Improvement tracking
+  improvementAreas?: string[];
+  achievements?: string[];
 }
 
 // Interview Metrics Interface

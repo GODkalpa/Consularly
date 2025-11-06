@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { ProfileSetupForm } from '@/components/profile/ProfileSetupForm'
-import { updateStudentProfile, updateUserProfile, type StudentProfileInfo } from '@/lib/database'
+import { type StudentProfileInfo } from '@/lib/database'
 import { toast } from 'sonner'
 import { Loader2, GraduationCap, Sparkles } from 'lucide-react'
 
@@ -49,12 +49,26 @@ export default function ProfileSetupPage() {
     try {
       const { interviewCountry, ...profileData } = data
       
-      // Always save the interview country
-      await updateUserProfile(user.uid, { interviewCountry })
+      // Get the ID token for authentication
+      const idToken = await user.getIdToken()
       
-      // Only save profile for USA
-      if (interviewCountry === 'usa') {
-        await updateStudentProfile(user.uid, profileData)
+      // Call server-side API to update profile (bypasses security rules)
+      const response = await fetch('/api/profile/setup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          interviewCountry,
+          studentProfile: interviewCountry === 'usa' ? profileData : null,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update profile')
       }
       
       toast.success('Setup completed successfully!', {

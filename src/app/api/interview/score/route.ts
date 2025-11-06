@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
       sessionMemory,
       languageCode,
       languageConfidence,
+      difficulty,
     }: {
       question: string
       answer: string
@@ -27,7 +28,12 @@ export async function POST(request: NextRequest) {
       sessionMemory?: F1SessionMemory
       languageCode?: string
       languageConfidence?: number
+      difficulty?: 'easy' | 'medium' | 'hard' | 'expert'
     } = body
+    
+    // Log difficulty setting for transparency
+    const effectiveDifficulty = difficulty || 'medium';
+    console.log(`[Scoring] Difficulty level: ${effectiveDifficulty}`);
 
     if (!question || typeof answer !== 'string' || !interviewContext) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -233,11 +239,40 @@ export async function POST(request: NextRequest) {
       ? { content: 0.75, speech: 0.25, body: 0 }  // Redistribute body weight to content/speech
       : weights
     
-    const overall = Math.round(
+    // Apply difficulty-based scoring adjustments
+    let difficultyMultiplier = 1.0;
+    let difficultyBonus = 0;
+    switch (effectiveDifficulty) {
+      case 'easy':
+        // Easy mode: 15% bonus to help beginners
+        difficultyMultiplier = 1.15;
+        difficultyBonus = 10;
+        break;
+      case 'medium':
+        // Standard scoring (no adjustment)
+        difficultyMultiplier = 1.0;
+        difficultyBonus = 0;
+        break;
+      case 'hard':
+        // Hard mode: 10% stricter scoring
+        difficultyMultiplier = 0.90;
+        difficultyBonus = -5;
+        break;
+      case 'expert':
+        // Expert mode: 20% stricter scoring, no bonus
+        difficultyMultiplier = 0.80;
+        difficultyBonus = -10;
+        break;
+    }
+    
+    let rawOverall = Math.round(
       adjustedWeights.content * contentScore +
       adjustedWeights.speech * speechScore +
       adjustedWeights.body * bodyScore
-    )
+    );
+    
+    // Apply difficulty adjustment (with floor to prevent negative scores)
+    const overall = Math.max(0, Math.min(100, Math.round(rawOverall * difficultyMultiplier + difficultyBonus)))
     
     console.log('📊 Scoring complete:', {
       content: contentScore,
@@ -246,8 +281,12 @@ export async function POST(request: NextRequest) {
       bodyMissing: bodyLanguageMissing,
       languagePenalty,
       relevancePenalty: relevanceCheck.penalty,
+      difficulty: effectiveDifficulty,
+      difficultyMultiplier,
+      difficultyBonus,
+      rawScore: rawOverall,
+      finalScore: overall,
       weights: adjustedWeights,
-      overall,
       usedLLM: !!aiRes,
     })
     

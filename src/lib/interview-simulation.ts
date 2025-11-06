@@ -45,6 +45,13 @@ export interface InterviewSession {
   sessionMemory?: F1SessionMemory;
   // Track if using adaptive LLM flow (USA F1)
   useMVPFlow?: boolean;
+  // Interview mode and configuration
+  interviewMode?: 'practice' | 'standard' | 'comprehensive' | 'stress_test';
+  difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
+  officerPersona?: 'professional' | 'skeptical' | 'friendly' | 'strict';
+  targetTopic?: 'financial' | 'academic' | 'intent' | 'weak_areas';
+  totalQuestions?: number; // Total questions for this mode
+  timePerQuestion?: number; // Seconds per question
 }
 
 export class InterviewSimulationService {
@@ -62,6 +69,12 @@ export class InterviewSimulationService {
     visaType: 'F1' | 'B1/B2' | 'H1B' | 'other',
     studentProfile: InterviewSession['studentProfile'],
     route?: InterviewRoute,
+    options?: {
+      mode?: 'practice' | 'standard' | 'comprehensive' | 'stress_test';
+      difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
+      officerPersona?: 'professional' | 'skeptical' | 'friendly' | 'strict';
+      targetTopic?: 'financial' | 'academic' | 'intent' | 'weak_areas';
+    }
   ): Promise<{ session: InterviewSession; firstQuestion: QuestionGenerationResponse }> {
     const sessionId = `interview_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -73,6 +86,34 @@ export class InterviewSimulationService {
       route === 'france_ema' ? 'ema' : 
       route === 'france_icn' ? 'icn' : 
       undefined;
+    
+    // Import interview mode configurations
+    const { getModeConfig, getDifficultyConfig, getEffectiveTimePerQuestion } = await import('./interview-modes');
+    
+    // Determine interview configuration
+    const interviewMode = options?.mode || 'standard';
+    const difficulty = options?.difficulty;
+    const modeConfig = getModeConfig(interviewMode);
+    const totalQuestions = modeConfig.questionCount;
+    const timePerQuestion = getEffectiveTimePerQuestion(interviewMode, difficulty);
+    
+    // Determine officer persona (random if not specified for realistic variety)
+    let officerPersona = options?.officerPersona;
+    if (!officerPersona && difficulty) {
+      // Assign persona based on difficulty if not specified
+      const personaMap = {
+        easy: 'friendly' as const,
+        medium: 'professional' as const,
+        hard: 'skeptical' as const,
+        expert: 'strict' as const,
+      };
+      officerPersona = personaMap[difficulty];
+    } else if (!officerPersona) {
+      // Random selection weighted towards professional
+      const personaChoices: Array<'professional' | 'skeptical' | 'friendly' | 'strict'> = 
+        ['professional', 'professional', 'skeptical', 'friendly'];
+      officerPersona = personaChoices[Math.floor(Math.random() * personaChoices.length)];
+    }
     
     const session: InterviewSession = {
       id: sessionId,
@@ -87,6 +128,13 @@ export class InterviewSimulationService {
       startTime: new Date().toISOString(),
       sessionMemory: useMVPFlow ? {} : undefined, // Track facts for consistency
       useMVPFlow, // Using adaptive LLM with question bank
+      // Interview mode configuration
+      interviewMode,
+      difficulty,
+      officerPersona,
+      targetTopic: options?.targetTopic,
+      totalQuestions,
+      timePerQuestion,
     };
 
     // Generate the first question (LLM with question bank for usa_f1)
@@ -137,9 +185,11 @@ export class InterviewSimulationService {
       updatedSession.sessionMemory = updateMemory(session.sessionMemory, answer, currentQuestionType);
     }
 
-    // Check if interview should end (default 8, UK route requires 16 questions)
-    const targetQuestions = session.route === 'uk_student' ? 16 : 8;
+    // Check if interview should end based on mode configuration (or route-specific defaults)
+    const targetQuestions = session.totalQuestions || (session.route === 'uk_student' ? 16 : 8);
     const isComplete = updatedSession.currentQuestionNumber > targetQuestions;
+    
+    console.log(`[Interview Progress] Question ${updatedSession.currentQuestionNumber}/${targetQuestions} (Mode: ${session.interviewMode || 'standard'})`);
 
     if (isComplete) {
       updatedSession.status = 'completed';
@@ -173,6 +223,11 @@ export class InterviewSimulationService {
     studentAnswer?: string
   ): Promise<QuestionGenerationResponse> {
     
+    // Log degree level for debugging
+    if (session.route === 'usa_f1') {
+      console.log(`[Interview Generation] USA F1 - Degree Level: ${session.studentProfile.degreeLevel || 'NOT SET'}, Program: ${session.studentProfile.programName || 'NOT SET'}`);
+    }
+    
     const request: QuestionGenerationRequest = {
       previousQuestion,
       studentAnswer,
@@ -180,13 +235,18 @@ export class InterviewSimulationService {
         visaType: session.visaType,
         // country-specific route for prompt selection
         route: session.route,
-        studentProfile: session.studentProfile,
+        studentProfile: session.studentProfile, // Includes degreeLevel, programName, etc.
         currentQuestionNumber: session.currentQuestionNumber,
         conversationHistory: session.conversationHistory.map(item => ({
           question: item.question,
           answer: item.answer,
           timestamp: item.timestamp
-        }))
+        })),
+        // Pass interview mode configuration to influence question selection
+        interviewMode: session.interviewMode,
+        difficulty: session.difficulty,
+        officerPersona: session.officerPersona,
+        targetTopic: session.targetTopic,
       }
     };
 
@@ -204,6 +264,39 @@ export class InterviewSimulationService {
       }
 
       const next: QuestionGenerationResponse = await response.json();
+      
+      // VALIDATION: Check if the generated question is appropriate for the degree level
+      if (session.route === 'usa_f1' && session.studentProfile.degreeLevel) {
+        const degreeLevel = session.studentProfile.degreeLevel;
+        const q = next.question.toLowerCase();
+        
+        // Detect inappropriate questions for undergrads
+        if (degreeLevel === 'undergraduate') {
+          if (q.includes('undergraduate degree') || q.includes("bachelor's degree") || q.includes('undergraduate projects')) {
+            console.warn(`⚠️ [DEGREE MISMATCH] Generated question for UNDERGRADUATE student asks about bachelor's degree: "${next.question}"`);
+            console.warn(`⚠️ This should NOT happen. Student is pursuing undergraduate, not graduate.`);
+          }
+        }
+        
+        // Detect inappropriate questions for graduate students
+        if (degreeLevel === 'graduate') {
+          if (q.includes('high school') || q.includes('secondary school')) {
+            console.warn(`⚠️ [DEGREE MISMATCH] Generated question for GRADUATE student asks about high school: "${next.question}"`);
+            console.warn(`⚠️ Graduate students should be asked about their bachelor's degree, not high school.`);
+          }
+          if (q.includes('publish') || q.includes('conferences') || q.includes('dissertation')) {
+            console.warn(`⚠️ [DEGREE MISMATCH] Generated PhD-level question for GRADUATE (Master's) student: "${next.question}"`);
+          }
+        }
+        
+        // Detect inappropriate questions for PhD students
+        if (degreeLevel === 'doctorate') {
+          if (q.includes('plan to do a phd') || q.includes('pursue a doctorate')) {
+            console.warn(`⚠️ [DEGREE MISMATCH] Asked PhD student if they plan to do PhD: "${next.question}"`);
+            console.warn(`⚠️ Student IS pursuing a PhD. This question is inappropriate.`);
+          }
+        }
+      }
 
       // Helpers for de-duplication and flow gating
       const normalize = (s: string) => s

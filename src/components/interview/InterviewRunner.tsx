@@ -16,6 +16,7 @@ import { mapQuestionTypeToCategory, type InterviewRoute } from '@/lib/interview-
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'motion/react'
 import { auth } from '@/lib/firebase'
+import { FaceLivenessCheck } from '@/components/interview/FaceLivenessCheck'
 
 // Dynamically import the heavy InterviewStage (TensorFlow/MediaPipe) client-only to reduce initial bundle size
 const InterviewStage = dynamic<InterviewStageProps>(
@@ -110,6 +111,7 @@ export default function InterviewRunner() {
   const [permissionsReady, setPermissionsReady] = useState<boolean>(false)
   const [permError, setPermError] = useState<string | null>(null)
   const { running: micRunning, level: micLevel, error: micError, start: startMic, stop: stopMic } = useMicLevel()
+  const [livenessVerified, setLivenessVerified] = useState<boolean>(false)
 
   // load initial payload from localStorage seeded by the starter page
   useEffect(() => {
@@ -607,6 +609,8 @@ export default function InterviewRunner() {
             // Pass language detection data
             languageCode: detectedLanguage,
             languageConfidence: languageConfidence,
+            // Pass difficulty setting for adjusted scoring
+            difficulty: apiSession?.difficulty,
           })
         }).then(async (resScore) => {
           if (resScore.ok) {
@@ -922,9 +926,25 @@ export default function InterviewRunner() {
   if (!session || !apiSession) {
     return (
       <div className="max-w-xl mx-auto my-16 text-center space-y-4">
-        <h2 className="text-2xl font-semibold">Interview Not Initialized</h2>
-        <p className="text-muted-foreground">Go back and start a new interview session from the dashboard.</p>
-        <Button onClick={() => router.push('/admin')}>Back to Admin</Button>
+        <AlertCircle className="h-16 w-16 mx-auto text-destructive" />
+        <h2 className="text-2xl font-semibold">Interview Session Not Found</h2>
+        <p className="text-muted-foreground">
+          The interview session data could not be loaded. This may happen if:
+        </p>
+        <ul className="text-sm text-muted-foreground list-disc text-left max-w-md mx-auto space-y-1">
+          <li>The session link expired or was already used</li>
+          <li>You opened the interview in a different browser</li>
+          <li>Browser storage was cleared during setup</li>
+          <li>The page was refreshed before the session loaded</li>
+        </ul>
+        <div className="flex gap-3 justify-center pt-4">
+          <Button onClick={() => router.push('/dashboard')}>
+            Return to Dashboard
+          </Button>
+          <Button variant="outline" onClick={() => router.push('/org')}>
+            Organization Dashboard
+          </Button>
+        </div>
       </div>
     )
   }
@@ -998,6 +1018,53 @@ export default function InterviewRunner() {
           </CardContent>
         </Card>
       </motion.div>
+    )
+  }
+
+  // Show loading state while generating final report
+  if (session.status === 'completed' && !finalReport) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-muted/40">
+        <Card className="max-w-md">
+          <CardContent className="p-8 text-center space-y-4">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              <Loader2 className="h-16 w-16 animate-spin mx-auto text-primary" />
+            </motion.div>
+            <h3 className="text-2xl font-semibold">Generating Your Final Report</h3>
+            <p className="text-muted-foreground">
+              Our AI is analyzing your complete interview performance across all questions. This may take up to 30 seconds...
+            </p>
+            <div className="flex flex-col gap-2 text-sm text-muted-foreground pt-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <span>Analyzing {perfList.length} answer{perfList.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <span>Evaluating content quality</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span>Generating personalized feedback</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Show face liveness check before starting interview (during preparing state)
+  if (session.status === 'preparing' && permissionsReady && !livenessVerified) {
+    return (
+      <FaceLivenessCheck
+        onVerified={() => setLivenessVerified(true)}
+        onSkip={() => setLivenessVerified(true)}
+      />
     )
   }
 
@@ -1293,11 +1360,6 @@ export default function InterviewRunner() {
                                     </Badge>
                                   </div>
                                   <p className="font-semibold text-sm text-foreground">{insight.finding}</p>
-                                  {insight.example && (
-                                    <p className="text-sm text-muted-foreground italic border-l-2 border-muted pl-3">
-                                      &ldquo;{insight.example}&rdquo;
-                                    </p>
-                                  )}
                                   <div className="pt-2">
                                     <p className="text-sm text-foreground flex items-start gap-2">
                                       <Lightbulb className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
@@ -1591,7 +1653,7 @@ export default function InterviewRunner() {
                 <Play className="h-5 w-5 mr-2" /> Allow Camera & Microphone
               </Button>
             )}
-            {session.status === 'preparing' && permissionsReady && (
+            {session.status === 'preparing' && permissionsReady && livenessVerified && (
               <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={beginInterview}>
                 <Play className="h-5 w-5 mr-2" /> Start Interview
               </Button>

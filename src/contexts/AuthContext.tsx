@@ -4,13 +4,10 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   User,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
-  updateProfile,
-  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
@@ -140,47 +137,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, displayName: string) => {
     try {
       if (!firebaseEnabled) throw new Error('Authentication is not configured. Please contact support.');
-      const { user } = await createUserWithEmailAndPassword(auth, email, password);
       
-      // Update the user's display name
-      await updateProfile(user, { displayName });
-      
-      // Create user document in Firestore
-      await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid,
-        email: user.email,
-        displayName: displayName,
-        role: 'user', // Default role for new users
-        quotaLimit: 10, // Default quota for new signup users
-        quotaUsed: 0, // Start with 0 interviews used
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        isActive: true,
-        preferences: {
-          theme: 'light',
-          notifications: true,
-          language: 'en'
-        }
+      // Use server-side API to create user (bypasses Firestore security rules)
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          displayName,
+        }),
       });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create account');
+      }
+
+      // Now sign in the user with the credentials
+      await signInWithEmailAndPassword(auth, email, password);
 
       // Send welcome email (non-blocking)
       sendWelcomeEmail({
         to: email,
         displayName: displayName,
-        userId: user.uid,
+        userId: data.uid,
       }).catch((e) => {
         console.warn('[AuthContext] Welcome email failed:', e);
       });
 
-      // Always send password setup email so the user can set/confirm their password via email link
-      try {
-        await sendPasswordResetEmail(auth, email);
-      } catch (e) {
-        // Non-fatal: continue even if email fails here; user can use "Forgot password" later
-        // eslint-disable-next-line no-console
-        console.warn('[AuthContext] sendPasswordResetEmail after signup failed:', e);
-      }
       // Redirect will be handled by the auth state change listener
     } catch (error) {
       throw error;

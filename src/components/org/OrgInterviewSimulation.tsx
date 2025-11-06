@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
-import { Play, RotateCcw, Save, Users, AlertCircle } from 'lucide-react'
+import { Play, RotateCcw, Save, AlertCircle, User, Globe, Settings, Target, TrendingUp, Lightbulb, BookOpen, Clock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { auth, firebaseEnabled } from '@/lib/firebase'
 import {
@@ -25,6 +25,8 @@ import { TranscriptionResult } from '@/lib/assemblyai-service'
 import { mapQuestionTypeToCategory, defaultVisaTypeForRoute, type InterviewRoute, routeDisplayName } from '@/lib/interview-routes'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
 import { scorePerformance } from '@/lib/performance-scoring'
+import type { InterviewMode, DifficultyLevel, PracticeTopic } from '@/lib/interview-modes'
+import type { OfficerPersona } from '@/lib/officer-personas'
 // Using secure API routes instead of direct client Firestore writes
 
 interface InterviewQuestion {
@@ -72,6 +74,12 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
   const [studentId, setStudentId] = useState<string>(initialStudentId || '')
   const [studentName, setStudentName] = useState<string>(initialStudentName || '')
   const [route, setRoute] = useState<InterviewRoute>('usa_f1')
+  
+  // Interview mode configuration
+  const [mode, setMode] = useState<InterviewMode>('standard')
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>('medium')
+  const [persona, setPersona] = useState<OfficerPersona | undefined>(undefined)
+  const [topic, setTopic] = useState<PracticeTopic | undefined>(undefined)
 
   // Interview session state
   const [session, setSession] = useState<UISession | null>(null)
@@ -435,7 +443,12 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
           visaType: defaultVisaTypeForRoute(route),
           route,
           studentProfile: studentProfilePayload,
-          firestoreInterviewId: created.id  // Pass the interview ID we just created
+          firestoreInterviewId: created.id,  // Pass the interview ID we just created
+          // NEW: Interview configuration
+          mode,
+          difficulty,
+          officerPersona: persona,
+          targetTopic: topic,
         })
       })
       if (!res.ok) {
@@ -638,6 +651,8 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
               assemblyConfidence: typeof confidence === 'number' ? confidence : undefined,
               interviewContext: ic,
               sessionMemory: (apiSession as any)?.sessionMemory,
+              // Pass difficulty for adjusted scoring
+              difficulty: apiSession?.difficulty,
             }),
           })
           if (res.ok) {
@@ -812,47 +827,231 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
   const currentQuestion = session?.questions[session.currentQuestionIndex]
 
   return (
-    <div className='space-y-6'>
+    <div className='space-y-8'>
       {!session && (
-        <Card>
-          <CardHeader>
-            <CardTitle className='flex items-center gap-2'>
-              <Users className='h-5 w-5' /> Select Student
-            </CardTitle>
-          </CardHeader>
-          <CardContent className='space-y-4'>
-            <div className='space-y-2'>
-              <Label>Student</Label>
-              <Select value={studentId} onValueChange={setStudentId}>
-                <SelectTrigger>
-                  <SelectValue placeholder='Pick a student from your organization' />
-                </SelectTrigger>
-                <SelectContent>
-                  {students.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <>
+          {/* Header */}
+          <div>
+            <h2 className="text-2xl font-semibold">Interview Setup</h2>
+            <p className="text-sm text-muted-foreground mt-1">Configure your interview session parameters and launch when ready</p>
+          </div>
+
+          {/* Candidate Information */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2.5 mb-6">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <User className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium">Candidate Information</h3>
+                  <p className="text-xs text-muted-foreground">Select student and interview destination</p>
+                </div>
+              </div>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Student Selection */}
+                <div className="space-y-2">
+                  <Label htmlFor="student-select" className="text-sm font-medium">
+                    Student Name <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">Required</Badge>
+                  </Label>
+                  <Select value={studentId} onValueChange={setStudentId}>
+                    <SelectTrigger id="student-select">
+                      <SelectValue placeholder="Choose a student..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {students.length === 0 ? (
+                        <div className="px-2 py-8 text-center text-sm text-muted-foreground">
+                          No students found. Add students first.
+                        </div>
+                      ) : (
+                        students.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {!studentId && students.length > 0 && (
+                    <p className="text-xs text-muted-foreground">Select the student who will be interviewed</p>
+                  )}
+                </div>
+
+                {/* Country Selection */}
+                <div className="space-y-2">
+                  <Label htmlFor="country-select" className="text-sm font-medium flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5" />
+                    Destination Country
+                  </Label>
+                  <Select value={route} onValueChange={(v) => setRoute(v as InterviewRoute)}>
+                    <SelectTrigger id="country-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='usa_f1'>🇺🇸 {routeDisplayName.usa_f1}</SelectItem>
+                      <SelectItem value='uk_student'>🇬🇧 {routeDisplayName.uk_student}</SelectItem>
+                      <SelectItem value='france_ema'>🇫🇷 {routeDisplayName.france_ema}</SelectItem>
+                      <SelectItem value='france_icn'>🇫🇷 {routeDisplayName.france_icn}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Interview questions will be tailored to this visa type</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Interview Configuration - Only for USA F1 */}
+          {route === 'usa_f1' && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2.5 mb-6">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Settings className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium">Interview Configuration</h3>
+                    <p className="text-xs text-muted-foreground">Customize difficulty and format</p>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Interview Mode */}
+                  <div className="space-y-2">
+                    <Label htmlFor="mode-select" className="text-sm font-medium flex items-center gap-1.5">
+                      <Target className="h-3.5 w-3.5" />
+                      Interview Mode
+                    </Label>
+                    <Select value={mode} onValueChange={(v) => setMode(v as InterviewMode)}>
+                      <SelectTrigger id="mode-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="practice">
+                          <span className="font-medium">Practice</span>
+                          <span className="text-xs text-muted-foreground ml-2">8 questions • 10 min</span>
+                        </SelectItem>
+                        <SelectItem value="standard">
+                          <span className="font-medium">Standard</span>
+                          <span className="text-xs text-muted-foreground ml-2">12 questions • 15 min</span>
+                        </SelectItem>
+                        <SelectItem value="comprehensive">
+                          <span className="font-medium">Comprehensive</span>
+                          <span className="text-xs text-muted-foreground ml-2">16 questions • 20 min</span>
+                        </SelectItem>
+                        <SelectItem value="stress_test">
+                          <span className="font-medium">Stress Test</span>
+                          <span className="text-xs text-muted-foreground ml-2">20 questions • 25 min</span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {mode === 'practice' && 'Balanced session simulating a typical embassy interview experience'}
+                      {mode === 'standard' && 'Balanced session simulating a typical embassy interview experience'}
+                      {mode === 'comprehensive' && 'In-depth interview covering all aspects thoroughly with follow-ups'}
+                      {mode === 'stress_test' && 'Challenging rapid-fire format designed to test composure under pressure'}
+                    </p>
+                  </div>
+
+                  {/* Difficulty Level */}
+                  <div className="space-y-2">
+                    <Label htmlFor="difficulty-select" className="text-sm font-medium flex items-center gap-1.5">
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      Difficulty Level
+                    </Label>
+                    <Select value={difficulty} onValueChange={(v) => setDifficulty(v as DifficultyLevel)}>
+                      <SelectTrigger id="difficulty-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="easy">
+                          <span className="font-medium">Beginner</span>
+                          <span className="text-xs text-muted-foreground ml-2">60s/question • Patient officer</span>
+                        </SelectItem>
+                        <SelectItem value="medium">
+                          <span className="font-medium">Intermediate</span>
+                          <span className="text-xs text-muted-foreground ml-2">45s/question • Professional officer</span>
+                        </SelectItem>
+                        <SelectItem value="hard">
+                          <span className="font-medium">Advanced</span>
+                          <span className="text-xs text-muted-foreground ml-2">30s/question • Challenging</span>
+                        </SelectItem>
+                        <SelectItem value="expert">
+                          <span className="font-medium">Master</span>
+                          <span className="text-xs text-muted-foreground ml-2">25s/question • Maximum pressure</span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Advanced Options */}
+                  <div className="pt-4 border-t space-y-6">
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {/* Officer Persona */}
+                      <div className="space-y-2">
+                        <Label htmlFor="persona-select" className="text-sm font-medium">
+                          Officer Persona <span className="text-muted-foreground font-normal">(Optional)</span>
+                        </Label>
+                        <Select value={persona || 'auto'} onValueChange={(v) => setPersona(v === 'auto' ? undefined : v as OfficerPersona)}>
+                          <SelectTrigger id="persona-select">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="auto">Auto-select</SelectItem>
+                            <SelectItem value="professional">Professional Officer</SelectItem>
+                            <SelectItem value="skeptical">Skeptical Officer</SelectItem>
+                            <SelectItem value="friendly">Friendly Officer</SelectItem>
+                            <SelectItem value="strict">Strict Officer</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Topic Focus (Only for Practice Mode) */}
+                      {mode === 'practice' && (
+                        <div className="space-y-2">
+                          <Label htmlFor="topic-select" className="text-sm font-medium">
+                            Topic Focus <span className="text-muted-foreground font-normal">(Optional)</span>
+                          </Label>
+                          <Select value={topic || 'balanced'} onValueChange={(v) => setTopic(v === 'balanced' ? undefined : v as PracticeTopic)}>
+                            <SelectTrigger id="topic-select">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="balanced">Balanced Practice</SelectItem>
+                              <SelectItem value="financial">Financial Capacity</SelectItem>
+                              <SelectItem value="academic">Academic Background</SelectItem>
+                              <SelectItem value="intent">Return Intent</SelectItem>
+                              <SelectItem value="weak_areas">Weak Areas Practice</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Start Button */}
+          <Button 
+            onClick={startNewSession} 
+            disabled={!studentId} 
+            className='w-full' 
+            size='lg'
+          >
+            <Play className='h-4 w-4 mr-2' /> 
+            Launch Interview Session
+          </Button>
+          
+          {!studentId && students.length > 0 && (
+            <div className="flex items-start gap-2.5 p-3.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30 rounded-lg text-sm">
+              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-900 dark:text-amber-200">Student selection required</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">Please select a student from the dropdown above to continue</p>
+              </div>
             </div>
-            <div className='space-y-2'>
-              <Label>Country</Label>
-              <Select value={route} onValueChange={(v) => setRoute(v as InterviewRoute)}>
-                <SelectTrigger>
-                  <SelectValue placeholder='Select interview country/route' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='usa_f1'>{routeDisplayName.usa_f1}</SelectItem>
-                  <SelectItem value='uk_student'>{routeDisplayName.uk_student}</SelectItem>
-                  <SelectItem value='france_ema'>{routeDisplayName.france_ema}</SelectItem>
-                  <SelectItem value='france_icn'>{routeDisplayName.france_icn}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={startNewSession} disabled={!studentId} className='w-full'>
-              <Play className='h-4 w-4 mr-2' /> New Interview Session
-            </Button>
-          </CardContent>
-        </Card>
+          )}
+        </>
       )}
 
       {session && (

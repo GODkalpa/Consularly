@@ -80,19 +80,43 @@ export async function GET(req: NextRequest) {
       avgScore = Math.round(totalScore / scoredInterviews.length);
     }
 
-    // Get recent interviews (last 5)
-    const recentInterviews = interviews
-      .slice(0, 5)
-      .map((doc) => {
+    // Get recent interviews (last 5) with student names
+    const recentInterviewDocs = interviews.slice(0, 5);
+    
+    // Fetch student names for these interviews
+    const studentIds = recentInterviewDocs
+      .map(doc => doc.data().userId)
+      .filter((id): id is string => !!id);
+    
+    // Fetch all students in one batch
+    const studentDocs = await Promise.all(
+      studentIds.map(id => adminDb().collection('orgStudents').doc(id).get())
+    );
+    
+    // Create a map of studentId -> studentName
+    const studentNameMap = new Map<string, string>();
+    studentDocs.forEach((doc, idx) => {
+      if (doc.exists) {
         const data = doc.data();
-        return {
-          id: doc.id,
-          candidateName: data.candidateName || 'Unknown',
-          date: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          score: data.finalScore || 0,
-          status: data.status || 'completed',
-        };
-      });
+        const name = data?.name || data?.fullName || 'Unknown';
+        studentNameMap.set(studentIds[idx], name);
+      }
+    });
+    
+    // Map interviews with student names
+    const recentInterviews = recentInterviewDocs.map((doc) => {
+      const data = doc.data();
+      const studentId = data.userId;
+      const candidateName = studentId ? (studentNameMap.get(studentId) || 'Unknown') : 'Unknown';
+      
+      return {
+        id: doc.id,
+        candidateName,
+        date: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        score: data.finalScore || 0,
+        status: data.status || 'completed',
+      };
+    });
 
     // Active users count
     const activeUsers = orgUsersSnapshot.data().count;
