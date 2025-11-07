@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin'
 
 // PATCH /api/org/students/[id]
-// Body: { name?: string, email?: string }
+// Body: { name?: string, email?: string, interviewCountry?: string, studentProfile?: object }
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     await ensureFirebaseAdmin()
@@ -34,6 +34,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const updates: any = { updatedAt: FieldValue.serverTimestamp() }
     if (typeof body.name === 'string') updates.name = String(body.name).trim()
     if (typeof body.email === 'string') updates.email = String(body.email).trim()
+    if (body.interviewCountry) updates.interviewCountry = body.interviewCountry
+    if (body.studentProfile !== undefined) updates.studentProfile = body.studentProfile
 
     await studentRef.update(updates)
     return NextResponse.json({ ok: true })

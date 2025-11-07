@@ -70,7 +70,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
   const router = useRouter()
 
   // Student selection
-  const [students, setStudents] = useState<Array<{ id: string; name: string; studentProfile?: any | null }>>([])
+  const [students, setStudents] = useState<Array<{ id: string; name: string; interviewCountry?: 'usa' | 'uk' | 'france'; studentProfile?: any | null }>>([])
   const [studentId, setStudentId] = useState<string>(initialStudentId || '')
   const [studentName, setStudentName] = useState<string>(initialStudentName || '')
   const [route, setRoute] = useState<InterviewRoute>('usa_f1')
@@ -124,7 +124,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
         const res = await fetch('/api/org/students', { headers: { Authorization: `Bearer ${token}` } })
         const data = await res.json()
         if (!canceled && res.ok) {
-          const list = (data.students || []).map((s: any) => ({ id: s.id, name: s.name, studentProfile: s.studentProfile || null }))
+          const list = (data.students || []).map((s: any) => ({ id: s.id, name: s.name, interviewCountry: s.interviewCountry, studentProfile: s.studentProfile || null }))
           setStudents(list)
           if (!initialStudentName && initialStudentId) {
             const match = list.find((s: any) => s.id === initialStudentId)
@@ -135,6 +135,25 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
     })()
     return () => { canceled = true }
   }, [orgId, initialStudentId, initialStudentName])
+
+  // Auto-select route when student is selected based on their interviewCountry
+  useEffect(() => {
+    if (!studentId) return
+    const student = students.find(s => s.id === studentId)
+    if (!student?.interviewCountry) return
+    
+    // Map interviewCountry to InterviewRoute
+    const countryToRoute: Record<string, InterviewRoute> = {
+      'usa': 'usa_f1',
+      'uk': 'uk_student',
+      'france': 'france_ema' // Default to EMA for France
+    }
+    
+    const mappedRoute = countryToRoute[student.interviewCountry]
+    if (mappedRoute) {
+      setRoute(mappedRoute)
+    }
+  }, [studentId, students])
 
   const clearTimers = () => {
     if (questionTimerRef.current) { window.clearTimeout(questionTimerRef.current); questionTimerRef.current = null }
@@ -882,7 +901,11 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
                     <Globe className="h-3.5 w-3.5" />
                     Destination Country
                   </Label>
-                  <Select value={route} onValueChange={(v) => setRoute(v as InterviewRoute)}>
+                  <Select 
+                    value={route} 
+                    onValueChange={(v) => setRoute(v as InterviewRoute)}
+                    disabled={!!studentId && !!students.find(s => s.id === studentId)?.interviewCountry}
+                  >
                     <SelectTrigger id="country-select">
                       <SelectValue />
                     </SelectTrigger>
@@ -893,7 +916,12 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
                       <SelectItem value='france_icn'>🇫🇷 {routeDisplayName.france_icn}</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Interview questions will be tailored to this visa type</p>
+                  <p className="text-xs text-muted-foreground">
+                    {studentId && students.find(s => s.id === studentId)?.interviewCountry 
+                      ? 'Country pre-assigned to this student'
+                      : 'Interview questions will be tailored to this visa type'
+                    }
+                  </p>
                 </div>
               </div>
             </CardContent>

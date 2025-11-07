@@ -38,7 +38,7 @@ export function FaceLivenessCheck({ onVerified, onSkip }: FaceLivenessCheckProps
   
   // Track head position for movement detection
   const baselinePositionRef = useRef<{ x: number; y: number; z: number } | null>(null)
-  const movementThreshold = 20 // Increased threshold for more deliberate movements
+  const movementThreshold = 12 // Reduced threshold for easier, more forgiving movements
   const detectionInterval = useRef<number>(0) // Skip frames for better performance
   const completedMovementsRef = useRef<Set<MovementDirection>>(new Set()) // Track completed movements immediately
 
@@ -87,118 +87,134 @@ export function FaceLivenessCheck({ onVerified, onSkip }: FaceLivenessCheckProps
   useEffect(() => {
     if (!modelsLoaded) return
     
+    let mounted = true
+    
     const startCamera = async () => {
       try {
         console.log('[FaceLiveness] Starting camera...')
+        
+        // Request camera with better constraints
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-            facingMode: 'user'
-          }
+            width: { ideal: 640, min: 480 },
+            height: { ideal: 480, min: 360 },
+            facingMode: 'user',
+            frameRate: { ideal: 30 }
+          },
+          audio: false
         })
         
-        streamRef.current = stream
-        console.log('[FaceLiveness] Camera stream obtained')
+        if (!mounted) {
+          // Component unmounted, clean up stream
+          stream.getTracks().forEach(track => track.stop())
+          return
+        }
         
+        streamRef.current = stream
+        console.log('[FaceLiveness] ✅ Camera stream obtained')
+        
+        // Assign to hidden video for face detection
         if (videoRef.current) {
-          const video = videoRef.current
-          video.srcObject = stream
-          console.log('[FaceLiveness] Stream assigned to hidden video element')
-          console.log('[FaceLiveness] Video element exists:', !!video)
-          console.log('[FaceLiveness] Video readyState:', video.readyState)
+          videoRef.current.srcObject = stream
+          videoRef.current.play().catch(e => console.warn('[FaceLiveness] Hidden video play:', e))
+        }
+        
+        // Wait a bit for the display element to mount
+        setTimeout(() => {
+          if (!mounted) return
           
-          // Also assign to display video
           const displayVideo = document.getElementById('face-liveness-display') as HTMLVideoElement
-          if (displayVideo) {
-            displayVideo.srcObject = stream
-            console.log('[FaceLiveness] Stream also assigned to display video')
-          }
-          
-          // Try to play immediately (sometimes works without waiting for metadata)
-          const tryPlay = () => {
-            console.log('[FaceLiveness] Attempting to play video...')
-            video.play()
-              .then(() => {
-                console.log('[FaceLiveness] ✅ Video playing successfully')
-                
-                // Also play the display video
-                const displayVideo = document.getElementById('face-liveness-display') as HTMLVideoElement
-                if (displayVideo && displayVideo.srcObject) {
-                  displayVideo.play().catch(e => console.warn('[FaceLiveness] Display video play error:', e))
-                }
-                
+          if (displayVideo && streamRef.current) {
+            console.log('[FaceLiveness] Assigning stream to display video')
+            displayVideo.srcObject = streamRef.current
+            
+            displayVideo.onloadedmetadata = () => {
+              console.log('[FaceLiveness] Display video metadata loaded')
+              displayVideo.play()
+                .then(() => {
+                  console.log('[FaceLiveness] ✅ Display video playing')
+                  if (mounted) {
+                    setCameraReady(true)
+                    setLoading(false)
+                  }
+                })
+                .catch(e => {
+                  console.error('[FaceLiveness] Display video play error:', e)
+                  if (mounted) {
+                    setError(`Camera display failed: ${e.message}`)
+                    setLoading(false)
+                  }
+                })
+            }
+            
+            // Fallback: Force ready after 2 seconds
+            setTimeout(() => {
+              if (mounted && !cameraReady) {
+                console.log('[FaceLiveness] Fallback: Forcing camera ready')
                 setCameraReady(true)
                 setLoading(false)
-              })
-              .catch((playError) => {
-                console.warn('[FaceLiveness] Play error (will retry):', playError.name, playError.message)
-              })
+              }
+            }, 2000)
+          } else {
+            console.warn('[FaceLiveness] Display video element not found yet')
+            // Retry after another delay
+            setTimeout(() => {
+              if (mounted && !cameraReady) {
+                setCameraReady(true)
+                setLoading(false)
+              }
+            }, 1000)
           }
-          
-          // Wait for video metadata to load
-          video.onloadedmetadata = () => {
-            console.log('[FaceLiveness] Video metadata loaded, readyState:', video.readyState)
-            tryPlay()
-          }
-          
-          // Fallback 1: Try after 500ms regardless
-          setTimeout(() => {
-            if (!cameraReady) {
-              console.log('[FaceLiveness] Fallback 1: Trying to play after 500ms')
-              tryPlay()
-            }
-          }, 500)
-          
-          // Fallback 2: Force camera ready after 1.5 seconds
-          setTimeout(() => {
-            if (!cameraReady) {
-              console.log('[FaceLiveness] Fallback 2: Forcing camera ready after 1.5s')
-              setCameraReady(true)
-              setLoading(false)
-            }
-          }, 1500)
-        } else {
-          console.error('[FaceLiveness] Video element is null!')
-          setError('Video element not found')
-          setLoading(false)
-        }
+        }, 200)
+        
       } catch (e: any) {
         console.error('[FaceLiveness] Camera error:', e)
-        setError(`Camera access denied: ${e.message}`)
-        setLoading(false)
+        if (mounted) {
+          if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+            setError('Camera access denied. Please allow camera access and refresh.')
+          } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
+            setError('No camera found. Please connect a camera and refresh.')
+          } else if (e.name === 'NotReadableError' || e.name === 'TrackStartError') {
+            setError('Camera is already in use by another application.')
+          } else {
+            setError(`Camera error: ${e.message}`)
+          }
+          setLoading(false)
+        }
       }
     }
     
     startCamera()
     
     return () => {
+      mounted = false
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
+        console.log('[FaceLiveness] Stopping camera stream')
+        streamRef.current.getTracks().forEach(track => {
+          track.stop()
+          console.log('[FaceLiveness] Camera track stopped')
+        })
+        streamRef.current = null
       }
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
       }
     }
   }, [modelsLoaded])
 
-  // Start display video when camera becomes ready and UI renders
+  // Ensure display video is playing when camera becomes ready
   useEffect(() => {
     if (!cameraReady || loading) return
     
-    // Wait a moment for the display video to render
-    const timer = setTimeout(() => {
-      const displayVideo = document.getElementById('face-liveness-display') as HTMLVideoElement
-      if (displayVideo && streamRef.current) {
-        console.log('[FaceLiveness] Starting display video playback...')
-        displayVideo.srcObject = streamRef.current
-        displayVideo.play()
-          .then(() => console.log('[FaceLiveness] ✅ Display video playing'))
-          .catch(e => console.error('[FaceLiveness] Display video play error:', e))
-      }
-    }, 100)
-    
-    return () => clearTimeout(timer)
+    const displayVideo = document.getElementById('face-liveness-display') as HTMLVideoElement
+    if (displayVideo && streamRef.current && displayVideo.paused) {
+      console.log('[FaceLiveness] Ensuring display video is playing...')
+      displayVideo.srcObject = streamRef.current
+      displayVideo.play()
+        .then(() => console.log('[FaceLiveness] ✅ Display video confirmed playing'))
+        .catch(e => console.warn('[FaceLiveness] Display play retry error:', e))
+    }
   }, [cameraReady, loading])
 
   // Face detection and movement tracking
@@ -294,10 +310,10 @@ export function FaceLivenessCheck({ onVerified, onSkip }: FaceLivenessCheckProps
         console.log('[FaceLiveness] Using display video for detection')
       }
       
-      // Improved detection options for better accuracy
+      // Improved detection options for better accuracy and leniency
       const detectionOptions = new faceapi.TinyFaceDetectorOptions({
         inputSize: 416, // Higher resolution for better detection (default: 416)
-        scoreThreshold: 0.5 // Lower threshold for easier detection (default: 0.5)
+        scoreThreshold: 0.35 // Lower threshold for much easier face detection (default: 0.5)
       })
       
       const detections = await faceapi
@@ -357,7 +373,7 @@ export function FaceLivenessCheck({ onVerified, onSkip }: FaceLivenessCheckProps
             yaw: deltaYaw.toFixed(2),
             pitch: deltaPitch.toFixed(2),
             threshold: movementThreshold,
-            downThreshold: (movementThreshold * 0.8).toFixed(2)
+            downThreshold: movementThreshold.toFixed(2)
           })
         }
         
@@ -378,7 +394,7 @@ export function FaceLivenessCheck({ onVerified, onSkip }: FaceLivenessCheckProps
           completedMovementsRef.current.add('up')
           setCompletedMovements(prev => [...prev, 'up'])
           setCurrentInstruction('Almost done! Now tilt your head DOWN')
-        } else if (!completedMovementsRef.current.has('down') && deltaPitch > (movementThreshold * 0.8)) {
+        } else if (!completedMovementsRef.current.has('down') && deltaPitch > movementThreshold) {
           console.log('[FaceLiveness] ✅ DOWN movement detected (deltaPitch:', deltaPitch.toFixed(2), ')')
           completedMovementsRef.current.add('down')
           setCompletedMovements(prev => [...prev, 'down'])
@@ -555,12 +571,12 @@ export function FaceLivenessCheck({ onVerified, onSkip }: FaceLivenessCheckProps
                       id="face-liveness-display"
                       className="w-full h-full object-cover"
                       style={{ 
-                        objectPosition: '100% 55%',  // 62% from left (shifted right), 55% from top
-                        transform: 'scale(-1.5, 1.5)'   // Flip + zoom to 150% for closer view
+                        transform: 'scaleX(-1)'  // Mirror horizontally
                       }}
                       autoPlay
                       muted
                       playsInline
+                      webkit-playsinline="true"
                     />
                     
                     {/* Face Detection Indicator */}
