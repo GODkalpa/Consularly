@@ -39,6 +39,8 @@ export interface UserProfile {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   isActive: boolean;
+  passwordSet?: boolean; // Track if user has set their password (for admin-created users)
+  welcomeEmailSent?: boolean; // Track if welcome email has been sent
   quotaLimit?: number; // Individual user quota limit (for signup users)
   quotaUsed?: number; // Individual user quota used (for signup users)
   studentProfile?: StudentProfileInfo; // Pre-interview profile information

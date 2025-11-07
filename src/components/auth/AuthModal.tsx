@@ -4,8 +4,6 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { X, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -71,10 +69,23 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
         return;
       }
       setLoading(true);
-      await sendPasswordResetEmail(auth, email);
-      setMessage('If this email is registered, a password reset link has been sent.');
+      
+      // Call our custom branded password reset API
+      const response = await fetch('/api/auth/password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setMessage(data.message || 'If this email is registered, a password reset link has been sent to your inbox.');
+      } else {
+        setError(data.error || 'Failed to send password reset email');
+      }
     } catch (error: any) {
-      setError(error?.message || 'Failed to send password reset email');
+      setError('Failed to send password reset email. Please try again.');
     } finally {
       setLoading(false);
     }

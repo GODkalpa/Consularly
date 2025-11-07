@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin'
-import { sendOrgWelcomeEmail, sendAccountCreationEmail } from '@/lib/email/send-helpers'
+import { sendOrgWelcomeEmail, sendPasswordResetEmail } from '@/lib/email/send-helpers'
 
 // POST /api/admin/organizations
 // Creates a new organization document in Firestore. Admin-only.
@@ -134,6 +134,8 @@ export async function POST(req: NextRequest) {
             orgId: ref.id,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
+            passwordSet: false, // Track if user has set password
+            welcomeEmailSent: false, // Track if welcome email has been sent
           })
           
           // Generate password reset link
@@ -141,18 +143,22 @@ export async function POST(req: NextRequest) {
           userCreated = true
           console.log('[api/admin/organizations] Created new user for org:', orgEmail)
           
-          // Send account creation email with password reset link
+          // Send password reset email (NOT account creation email)
           try {
-            await sendAccountCreationEmail({
+            await sendPasswordResetEmail({
               to: orgEmail,
               displayName: orgContactPerson,
               resetLink,
-              role: 'Organization Admin',
               orgName: name,
+              orgBranding: {
+                logoUrl: body?.settings?.customBranding?.logoUrl,
+                primaryColor: body?.settings?.customBranding?.primaryColor || '#4840A3',
+                companyName: name,
+              },
             })
-            console.log('[api/admin/organizations] Account creation email sent to:', orgEmail)
+            console.log('[api/admin/organizations] Password reset email sent to:', orgEmail)
           } catch (e: any) {
-            console.warn('[api/admin/organizations] Account creation email failed:', e.message)
+            console.warn('[api/admin/organizations] Password reset email failed:', e.message)
           }
         }
       } catch (e: any) {
@@ -161,32 +167,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Send organization welcome email to the org email (not the creating admin)
-    let emailError: string | null = null
-    const orgEmail = body.email ? String(body.email).trim() : null
-    const orgContactPerson = body.contactPerson ? String(body.contactPerson).trim() : 'Administrator'
-    
-    if (orgEmail) {
-      try {
-        await sendOrgWelcomeEmail({
-          to: orgEmail,
-          adminName: orgContactPerson,
-          orgName: name,
-          orgId: ref.id,
-          plan,
-          quotaLimit,
-        })
-        console.log('[api/admin/organizations] Welcome email sent to:', orgEmail)
-      } catch (e: any) {
-        emailError = e?.message || 'Email service error'
-        console.error('[api/admin/organizations] Org welcome email failed:', e)
-      }
-    }
+    // NOTE: Organization welcome email is NOT sent here anymore
+    // It will be sent automatically when the user sets their password and logs in for the first time
+    // This provides a better user experience: password setup → welcome email
 
     return NextResponse.json({ 
       id: ref.id,
-      emailSent: !emailError && !!orgEmail,
-      emailError: emailError || undefined,
       userCreated,
       resetLink: userCreated ? resetLink : undefined,
     }, { status: 201 })

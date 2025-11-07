@@ -9,6 +9,7 @@ import { generateAccountCreationEmail } from './templates/account-creation';
 import { generateOrgWelcomeEmail } from './templates/org-welcome';
 import { generateInterviewResultsEmail } from './templates/interview-results';
 import { generateQuotaAlertEmail } from './templates/quota-alert';
+import { generatePasswordResetEmail } from './templates/password-reset';
 import type { OrganizationBranding } from './index';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -59,6 +60,34 @@ export async function sendAccountCreationEmail(params: {
     role: params.role,
     orgName: params.orgName,
     dashboardLink,
+  });
+
+  return await emailService.sendEmail({
+    to: params.to,
+    subject,
+    html,
+    text,
+  });
+}
+
+/**
+ * Send password reset email with custom branding
+ */
+export async function sendPasswordResetEmail(params: {
+  to: string;
+  displayName?: string;
+  resetLink: string;
+  orgName?: string;
+  orgBranding?: OrganizationBranding;
+}) {
+  const emailService = getEmailService();
+  
+  const { subject, html, text } = generatePasswordResetEmail({
+    displayName: params.displayName,
+    email: params.to,
+    resetLink: params.resetLink,
+    orgName: params.orgName,
+    orgBranding: params.orgBranding,
   });
 
   return await emailService.sendEmail({

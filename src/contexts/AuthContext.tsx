@@ -83,6 +83,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const isAdminUser = latest?.role === 'admin';
               setIsAdmin(isAdminUser);
 
+              // Send welcome email on first login (after password is set)
+              // Only for org users who haven't received the welcome email yet
+              if (latest && latest.orgId && !latest.welcomeEmailSent) {
+                console.log('[AuthContext] First login detected, sending welcome email');
+                
+                // Send welcome email asynchronously (non-blocking)
+                user.getIdToken().then((token) => {
+                  fetch('/api/auth/send-welcome', {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${token}`,
+                      'Content-Type': 'application/json',
+                    },
+                  })
+                    .then((res) => res.json())
+                    .then((data) => {
+                      if (data.success) {
+                        console.log('[AuthContext] Welcome email sent successfully');
+                      } else {
+                        console.warn('[AuthContext] Welcome email failed:', data.error);
+                      }
+                    })
+                    .catch((err) => {
+                      console.error('[AuthContext] Welcome email request failed:', err);
+                    });
+                }).catch((err) => {
+                  console.error('[AuthContext] Failed to get auth token:', err);
+                });
+              }
+
               // Auto-redirect to profile setup if profile incomplete
               // Skip for: admins (role=admin) and org members (users with orgId)
               const needsProfileSetup = latest && 

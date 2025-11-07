@@ -68,6 +68,8 @@ export async function POST(req: NextRequest) {
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       isActive: true,
+      passwordSet: false, // Track if user has set password
+      welcomeEmailSent: false, // Track if welcome email has been sent
     })
 
     // Generate password reset link

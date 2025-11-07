@@ -42,6 +42,8 @@ export interface UserProfile {
   role: 'user' | 'admin';
   createdAt: string;
   lastLoginAt: string;
+  passwordSet?: boolean; // Track if user has set their password (for admin-created users)
+  welcomeEmailSent?: boolean; // Track if welcome email has been sent
   interviewCountry?: 'usa' | 'uk' | 'france'; // Selected country for interview (for individual users)
   preferences?: {
     notifications: boolean;
