@@ -299,7 +299,7 @@ export default function InterviewRunner() {
         phaseRef.current = 'answer'
         setPhase('answer')
         timerStartTimeRef.current = performance.now()
-        timerDurationRef.current = 30
+        timerDurationRef.current = 90
         setResetKey((k) => k + 1)
         answerBufferRef.current = ''
         setCurrentTranscript('')
@@ -364,7 +364,9 @@ export default function InterviewRunner() {
       }
     } catch {}
     if (session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') {
-      startPhase('prep', 30)
+      // UK: 15s prep, France: 30s prep
+      const prepDuration = session.route === 'uk_student' ? 15 : 30
+      startPhase('prep', prepDuration)
     } else if (session.route === 'usa_f1') {
       // USA F1: 40s soft cap per question with 30s warning
       startUSF1QuestionTimer()
@@ -397,7 +399,7 @@ export default function InterviewRunner() {
     setResetKey((k) => k + 1)
     answerBufferRef.current = ''
     setCurrentTranscript('')
-    startPhase('answer', 30)
+    startPhase('answer', 90)
   }, [session?.route, startPhase])
 
   // Define computeFinalReport first to avoid circular dependency
@@ -687,9 +689,10 @@ export default function InterviewRunner() {
       // Clear language detection buffer for next answer
       languageDataRef.current = []
       
-      // UK/France flow: new question => 30s prep again
+      // UK/France flow: new question => prep phase (UK: 15s, France: 30s)
       if (session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') {
-        startPhase('prep', 30)
+        const prepDuration = session.route === 'uk_student' ? 15 : 30
+        startPhase('prep', prepDuration)
       } else if (session.route === 'usa_f1') {
         // USA F1: restart 40s timer for next question
         startUSF1QuestionTimer()

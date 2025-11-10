@@ -192,7 +192,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       if (phase === 'prep') {
         setPhase('answer')
         timerStartTimeRef.current = performance.now()
-        timerDurationRef.current = 30
+        timerDurationRef.current = 90
         setResetKey((k) => k + 1)
         answerBufferRef.current = ''
         setCurrentTranscript('')
@@ -222,20 +222,20 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
     timerRafRef.current = requestAnimationFrame(updateTimer)
   }, [updateTimer, clearPhaseTimers])
 
-  // UK: allow early start of answer during prep
+  // UK/France: allow early start of answer during prep
   const startAnswerNow = () => {
-    if (route !== 'uk_student') return
+    if (route !== 'uk_student' && route !== 'france_ema' && route !== 'france_icn') return
     clearPhaseTimers()
     setPhase('answer')
-    setSecondsRemaining(30)
+    setSecondsRemaining(90)
     setResetKey((k) => k + 1)
     answerBufferRef.current = ''
     setCurrentTranscript('')
-    startPhase('answer', 30)
+    startPhase('answer', 90)
   }
 
   const armTimers = () => {
-    if (route === 'uk_student') return // UK uses phase timers instead
+    if (route === 'uk_student' || route === 'france_ema' || route === 'france_icn') return // UK/France use phase timers instead
     clearTimers()
     questionTimerRef.current = window.setTimeout(() => {
       if (processingRef.current) return
@@ -548,9 +548,10 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
         })
       }
     } catch {}
-    if (route === 'uk_student') {
-      // Start with 30s preparation time (mic off), then 30s answer window
-      startPhase('prep', 30)
+    if (route === 'uk_student' || route === 'france_ema' || route === 'france_icn') {
+      // UK: 15s prep, France: 30s prep
+      const prepDuration = route === 'uk_student' ? 15 : 30
+      startPhase('prep', prepDuration)
     } else {
       setTimeout(() => armTimers(), 0)
     }
@@ -636,8 +637,10 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
               setCurrentLLMQuestion(nextQ)
               const uiQ: InterviewQuestion = { question: nextQ.question, category: mapQuestionTypeToCategory(route, nextQ.questionType) }
               setSession((prev) => (prev ? { ...prev, questions: [...prev.questions, uiQ], currentQuestionIndex: prev.currentQuestionIndex + 1 } : prev))
-              if (route === 'uk_student') {
-                startPhase('prep', 30)
+              if (route === 'uk_student' || route === 'france_ema' || route === 'france_icn') {
+                // UK: 15s prep, France: 30s prep
+                const prepDuration = route === 'uk_student' ? 15 : 30
+                startPhase('prep', prepDuration)
               }
             }
           }
@@ -717,7 +720,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
       setIsAnalyzing(false)
       setResetKey((k) => k + 1)
       processingRef.current = false
-      if (route !== 'uk_student') {
+      if (route !== 'uk_student' && route !== 'france_ema' && route !== 'france_icn') {
         setTimeout(() => { if (session && session.status === 'active') armTimers() }, 0)
       }
     }
@@ -728,7 +731,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
     const transcriptText = transcript.text.trim()
     if (transcriptText.length < 1) return
     if (session.currentQuestionIndex === lastAnsweredIndex) return
-    if (route === 'uk_student') {
+    if (route === 'uk_student' || route === 'france_ema' || route === 'france_icn') {
       // Do not finalize early; accumulate only during the answer window
       if (phase !== 'answer') return
       answerBufferRef.current = answerBufferRef.current ? `${answerBufferRef.current} ${transcriptText}` : transcriptText
@@ -1107,16 +1110,16 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
               questionText={currentQuestion.question}
               currentTranscript={currentTranscript}
               onScore={setBodyScore}
-              onNext={session.status === 'active' && route !== 'uk_student' ? () => {/* skip handled by timers */} : undefined}
+              onNext={session.status === 'active' && route !== 'uk_student' && route !== 'france_ema' && route !== 'france_icn' ? () => {/* skip handled by timers */} : undefined}
               startedAt={session.startTime}
               statusBadge={session.status === 'active' ? 'Live' : session.status === 'paused' ? 'Paused' : 'Completed'}
               candidateName={session.studentName}
               questionIndex={session.currentQuestionIndex}
-              questionTotal={route === 'uk_student' ? 16 : session.questions.length}
+              questionTotal={route === 'uk_student' || route === 'france_ema' || route === 'france_icn' ? 16 : session.questions.length}
               phase={phase ?? undefined}
               secondsRemaining={phase ? secondsRemaining : undefined}
-              onStartAnswer={route === 'uk_student' ? startAnswerNow : undefined}
-              onStopAndNext={route === 'uk_student' ? finalizeAnswer : undefined}
+              onStartAnswer={route === 'uk_student' || route === 'france_ema' || route === 'france_icn' ? startAnswerNow : undefined}
+              onStopAndNext={route === 'uk_student' || route === 'france_ema' || route === 'france_icn' ? finalizeAnswer : undefined}
             />
           )}
 
@@ -1130,7 +1133,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
                 window.clearTimeout(transcriptDebounceRef.current)
               }
               transcriptDebounceRef.current = window.setTimeout(() => {
-                if (route === 'uk_student') {
+                if (route === 'uk_student' || route === 'france_ema' || route === 'france_icn') {
                   if (phase !== 'answer') return
                   const combined = answerBufferRef.current ? `${answerBufferRef.current} ${t}` : t
                   setCurrentTranscript(combined)
@@ -1142,7 +1145,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
             }}
             showControls={false}
             showTranscripts={false}
-            running={session.status === 'active' && (route !== 'uk_student' || phase === 'answer')}
+            running={session.status === 'active' && ((route !== 'uk_student' && route !== 'france_ema' && route !== 'france_icn') || phase === 'answer')}
             resetKey={resetKey}
           />
           </div>

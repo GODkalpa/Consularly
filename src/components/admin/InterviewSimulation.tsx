@@ -173,7 +173,7 @@ export function InterviewSimulation() {
       if (phase === 'prep') {
         setPhase('answer');
         timerStartTimeRef.current = performance.now();
-        timerDurationRef.current = 30;
+        timerDurationRef.current = 90;
         setResetKey((k) => k + 1);
         answerBufferRef.current = '';
         setCurrentTranscript('');
@@ -203,20 +203,20 @@ export function InterviewSimulation() {
     timerRafRef.current = requestAnimationFrame(updateTimer);
   }, [updateTimer]);
 
-  // UK: allow user to start the answer window early by clicking Start during prep
+  // UK/France: allow user to start the answer window early by clicking Start during prep
   const startAnswerNow = () => {
-    if (route !== 'uk_student') return;
+    if (route !== 'uk_student' && route !== 'france_ema' && route !== 'france_icn') return;
     clearPhaseTimers();
     setPhase('answer');
-    setSecondsRemaining(30);
+    setSecondsRemaining(90);
     setResetKey((k) => k + 1);
     answerBufferRef.current = '';
     setCurrentTranscript('');
-    startPhase('answer', 30);
+    startPhase('answer', 90);
   };
 
   const armTimers = () => {
-    if (route === 'uk_student') return; // UK uses phase timers
+    if (route === 'uk_student' || route === 'france_ema' || route === 'france_icn') return; // UK/France use phase timers
     clearTimers();
     // Max 15s per question
     questionTimerRef.current = window.setTimeout(() => {
@@ -676,8 +676,10 @@ export function InterviewSimulation() {
               questions: [...prev.questions, uiQ],
               currentQuestionIndex: prev.currentQuestionIndex + 1
             } : prev);
-            if (route === 'uk_student') {
-              startPhase('prep', 30);
+            if (route === 'uk_student' || route === 'france_ema' || route === 'france_icn') {
+              // UK: 15s prep, France: 30s prep
+              const prepDuration = route === 'uk_student' ? 15 : 30;
+              startPhase('prep', prepDuration);
             }
           }
         } else {
@@ -690,8 +692,8 @@ export function InterviewSimulation() {
       setIsAnalyzing(false);
       setResetKey((k) => k + 1);
       processingRef.current = false;
-      // Arm timers for the next question (if any) unless UK uses phase timers
-      if (route !== 'uk_student') {
+      // Arm timers for the next question (if any) unless UK/France use phase timers
+      if (route !== 'uk_student' && route !== 'france_ema' && route !== 'france_icn') {
         setTimeout(() => {
           if (session && session.status === 'active') armTimers();
         }, 0);
@@ -705,7 +707,7 @@ export function InterviewSimulation() {
     const transcriptText = transcript.text.trim();
     if (transcriptText.length < 1) return;
     if (session.currentQuestionIndex === lastAnsweredIndex) return;
-    if (route === 'uk_student') {
+    if (route === 'uk_student' || route === 'france_ema' || route === 'france_icn') {
       // Do not finalize early; accumulate during answer window only.
       if (phase !== 'answer') return;
       answerBufferRef.current = answerBufferRef.current ? `${answerBufferRef.current} ${transcriptText}` : transcriptText;
@@ -769,8 +771,10 @@ export function InterviewSimulation() {
     if (!session) return;
     setSession(prev => prev ? { ...prev, status: 'active', startTime: new Date() } : prev);
     // Arm timers for the first question after state update
-    if (route === 'uk_student') {
-      startPhase('prep', 30);
+    if (route === 'uk_student' || route === 'france_ema' || route === 'france_icn') {
+      // UK: 15s prep, France: 30s prep
+      const prepDuration = route === 'uk_student' ? 15 : 30;
+      startPhase('prep', prepDuration);
     } else {
       setTimeout(() => { armTimers(); }, 0);
     }
@@ -1074,16 +1078,16 @@ export function InterviewSimulation() {
               questionText={currentQuestion.question}
               currentTranscript={currentTranscript}
               onScore={handleBodyScoreUpdate}
-              onNext={session.status === 'active' && route !== 'uk_student' ? nextQuestion : undefined}
+              onNext={session.status === 'active' && route !== 'uk_student' && route !== 'france_ema' && route !== 'france_icn' ? nextQuestion : undefined}
               startedAt={session.startTime}
               statusBadge={session.status === 'active' ? 'Live' : session.status === 'paused' ? 'Paused' : 'Completed'}
               candidateName={session.studentName}
               questionIndex={session.currentQuestionIndex}
-              questionTotal={route === 'uk_student' ? 16 : session.questions.length}
+              questionTotal={route === 'uk_student' || route === 'france_ema' || route === 'france_icn' ? 16 : session.questions.length}
               phase={phase ?? undefined}
               secondsRemaining={phase ? secondsRemaining : undefined}
-              onStartAnswer={route === 'uk_student' ? startAnswerNow : undefined}
-              onStopAndNext={route === 'uk_student' ? finalizeAnswer : undefined}
+              onStartAnswer={route === 'uk_student' || route === 'france_ema' || route === 'france_icn' ? startAnswerNow : undefined}
+              onStopAndNext={route === 'uk_student' || route === 'france_ema' || route === 'france_icn' ? finalizeAnswer : undefined}
             />
           )}
 
@@ -1144,7 +1148,7 @@ export function InterviewSimulation() {
             <AssemblyAITranscription
             onTranscriptComplete={handleTranscriptComplete}
             onTranscriptUpdate={(t) => {
-                if (route === 'uk_student') {
+                if (route === 'uk_student' || route === 'france_ema' || route === 'france_icn') {
                   if (phase !== 'answer') return;
                   const combined = answerBufferRef.current ? `${answerBufferRef.current} ${t}` : t;
                   handleTranscriptUpdate(combined);
@@ -1154,7 +1158,7 @@ export function InterviewSimulation() {
               }}
             showControls={false}
             showTranscripts={false}
-            running={session.status === 'active' && (route !== 'uk_student' || phase === 'answer')}
+            running={session.status === 'active' && ((route !== 'uk_student' && route !== 'france_ema' && route !== 'france_icn') || phase === 'answer')}
             resetKey={resetKey}
           />
           </div>
