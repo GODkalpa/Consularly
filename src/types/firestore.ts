@@ -132,6 +132,10 @@ export interface Interview {
   duration: number; // minutes
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  // Scheduling-related fields
+  scheduledTime?: Timestamp;    // When interview is scheduled (if pre-scheduled)
+  actualStartTime?: Timestamp;  // When actually started (can differ from scheduledTime)
+  slotId?: string;             // Reference to InterviewSlot (if booked via scheduling)
   // Enhanced reporting fields
   finalReport?: FinalReport;
   perAnswerScores?: PerAnswerScore[];
@@ -234,6 +238,15 @@ export interface OrganizationSettings {
     weeklyDigest: boolean;
     quotaWarnings: boolean;
   };
+  scheduling?: {
+    enabled: boolean;
+    defaultTimezone: string;          // IANA (e.g., "America/New_York")
+    defaultSlotDuration: number;      // minutes (default 30)
+    enableReminders: boolean;
+    reminderHours: number[];          // [24, 1] = 24h and 1h before
+    allowStudentReschedule: boolean;
+    maxReschedules: number;           // per student (default 2)
+  };
 }
 
 // Organization Interface
@@ -270,6 +283,71 @@ export interface AuditLog {
   timestamp: Timestamp;
   ipAddress?: string;
   userAgent?: string;
+}
+
+// Interview Scheduling Interfaces
+export interface InterviewSlot {
+  orgId: string;
+  startTime: Timestamp;
+  endTime: Timestamp;
+  studentId?: string;           // Assigned student (null = available)
+  studentName?: string;
+  studentEmail?: string;
+  interviewRoute?: string;      // 'usa_f1' | 'uk_student' | 'france_ema' | 'france_icn'
+  status: 'available' | 'booked' | 'completed' | 'cancelled' | 'no_show';
+  bookedBy?: string;            // User ID who created the booking
+  bookedAt?: Timestamp;
+  notes?: string;
+  timezone: string;             // IANA timezone
+  remindersSent?: {
+    confirmation: boolean;
+    reminder24h: boolean;
+    reminder1h: boolean;
+  };
+  interviewId?: string;         // Reference to Interview document (once conducted)
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface BookingLink {
+  orgId: string;
+  name: string;                 // "Weekly UK Interviews"
+  slug: string;                 // "weekly-uk-interviews" (for URL)
+  description?: string;
+  isActive: boolean;
+  route?: string;               // Optional filter for specific route
+  settings: {
+    slotDuration: number;       // minutes (default 30)
+    bufferBefore: number;       // minutes (default 0)
+    bufferAfter: number;        // minutes (default 5)
+    maxAdvanceDays: number;     // How far ahead can book (default 30)
+    minAdvanceHours: number;    // Minimum notice (default 24)
+    timezone: string;           // IANA timezone (default org timezone)
+    requireApproval: boolean;   // Require org approval before confirming
+  };
+  availability: {
+    monday?: { start: string; end: string }[];    // [{ start: "09:00", end: "17:00" }]
+    tuesday?: { start: string; end: string }[];
+    wednesday?: { start: string; end: string }[];
+    thursday?: { start: string; end: string }[];
+    friday?: { start: string; end: string }[];
+    saturday?: { start: string; end: string }[];
+    sunday?: { start: string; end: string }[];
+  };
+  bookingCount?: number;        // Track total bookings through this link
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface ReminderLog {
+  interviewSlotId: string;
+  orgId: string;
+  studentEmail: string;
+  type: 'confirmation' | 'reminder_24h' | 'reminder_1h' | 'cancellation' | 'reschedule';
+  status: 'sent' | 'failed';
+  sentAt: Timestamp;
+  error?: string;
+  emailProvider: 'brevo';       // Track which provider was used
 }
 
 // Legacy interfaces for backward compatibility
@@ -321,6 +399,18 @@ export interface SystemSettingWithId extends SystemSetting {
 }
 
 export interface AuditLogWithId extends AuditLog {
+  id: string; // document ID
+}
+
+export interface InterviewSlotWithId extends InterviewSlot {
+  id: string; // document ID
+}
+
+export interface BookingLinkWithId extends BookingLink {
+  id: string; // document ID
+}
+
+export interface ReminderLogWithId extends ReminderLog {
   id: string; // document ID
 }
 

@@ -105,15 +105,15 @@
     --chart-4: 195 66% 60%; /* cyan medium */
     --chart-5: 258 44% 62%; /* violet lighter */
 
-    /* Sidebar */
-    --sidebar-background: 245 44% 45%;
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 245 44% 45%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 42 92% 70%;
-    --sidebar-accent-foreground: 220 10% 6%;
-    --sidebar-border: 245 44% 80%;
-    --sidebar-ring: 245 44% 45%;
+    /* Sidebar - Light Theme to Match Dashboard */
+    --sidebar-background: 76 39% 98%; /* Same as main background */
+    --sidebar-foreground: 0 0% 0%; /* Black text */
+    --sidebar-primary: 245 44% 45%; /* Primary color for active items */
+    --sidebar-primary-foreground: 0 0% 100%; /* White text on primary */
+    --sidebar-accent: 196 66% 96%; /* Muted hover background */
+    --sidebar-accent-foreground: 0 0% 0%; /* Black text */
+    --sidebar-border: 196 66% 91%; /* Light border */
+    --sidebar-ring: 245 44% 45%; /* Primary focus ring */
 
     --radius: 0.5rem;
 
@@ -241,6 +241,36 @@
     animation: marquee 30s linear infinite;
     display: inline-block;
   }
+  
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
+  }
+
+  /* Color utilities for dashboard */
+  .bg-primary-100 {
+    background-color: hsl(var(--primary-100));
+  }
+  .text-primary {
+    color: hsl(var(--primary));
+  }
+  .bg-accent-200 {
+    background-color: hsl(var(--accent-200));
+  }
+  .text-accent-foreground {
+    color: hsl(var(--accent-foreground));
+  }
+  .bg-primary {
+    background-color: hsl(var(--primary));
+  }
+  .bg-accent {
+    background-color: hsl(var(--accent));
+  }
+  .stroke-primary {
+    stroke: hsl(var(--primary));
+  }
+  .stroke-accent {
+    stroke: hsl(var(--accent));
+  }
 
   /* Typography utilities aligned to Mockin-style display scale */
   .text-balance { text-wrap: balance; }
@@ -356,6 +386,15 @@
   }
 }
 
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
 /* Hide scrollbar for mobile horizontal scroll */
 @layer utilities {
   .scrollbar-hide {
@@ -365,4 +404,102 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;  /* Chrome, Safari and Opera */
   }
+}
+
+/* React Big Calendar Styles */
+.rbc-calendar {
+  font-family: inherit;
+}
+
+.rbc-header {
+  padding: 10px 3px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: hsl(var(--foreground));
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.rbc-month-view, .rbc-time-view, .rbc-agenda-view {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.rbc-event {
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 0.875rem;
+}
+
+.rbc-today {
+  background-color: hsl(var(--accent) / 0.1);
+}
+
+.rbc-toolbar {
+  padding: 10px 0;
+  margin-bottom: 10px;
+}
+
+.rbc-toolbar button {
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.rbc-toolbar button:hover {
+  background-color: hsl(var(--accent) / 0.1);
+}
+
+.rbc-toolbar button.rbc-active {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: hsl(var(--primary));
+}
+
+.rbc-slot-selection {
+  background-color: hsl(var(--primary) / 0.2);
+}
+
+/* Calendar date cell hover effects */
+.rbc-day-bg {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.rbc-day-bg:hover {
+  background-color: hsl(var(--accent) / 0.15);
+}
+
+.rbc-off-range-bg {
+  cursor: default;
+}
+
+.rbc-off-range-bg:hover {
+  background-color: transparent;
+}
+
+/* Date number styling */
+.rbc-date-cell {
+  padding: 4px;
+}
+
+.rbc-date-cell a {
+  transition: all 0.2s ease;
+}
+
+.rbc-date-cell:hover a {
+  color: hsl(var(--primary));
+  font-weight: 600;
+}
+
+/* Event hover */
+.rbc-event:hover {
+  opacity: 0.85;
+  cursor: pointer;
+  transform: scale(1.02);
+  transition: all 0.15s ease;
 }

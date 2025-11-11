@@ -8,6 +8,7 @@ export const runtime = 'nodejs'
 // Returns the caller's organization document (sanitized) based on their user profile orgId
 export async function GET(req: NextRequest) {
   try {
+    const startTime = Date.now();
     await ensureFirebaseAdmin()
 
     const authHeader = req.headers.get('authorization') || ''
@@ -30,6 +31,9 @@ export async function GET(req: NextRequest) {
     if (!orgSnap.exists) return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
 
     const data = orgSnap.data() || {}
+    
+    const queryTime = Date.now() - startTime;
+    console.log(`[Organization API] ✅ Fetched in ${queryTime}ms for org: ${orgId}`);
 
     // Sanitize fields: expose only what the org dashboard needs
     const organization = {

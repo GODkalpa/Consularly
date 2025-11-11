@@ -1,6 +1,6 @@
 import { getApps, initializeApp, cert, applicationDefault, App, getApp, deleteApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
-import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import fs from 'fs'
 import path from 'path'
 
@@ -104,4 +104,4 @@ if (typeof window === 'undefined') {
 
 export const adminAuth = () => getAuth()
 export const adminDb = () => getFirestore()
-export { FieldValue }
+export { FieldValue, Timestamp }

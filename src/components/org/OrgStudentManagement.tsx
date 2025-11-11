@@ -283,37 +283,53 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
 
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-semibold tracking-tight">Students</h1>
+        <p className="text-muted-foreground mt-1">Manage student records and simulation access</p>
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <p className="text-sm text-muted-foreground">Total Students</p>
+        <Card className="bg-white">
+          <CardContent className="p-6">
+            <p className="text-sm text-muted-foreground mb-1">Total Students</p>
+            <div className="text-4xl font-bold">{stats.total.toLocaleString()}</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold">{stats.completed}</div>
-            <p className="text-sm text-muted-foreground">Completed Interviews</p>
+        <Card className="bg-white">
+          <CardContent className="p-6">
+            <p className="text-sm text-muted-foreground mb-1">Completed Interviews</p>
+            <div className="text-4xl font-bold">{stats.completed}</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold flex items-center gap-2"><GraduationCap className="h-5 w-5" /> Org Student Records</div>
-            <p className="text-sm text-muted-foreground">Database-only students (no user accounts)</p>
+        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-2 bg-primary rounded-lg">
+                <GraduationCap className="h-5 w-5 text-white" />
+              </div>
+              <p className="text-sm font-medium text-primary">Org Student Records</p>
+            </div>
+            <p className="text-xs text-primary/70">Database-only students (no user accounts)</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Search and Actions */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search students by name or email" className="pl-8" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)} 
+            placeholder="Search students by name or email" 
+            className="pl-9 h-10" 
+          />
         </div>
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="bg-primary hover:bg-primary/90 h-10 px-4 text-white">
               <Plus className="h-4 w-4 mr-2" /> Add Student
             </Button>
           </DialogTrigger>
@@ -528,21 +544,17 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
       </div>
 
       {/* Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Students</CardTitle>
-          <CardDescription>These students are defined by your organization for analysis. They do not have platform accounts.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
+      <Card className="bg-white">
+        <CardContent className="p-0">
+          <div className="rounded-lg border">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Completed</TableHead>
-                  <TableHead>Last Active</TableHead>
-                  <TableHead>Actions</TableHead>
+                <TableRow className="bg-gray-50 hover:bg-gray-50">
+                  <TableHead className="font-semibold text-xs uppercase text-gray-600">Student</TableHead>
+                  <TableHead className="font-semibold text-xs uppercase text-gray-600">Email</TableHead>
+                  <TableHead className="font-semibold text-xs uppercase text-gray-600">Completed</TableHead>
+                  <TableHead className="font-semibold text-xs uppercase text-gray-600">Last Active</TableHead>
+                  <TableHead className="font-semibold text-xs uppercase text-gray-600">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -561,21 +573,21 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{s.email || '-'}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{s.interviewsCompleted ?? 0}</Badge>
+                      <Badge variant="secondary" className="rounded-full px-3">{s.interviewsCompleted ?? 0}</Badge>
                     </TableCell>
                     <TableCell>{s.lastActive ? new Date(s.lastActive).toLocaleDateString() : '-'}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" onClick={() => openViewDialog(s)}>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openViewDialog(s)}>
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => openEditDialog(s)}>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEditDialog(s)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => handleDeleteStudent(s)} disabled={deleting}>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => handleDeleteStudent(s)} disabled={deleting}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" onClick={() => onStartInterview?.(s.id, s.name)}>
+                        <Button size="sm" className="bg-primary hover:bg-primary/90 ml-2 text-white" onClick={() => onStartInterview?.(s.id, s.name)}>
                           <Play className="h-4 w-4 mr-1.5" />
                           Start Interview
                         </Button>

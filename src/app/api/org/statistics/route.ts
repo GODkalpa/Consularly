@@ -36,8 +36,19 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Fetch statistics in parallel - optimized queries
-    const [studentsSnapshot, totalInterviewsSnapshot, recentInterviewsSnapshot, orgUsersSnapshot] = await Promise.all([
+    const startTime = Date.now();
+
+    // Extract unique student IDs BEFORE fetching - we'll fetch them in parallel
+    // NOTE: We'll do this after getting recent interviews
+    
+    // Fetch ALL statistics in parallel - fully optimized queries
+    const [
+      studentsSnapshot, 
+      totalInterviewsSnapshot, 
+      recentInterviewsSnapshot, 
+      orgUsersSnapshot,
+      scoredInterviewsSnapshot // MOVED: Include scored interviews in the main Promise.all
+    ] = await Promise.all([
       // Total students
       adminDb()
         .collection('orgStudents')
@@ -66,24 +77,28 @@ export async function GET(req: NextRequest) {
         .where('orgId', '==', orgId)
         .count()
         .get(),
+      
+      // OPTIMIZED: Fetch scored interviews in parallel with other queries
+      adminDb()
+        .collection('interviews')
+        .where('orgId', '==', orgId)
+        .where('finalScore', '>=', 0)
+        .limit(50)
+        .get(),
     ]);
 
-    // Count students
+    const queryTime = Date.now() - startTime;
+    console.log(`[Statistics API] Main queries completed in ${queryTime}ms`);
+
+    // Count students and interviews
     const totalStudents = studentsSnapshot.data().count;
     const totalInterviews = totalInterviewsSnapshot.data().count;
+    const activeUsers = orgUsersSnapshot.data().count;
 
-    // Process only recent interviews for display
+    // Process recent interviews for display
     const recentInterviewDocs = recentInterviewsSnapshot.docs;
 
-    // Calculate average score efficiently from recent interviews + a sample query
-    // For better accuracy, fetch scored interviews separately with limit
-    const scoredInterviewsSnapshot = await adminDb()
-      .collection('interviews')
-      .where('orgId', '==', orgId)
-      .where('finalScore', '>=', 0)
-      .limit(50)
-      .get();
-    
+    // Calculate average score
     let avgScore = 0;
     if (!scoredInterviewsSnapshot.empty) {
       const totalScore = scoredInterviewsSnapshot.docs.reduce((sum, doc) => {
@@ -99,25 +114,39 @@ export async function GET(req: NextRequest) {
         .filter((id): id is string => !!id)
     )];
     
-    // Batch fetch all students efficiently - Firestore allows up to 10 in one query using 'in'
+    // OPTIMIZED: Batch fetch all students in PARALLEL, not sequential
     const studentNameMap = new Map<string, string>();
     
     if (studentIds.length > 0) {
-      // Split into chunks of 10 (Firestore 'in' query limit)
+      const studentFetchStart = Date.now();
+      // Split into chunks of 10 (Firestore 'in' query limit) and fetch in parallel
       const chunkSize = 10;
+      const chunks: string[][] = [];
       for (let i = 0; i < studentIds.length; i += chunkSize) {
-        const chunk = studentIds.slice(i, i + chunkSize);
-        const studentsSnapshot = await adminDb()
-          .collection('orgStudents')
-          .where('__name__', 'in', chunk)
-          .get();
-        
-        studentsSnapshot.forEach(doc => {
+        chunks.push(studentIds.slice(i, i + chunkSize));
+      }
+      
+      // FIXED: Run all student queries in PARALLEL with Promise.all
+      const studentSnapshots = await Promise.all(
+        chunks.map(chunk => 
+          adminDb()
+            .collection('orgStudents')
+            .where('__name__', 'in', chunk)
+            .get()
+        )
+      );
+      
+      // Populate the name map
+      studentSnapshots.forEach(snapshot => {
+        snapshot.forEach(doc => {
           const data = doc.data();
           const name = data?.name || data?.fullName || 'Unknown';
           studentNameMap.set(doc.id, name);
         });
-      }
+      });
+      
+      const studentFetchTime = Date.now() - studentFetchStart;
+      console.log(`[Statistics API] Student names fetched in ${studentFetchTime}ms (${studentIds.length} students)`);
     }
     
     // Map interviews with student names
@@ -135,8 +164,9 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Active users count
-    const activeUsers = orgUsersSnapshot.data().count;
+    const totalTime = Date.now() - startTime;
+    console.log(`[Statistics API] ✅ Total request completed in ${totalTime}ms`);
+    console.log(`[Statistics API] 📊 Stats: ${totalStudents} students, ${totalInterviews} interviews, ${activeUsers} users`);
 
     const response = NextResponse.json({
       success: true,
@@ -149,7 +179,7 @@ export async function GET(req: NextRequest) {
       },
     });
     
-    // Add caching headers - cache for 30 seconds, allow stale data for 60s while revalidating
+    // Add aggressive caching headers - cache for 30 seconds, allow stale data for 60s while revalidating
     response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
     
     return response;

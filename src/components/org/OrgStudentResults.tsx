@@ -7,8 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { ExpandableInterviewCard } from '@/components/user/ExpandableInterviewCard'
 import { ResultsTrendChart, type ResultsPoint } from '@/components/user/ResultsTrendChart'
-import { Trophy, TrendingUp, Target, Search, Users } from 'lucide-react'
+import { Trophy, TrendingUp, Target, Search, Users, Eye, Download } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 interface StudentResult {
   student: {
@@ -141,276 +143,170 @@ export function OrgStudentResults() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-semibold tracking-tight">Results</h1>
+        <p className="text-muted-foreground mt-1">View student interview performance and analytics</p>
+      </div>
+
       {/* Overview Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-blue-900 dark:text-blue-100 flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Total Students
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-900 dark:text-blue-100">
-              {overallStats.totalStudents}
+        <Card className="bg-white border">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Total Students</p>
+                <div className="text-4xl font-bold">
+                  {overallStats.totalStudents.toLocaleString()}
+                </div>
+              </div>
+              <div className="p-3 bg-primary-100 rounded-lg">
+                <Users className="h-6 w-6 text-primary" />
+              </div>
             </div>
-            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">With interview history</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-green-900 dark:text-green-100 flex items-center gap-2">
-              <Target className="h-4 w-4" />
-              Total Interviews
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-900 dark:text-green-100">
-              {overallStats.totalInterviews}
+        <Card className="bg-white border">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Total Interviews</p>
+                <div className="text-4xl font-bold">
+                  {overallStats.totalInterviews}
+                </div>
+              </div>
+              <div className="p-3 bg-accent-100 rounded-lg">
+                <Target className="h-6 w-6 text-accent-foreground" />
+              </div>
             </div>
-            <p className="text-xs text-green-700 dark:text-green-300 mt-1">Across all students</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-purple-900 dark:text-purple-100 flex items-center gap-2">
-              <Trophy className="h-4 w-4" />
-              Average Score
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-purple-900 dark:text-purple-100">
-              {overallStats.avgScore ?? '—'}/100
+        <Card className="bg-white border">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Average Score</p>
+                <div className="text-4xl font-bold">
+                  {overallStats.avgScore ? `${(overallStats.avgScore / 10).toFixed(1)}/10` : '—'}
+                </div>
+              </div>
+              <div className="p-3 bg-secondary-100 rounded-lg">
+                <Trophy className="h-6 w-6 text-secondary" />
+              </div>
             </div>
-            <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">Organization-wide</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="py-4">
-          <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-            <div className="font-medium text-sm">Filter results</div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative w-full sm:w-[240px]">
-                <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  className="h-9 pl-8"
-                  placeholder="Search students..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <Select value={timeRange} onValueChange={(v: any) => setTimeRange(v)}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Time range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All time</SelectItem>
-                  <SelectItem value="90d">Last 90 days</SelectItem>
-                  <SelectItem value="30d">Last 30 days</SelectItem>
-                  <SelectItem value="7d">Last 7 days</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={routeFilter} onValueChange={(v: any) => setRouteFilter(v)}>
-                <SelectTrigger className="w-full sm:w-[200px]">
-                  <SelectValue placeholder="Route" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All routes</SelectItem>
-                  {routeOptions.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* Results Section with Filters */}
+      <Card className="bg-white">
+        <CardHeader>
+          <CardTitle className="text-xl">Interview Results</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-3 mb-6">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="h-10 pl-9"
+                placeholder="Search students..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
+            <Select value={timeRange} onValueChange={(v: any) => setTimeRange(v)}>
+              <SelectTrigger className="w-full sm:w-[160px] h-10">
+                <SelectValue placeholder="Time range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All time</SelectItem>
+                <SelectItem value="90d">Last 90 days</SelectItem>
+                <SelectItem value="30d">Last 30 days</SelectItem>
+                <SelectItem value="7d">Last 7 days</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={routeFilter} onValueChange={(v: any) => setRouteFilter(v)}>
+              <SelectTrigger className="w-full sm:w-[180px] h-10">
+                <SelectValue placeholder="Visa type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All visa types</SelectItem>
+                {routeOptions.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          {/* Results Table */}
+          {filteredResults.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium mb-2">No results found</p>
+              <p className="text-sm">
+                {searchTerm ? 'Try adjusting your search or filters' : 'No students have completed interviews yet'}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50 hover:bg-gray-50">
+                    <TableHead className="font-semibold text-xs uppercase text-gray-600">Student</TableHead>
+                    <TableHead className="font-semibold text-xs uppercase text-gray-600">Visa Type</TableHead>
+                    <TableHead className="font-semibold text-xs uppercase text-gray-600">Score</TableHead>
+                    <TableHead className="font-semibold text-xs uppercase text-gray-600">Date</TableHead>
+                    <TableHead className="font-semibold text-xs uppercase text-gray-600">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredResults.flatMap((result) => {
+                    // For table view, we'll show one row per interview
+                    return result.interviews.slice(0, 5).map((interview) => {
+                      const scoreColor = interview.score && interview.score >= 90 ? 'text-green-600' :
+                        interview.score && interview.score >= 80 ? 'text-green-500' :
+                        interview.score && interview.score >= 70 ? 'text-yellow-600' :
+                        interview.score && interview.score >= 60 ? 'text-orange-600' : 'text-red-600'
+                      
+                      const score10 = interview.score ? (interview.score / 10).toFixed(1) : '—'
+                      
+                      return (
+                        <TableRow key={interview.id}>
+                          <TableCell>
+                            <div className="font-medium">{result.student.name}</div>
+                            <div className="text-sm text-muted-foreground">{result.student.email}</div>
+                          </TableCell>
+                          <TableCell className="text-sm">{interview.route || 'F-1 Visa interview'}</TableCell>
+                          <TableCell>
+                            <span className={`font-semibold ${scoreColor}`}>{score10} /10</span>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {interview.startTime ? new Date(interview.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
-
-      {/* Student Results */}
-      {filteredResults.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p className="text-lg font-medium mb-2">No results found</p>
-            <p className="text-sm">
-              {searchTerm ? 'Try adjusting your search or filters' : 'No students have completed interviews yet'}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {filteredResults.map((result) => {
-            const isExpanded = expandedStudents.has(result.student.id)
-            const scoreSeries: ResultsPoint[] = result.interviews
-              .filter((iv) => typeof iv.score === 'number' && iv.startTime)
-              .map((iv) => ({
-                date: iv.startTime!,
-                score: iv.score!,
-              }))
-              .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-
-            return (
-              <Card key={result.student.id} className="overflow-hidden">
-                <CardHeader
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => toggleStudent(result.student.id)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <CardTitle className="text-lg">{result.student.name}</CardTitle>
-                        {result.student.email && (
-                          <span className="text-sm text-muted-foreground">{result.student.email}</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-4 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">Interviews:</span>
-                          <Badge variant="secondary">{result.stats.totalInterviews}</Badge>
-                        </div>
-                        {result.stats.averageScore !== null && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Avg Score:</span>
-                            <Badge
-                              className={
-                                result.stats.averageScore >= 90
-                                  ? 'bg-green-600'
-                                  : result.stats.averageScore >= 80
-                                  ? 'bg-green-500'
-                                  : result.stats.averageScore >= 70
-                                  ? 'bg-yellow-500'
-                                  : result.stats.averageScore >= 60
-                                  ? 'bg-orange-500'
-                                  : 'bg-red-500'
-                              }
-                            >
-                              {result.stats.averageScore}/100
-                            </Badge>
-                          </div>
-                        )}
-                        {result.stats.latestScore !== null && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Latest:</span>
-                            <Badge
-                              variant="outline"
-                              className={
-                                result.stats.latestScore >= 90
-                                  ? 'border-green-600 text-green-600'
-                                  : result.stats.latestScore >= 80
-                                  ? 'border-green-500 text-green-500'
-                                  : result.stats.latestScore >= 70
-                                  ? 'border-yellow-500 text-yellow-500'
-                                  : 'border-red-500 text-red-500'
-                              }
-                            >
-                              {result.stats.latestScore}/100
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-
-                {isExpanded && (
-                  <CardContent className="space-y-6 border-t pt-6">
-                    {/* Student Profile Info */}
-                    {result.student.studentProfile && (
-                      <div className="bg-muted/50 rounded-lg p-4">
-                        <h4 className="text-sm font-semibold mb-3">Student Profile</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                          {result.student.studentProfile.degreeLevel && (
-                            <div>
-                              <span className="text-muted-foreground">Degree Level:</span>{' '}
-                              <span className="font-medium capitalize">
-                                {result.student.studentProfile.degreeLevel}
-                              </span>
-                            </div>
-                          )}
-                          {result.student.studentProfile.programName && (
-                            <div>
-                              <span className="text-muted-foreground">Program:</span>{' '}
-                              <span className="font-medium">{result.student.studentProfile.programName}</span>
-                            </div>
-                          )}
-                          {result.student.studentProfile.universityName && (
-                            <div>
-                              <span className="text-muted-foreground">University:</span>{' '}
-                              <span className="font-medium">{result.student.studentProfile.universityName}</span>
-                            </div>
-                          )}
-                          {result.student.studentProfile.fieldOfStudy && (
-                            <div>
-                              <span className="text-muted-foreground">Field:</span>{' '}
-                              <span className="font-medium">{result.student.studentProfile.fieldOfStudy}</span>
-                            </div>
-                          )}
-                          {result.student.studentProfile.programLength && (
-                            <div>
-                              <span className="text-muted-foreground">Duration:</span>{' '}
-                              <span className="font-medium">{result.student.studentProfile.programLength}</span>
-                            </div>
-                          )}
-                          {result.student.studentProfile.programCost && (
-                            <div>
-                              <span className="text-muted-foreground">Cost:</span>{' '}
-                              <span className="font-medium">{result.student.studentProfile.programCost}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Score Trend Chart */}
-                    {scoreSeries.length > 0 && (
-                      <ResultsTrendChart
-                        data={scoreSeries}
-                        title={`${result.student.name}'s Score Trend`}
-                        description="Performance over time"
-                        height={220}
-                      />
-                    )}
-
-                    {/* Interview History */}
-                    <div>
-                      <h4 className="text-sm font-semibold mb-3">Interview History</h4>
-                      {result.interviews.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-4">No interviews in selected period.</p>
-                      ) : (
-                        <div className="space-y-4">
-                          {result.interviews.map((interview) => {
-                            // Convert to format expected by ExpandableInterviewCard
-                            const interviewWithId = {
-                              id: interview.id,
-                              status: interview.status,
-                              score: interview.score || 0,
-                              route: interview.route,
-                              startTime: interview.startTime
-                                ? { toDate: () => new Date(interview.startTime!) }
-                                : null,
-                              endTime: interview.endTime ? { toDate: () => new Date(interview.endTime!) } : null,
-                              finalReport: interview.finalReport,
-                            } as any
-
-                            return <ExpandableInterviewCard key={interview.id} interview={interviewWithId} />
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }

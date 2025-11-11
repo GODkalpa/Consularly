@@ -1,0 +1,606 @@
+/**
+ * White-labeled Email Service for Organization Scheduling
+ * All emails sent with organization branding (logo, name, colors)
+ * Uses Brevo (formerly SendinBlue) as email provider
+ */
+
+import { TransactionalEmailsApi, SendSmtpEmail } from '@getbrevo/brevo'
+import type { OrganizationBranding } from '@/types/firestore'
+
+// Initialize Brevo client
+const brevo = new TransactionalEmailsApi()
+const apiKey = process.env.BREVO_API_KEY
+
+if (apiKey) {
+  brevo.setApiKey(0, apiKey) // 0 is the key index for api-key auth
+}
+
+interface EmailBaseParams {
+  to: string
+  studentName: string
+  orgName: string
+  orgBranding?: OrganizationBranding
+}
+
+interface InterviewConfirmationParams extends EmailBaseParams {
+  interviewDate: string
+  interviewTime: string
+  timezone: string
+  route: string
+  routeDisplay: string
+  slotId: string
+  rescheduleLink?: string
+  cancelLink?: string
+  joinLink?: string
+}
+
+interface ReminderParams extends EmailBaseParams {
+  interviewDate: string
+  interviewTime: string
+  timezone: string
+  route: string
+  routeDisplay: string
+  hoursUntil: number
+  joinLink?: string
+  rescheduleLink?: string
+}
+
+interface CancellationParams extends EmailBaseParams {
+  interviewDate: string
+  interviewTime: string
+  reason?: string
+  rebookLink?: string
+}
+
+interface RescheduleConfirmationParams extends EmailBaseParams {
+  oldDate: string
+  oldTime: string
+  newDate: string
+  newTime: string
+  timezone: string
+  route: string
+  routeDisplay: string
+}
+
+/**
+ * Generate white-labeled HTML email template
+ */
+function generateEmailTemplate(
+  content: string,
+  orgName: string,
+  orgBranding?: OrganizationBranding
+): string {
+  const logoUrl = orgBranding?.logoUrl
+  const primaryColor = orgBranding?.primaryColor || '#3b82f6'
+  const companyName = orgBranding?.companyName || orgName
+  const footerText = orgBranding?.footerText || `© ${new Date().getFullYear()} ${companyName}. All rights reserved.`
+  const website = orgBranding?.socialLinks?.website
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Interview Notification - ${companyName}</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          background-color: #f5f5f5;
+          margin: 0;
+          padding: 0;
+        }
+        .container {
+          max-width: 600px;
+          margin: 0 auto;
+          background-color: #ffffff;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+          background: linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}dd 100%);
+          padding: 30px 20px;
+          text-align: center;
+        }
+        .logo {
+          max-width: 150px;
+          max-height: 60px;
+          margin-bottom: 10px;
+        }
+        .header-title {
+          color: #ffffff;
+          font-size: 24px;
+          font-weight: bold;
+          margin: 10px 0 0 0;
+        }
+        .content {
+          padding: 40px 30px;
+        }
+        .button {
+          display: inline-block;
+          padding: 14px 28px;
+          background-color: ${primaryColor};
+          color: #ffffff !important;
+          text-decoration: none;
+          border-radius: 6px;
+          font-weight: 600;
+          margin: 20px 0;
+          transition: opacity 0.2s;
+        }
+        .button:hover {
+          opacity: 0.9;
+        }
+        .button-secondary {
+          background-color: #6b7280;
+          margin-left: 10px;
+        }
+        .info-box {
+          background-color: #f9fafb;
+          border-left: 4px solid ${primaryColor};
+          padding: 20px;
+          margin: 20px 0;
+          border-radius: 4px;
+        }
+        .info-row {
+          display: flex;
+          padding: 8px 0;
+          border-bottom: 1px solid #e5e7eb;
+        }
+        .info-row:last-child {
+          border-bottom: none;
+        }
+        .info-label {
+          font-weight: 600;
+          min-width: 120px;
+          color: #6b7280;
+        }
+        .info-value {
+          color: #111827;
+        }
+        .footer {
+          background-color: #f9fafb;
+          padding: 25px 30px;
+          text-align: center;
+          font-size: 14px;
+          color: #6b7280;
+          border-top: 1px solid #e5e7eb;
+        }
+        .footer a {
+          color: ${primaryColor};
+          text-decoration: none;
+        }
+        .alert {
+          background-color: #fef3c7;
+          border-left: 4px solid #f59e0b;
+          padding: 15px;
+          margin: 20px 0;
+          border-radius: 4px;
+          color: #92400e;
+        }
+        @media only screen and (max-width: 600px) {
+          .content {
+            padding: 30px 20px;
+          }
+          .button {
+            display: block;
+            margin: 10px 0;
+          }
+          .button-secondary {
+            margin-left: 0;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div style="padding: 20px;">
+        <div class="container">
+          <div class="header">
+            ${logoUrl ? `<img src="${logoUrl}" alt="${companyName}" class="logo">` : `<h1 style="color: #ffffff; margin: 0;">${companyName}</h1>`}
+          </div>
+          <div class="content">
+            ${content}
+          </div>
+          <div class="footer">
+            <p style="margin: 0 0 10px 0;">${footerText}</p>
+            ${website ? `<p style="margin: 0;"><a href="${website}" target="_blank">${website}</a></p>` : ''}
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+}
+
+/**
+ * Send interview confirmation email
+ */
+export async function sendInterviewConfirmation(params: InterviewConfirmationParams): Promise<void> {
+  if (!apiKey) {
+    console.warn('[Email] Brevo API key not configured, skipping email')
+    return
+  }
+
+  const {
+    to,
+    studentName,
+    orgName,
+    orgBranding,
+    interviewDate,
+    interviewTime,
+    timezone,
+    route,
+    routeDisplay,
+    rescheduleLink,
+    cancelLink,
+    joinLink
+  } = params
+
+  const content = `
+    <h2 style="color: #111827; margin-top: 0;">Hello ${studentName},</h2>
+    <p style="font-size: 16px; color: #374151;">
+      Your <strong>${routeDisplay}</strong> visa interview has been successfully scheduled!
+    </p>
+    
+    <div class="info-box">
+      <div class="info-row">
+        <span class="info-label">📅 Date:</span>
+        <span class="info-value">${interviewDate}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">🕐 Time:</span>
+        <span class="info-value">${interviewTime} ${timezone}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">🎯 Interview Type:</span>
+        <span class="info-value">${routeDisplay}</span>
+      </div>
+    </div>
+
+    <p style="font-size: 16px; color: #374151;">
+      <strong>What to expect:</strong><br>
+      This is a mock visa interview designed to help you prepare for your actual interview.
+      The session will last approximately 30 minutes and will simulate real interview conditions.
+    </p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      ${joinLink ? `<a href="${joinLink}" class="button">Join Interview</a>` : ''}
+      ${rescheduleLink ? `<a href="${rescheduleLink}" class="button button-secondary">Reschedule</a>` : ''}
+    </div>
+
+    <div class="alert">
+      <strong>⏰ Important:</strong> Please join 5 minutes early to test your camera and microphone.
+      You'll need a stable internet connection and a quiet environment.
+    </div>
+
+    <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
+      If you need to cancel or reschedule, please do so at least 24 hours in advance.
+    </p>
+  `
+
+  const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+
+  const email = new SendSmtpEmail()
+  email.subject = `Interview Confirmed - ${routeDisplay} on ${interviewDate}`
+  email.htmlContent = htmlContent
+  email.sender = { 
+    name: orgBranding?.companyName || orgName,
+    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
+  }
+  email.to = [{ email: to, name: studentName }]
+  email.replyTo = {
+    email: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.app',
+    name: `${orgName} Support`
+  }
+
+  try {
+    await brevo.sendTransacEmail(email)
+    console.log(`[Email] Confirmation sent to ${to}`)
+  } catch (error) {
+    console.error('[Email] Failed to send confirmation:', error)
+    throw error
+  }
+}
+
+/**
+ * Send 24-hour reminder email
+ */
+export async function send24HourReminder(params: ReminderParams): Promise<void> {
+  if (!apiKey) {
+    console.warn('[Email] Brevo API key not configured, skipping email')
+    return
+  }
+
+  const {
+    to,
+    studentName,
+    orgName,
+    orgBranding,
+    interviewDate,
+    interviewTime,
+    timezone,
+    routeDisplay,
+    joinLink,
+    rescheduleLink
+  } = params
+
+  const content = `
+    <h2 style="color: #111827; margin-top: 0;">Reminder: Interview Tomorrow</h2>
+    <p style="font-size: 16px; color: #374151;">
+      Hi ${studentName},
+    </p>
+    <p style="font-size: 16px; color: #374151;">
+      This is a friendly reminder that your <strong>${routeDisplay}</strong> interview is scheduled for tomorrow.
+    </p>
+    
+    <div class="info-box">
+      <div class="info-row">
+        <span class="info-label">📅 Date:</span>
+        <span class="info-value">${interviewDate}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">🕐 Time:</span>
+        <span class="info-value">${interviewTime} ${timezone}</span>
+      </div>
+    </div>
+
+    <p style="font-size: 16px; color: #374151;">
+      <strong>Preparation checklist:</strong>
+    </p>
+    <ul style="font-size: 16px; color: #374151; padding-left: 20px;">
+      <li>Test your camera and microphone</li>
+      <li>Choose a quiet, well-lit location</li>
+      <li>Have your documents ready (if applicable)</li>
+      <li>Review common interview questions</li>
+      <li>Dress professionally</li>
+    </ul>
+
+    <div style="text-align: center; margin: 30px 0;">
+      ${joinLink ? `<a href="${joinLink}" class="button">View Interview Details</a>` : ''}
+    </div>
+
+    <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
+      Need to reschedule? ${rescheduleLink ? `<a href="${rescheduleLink}" style="color: #3b82f6;">Click here</a>` : 'Contact us as soon as possible.'}
+    </p>
+  `
+
+  const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+
+  const email = new SendSmtpEmail()
+  email.subject = `Reminder: Interview Tomorrow - ${routeDisplay}`
+  email.htmlContent = htmlContent
+  email.sender = { 
+    name: orgBranding?.companyName || orgName,
+    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
+  }
+  email.to = [{ email: to, name: studentName }]
+
+  try {
+    await brevo.sendTransacEmail(email)
+    console.log(`[Email] 24h reminder sent to ${to}`)
+  } catch (error) {
+    console.error('[Email] Failed to send 24h reminder:', error)
+    throw error
+  }
+}
+
+/**
+ * Send 1-hour reminder email
+ */
+export async function send1HourReminder(params: ReminderParams): Promise<void> {
+  if (!apiKey) {
+    console.warn('[Email] Brevo API key not configured, skipping email')
+    return
+  }
+
+  const {
+    to,
+    studentName,
+    orgName,
+    orgBranding,
+    interviewTime,
+    timezone,
+    routeDisplay,
+    joinLink
+  } = params
+
+  const content = `
+    <h2 style="color: #111827; margin-top: 0;">Your Interview Starts in 1 Hour!</h2>
+    <p style="font-size: 16px; color: #374151;">
+      Hi ${studentName},
+    </p>
+    <p style="font-size: 18px; color: #111827; font-weight: 600;">
+      Your ${routeDisplay} interview starts at ${interviewTime} ${timezone}
+    </p>
+
+    <div class="alert">
+      <strong>⚠️ Join now to test your setup!</strong><br>
+      We recommend joining 5 minutes early to ensure your camera and microphone are working properly.
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+      ${joinLink ? `<a href="${joinLink}" class="button">Join Interview Now</a>` : ''}
+    </div>
+
+    <p style="font-size: 16px; color: #374151;">
+      <strong>Quick reminders:</strong>
+    </p>
+    <ul style="font-size: 16px; color: #374151; padding-left: 20px;">
+      <li>✅ Camera and microphone working</li>
+      <li>✅ Quiet, well-lit environment</li>
+      <li>✅ Professional appearance</li>
+      <li>✅ Documents within reach</li>
+    </ul>
+
+    <p style="font-size: 16px; color: #374151; margin-top: 30px;">
+      Good luck! Take a deep breath and be confident. 💪
+    </p>
+  `
+
+  const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+
+  const email = new SendSmtpEmail()
+  email.subject = `Starting Soon: Interview in 1 Hour - ${routeDisplay}`
+  email.htmlContent = htmlContent
+  email.sender = { 
+    name: orgBranding?.companyName || orgName,
+    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
+  }
+  email.to = [{ email: to, name: studentName }]
+
+  try {
+    await brevo.sendTransacEmail(email)
+    console.log(`[Email] 1h reminder sent to ${to}`)
+  } catch (error) {
+    console.error('[Email] Failed to send 1h reminder:', error)
+    throw error
+  }
+}
+
+/**
+ * Send cancellation email
+ */
+export async function sendCancellationEmail(params: CancellationParams): Promise<void> {
+  if (!apiKey) {
+    console.warn('[Email] Brevo API key not configured, skipping email')
+    return
+  }
+
+  const {
+    to,
+    studentName,
+    orgName,
+    orgBranding,
+    interviewDate,
+    interviewTime,
+    reason,
+    rebookLink
+  } = params
+
+  const content = `
+    <h2 style="color: #111827; margin-top: 0;">Interview Cancelled</h2>
+    <p style="font-size: 16px; color: #374151;">
+      Hi ${studentName},
+    </p>
+    <p style="font-size: 16px; color: #374151;">
+      We're writing to inform you that your interview scheduled for <strong>${interviewDate} at ${interviewTime}</strong> has been cancelled.
+    </p>
+
+    ${reason ? `
+      <div class="info-box">
+        <strong>Reason:</strong><br>
+        ${reason}
+      </div>
+    ` : ''}
+
+    ${rebookLink ? `
+      <p style="font-size: 16px; color: #374151;">
+        We apologize for any inconvenience. You can book a new slot using the link below:
+      </p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${rebookLink}" class="button">Book New Interview</a>
+      </div>
+    ` : `
+      <p style="font-size: 16px; color: #374151;">
+        If you'd like to reschedule, please contact us to arrange a new time.
+      </p>
+    `}
+
+    <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
+      If you have any questions, please don't hesitate to reach out to us.
+    </p>
+  `
+
+  const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+
+  const email = new SendSmtpEmail()
+  email.subject = `Interview Cancelled - ${interviewDate}`
+  email.htmlContent = htmlContent
+  email.sender = { 
+    name: orgBranding?.companyName || orgName,
+    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
+  }
+  email.to = [{ email: to, name: studentName }]
+
+  try {
+    await brevo.sendTransacEmail(email)
+    console.log(`[Email] Cancellation sent to ${to}`)
+  } catch (error) {
+    console.error('[Email] Failed to send cancellation:', error)
+    throw error
+  }
+}
+
+/**
+ * Send reschedule confirmation email
+ */
+export async function sendRescheduleConfirmation(params: RescheduleConfirmationParams): Promise<void> {
+  if (!apiKey) {
+    console.warn('[Email] Brevo API key not configured, skipping email')
+    return
+  }
+
+  const {
+    to,
+    studentName,
+    orgName,
+    orgBranding,
+    oldDate,
+    oldTime,
+    newDate,
+    newTime,
+    timezone,
+    routeDisplay
+  } = params
+
+  const content = `
+    <h2 style="color: #111827; margin-top: 0;">Interview Rescheduled</h2>
+    <p style="font-size: 16px; color: #374151;">
+      Hi ${studentName},
+    </p>
+    <p style="font-size: 16px; color: #374151;">
+      Your <strong>${routeDisplay}</strong> interview has been successfully rescheduled.
+    </p>
+    
+    <div class="info-box">
+      <h3 style="margin-top: 0; color: #6b7280; font-size: 14px;">Previous Time:</h3>
+      <p style="margin: 5px 0; text-decoration: line-through; color: #9ca3af;">
+        ${oldDate} at ${oldTime} ${timezone}
+      </p>
+      
+      <h3 style="margin-top: 15px; color: #111827; font-size: 14px;">New Time:</h3>
+      <p style="margin: 5px 0; font-weight: 600; font-size: 18px; color: #111827;">
+        ${newDate} at ${newTime} ${timezone}
+      </p>
+    </div>
+
+    <p style="font-size: 16px; color: #374151; margin-top: 25px;">
+      We look forward to seeing you at the new time!
+    </p>
+
+    <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
+      You'll receive reminder emails 24 hours and 1 hour before your interview.
+    </p>
+  `
+
+  const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+
+  const email = new SendSmtpEmail()
+  email.subject = `Interview Rescheduled - New Time: ${newDate}`
+  email.htmlContent = htmlContent
+  email.sender = { 
+    name: orgBranding?.companyName || orgName,
+    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
+  }
+  email.to = [{ email: to, name: studentName }]
+
+  try {
+    await brevo.sendTransacEmail(email)
+    console.log(`[Email] Reschedule confirmation sent to ${to}`)
+  } catch (error) {
+    console.error('[Email] Failed to send reschedule confirmation:', error)
+    throw error
+  }
+}

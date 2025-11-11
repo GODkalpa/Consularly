@@ -849,25 +849,25 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
   const currentQuestion = session?.questions[session.currentQuestionIndex]
 
   return (
-    <div className='space-y-8'>
+    <div className='space-y-6'>
       {!session && (
         <>
           {/* Header */}
           <div>
-            <h2 className="text-2xl font-semibold">Interview Setup</h2>
-            <p className="text-sm text-muted-foreground mt-1">Configure your interview session parameters and launch when ready</p>
+            <h1 className="text-3xl font-semibold tracking-tight">Interview Setup</h1>
+            <p className="text-muted-foreground mt-1">Configure your interview session parameters and launch when ready</p>
           </div>
 
           {/* Candidate Information */}
-          <Card>
+          <Card className="bg-white">
             <CardContent className="p-6">
-              <div className="flex items-center gap-2.5 mb-6">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <User className="h-4 w-4 text-primary" />
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 bg-primary-100 rounded-lg">
+                  <User className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-medium">Candidate Information</h3>
-                  <p className="text-xs text-muted-foreground">Select student and interview destination</p>
+                  <h3 className="text-base font-semibold">Candidate Information</h3>
+                  <p className="text-sm text-muted-foreground">Select student and interview destination</p>
                 </div>
               </div>
               
@@ -875,7 +875,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
                 {/* Student Selection */}
                 <div className="space-y-2">
                   <Label htmlFor="student-select" className="text-sm font-medium">
-                    Student Name <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">Required</Badge>
+                    Student Name <span className="text-red-500">*</span>
                   </Label>
                   <Select value={studentId} onValueChange={setStudentId}>
                     <SelectTrigger id="student-select">
@@ -900,8 +900,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
 
                 {/* Country Selection */}
                 <div className="space-y-2">
-                  <Label htmlFor="country-select" className="text-sm font-medium flex items-center gap-1.5">
-                    <Globe className="h-3.5 w-3.5" />
+                  <Label htmlFor="country-select" className="text-sm font-medium">
                     Destination Country
                   </Label>
                   <Select 
@@ -932,23 +931,22 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
 
           {/* Interview Configuration - Only for USA F1 */}
           {route === 'usa_f1' && (
-            <Card>
+            <Card className="bg-white">
               <CardContent className="p-6">
-                <div className="flex items-center gap-2.5 mb-6">
-                  <div className="p-2 bg-primary/10 rounded-lg">
-                    <Settings className="h-4 w-4 text-primary" />
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2.5 bg-primary-100 rounded-lg">
+                    <Settings className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium">Interview Configuration</h3>
-                    <p className="text-xs text-muted-foreground">Customize difficulty and format</p>
+                    <h3 className="text-base font-semibold">Interview Configuration</h3>
+                    <p className="text-sm text-muted-foreground">Customize difficulty and format</p>
                   </div>
                 </div>
 
                 <div className="space-y-6">
                   {/* Interview Mode */}
                   <div className="space-y-2">
-                    <Label htmlFor="mode-select" className="text-sm font-medium flex items-center gap-1.5">
-                      <Target className="h-3.5 w-3.5" />
+                    <Label htmlFor="mode-select" className="text-sm font-medium">
                       Interview Mode
                     </Label>
                     <Select value={mode} onValueChange={(v) => setMode(v as InterviewMode)}>
@@ -984,8 +982,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
 
                   {/* Difficulty Level */}
                   <div className="space-y-2">
-                    <Label htmlFor="difficulty-select" className="text-sm font-medium flex items-center gap-1.5">
-                      <TrendingUp className="h-3.5 w-3.5" />
+                    <Label htmlFor="difficulty-select" className="text-sm font-medium">
                       Difficulty Level
                     </Label>
                     <Select value={difficulty} onValueChange={(v) => setDifficulty(v as DifficultyLevel)}>
@@ -1066,10 +1063,9 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
           <Button 
             onClick={startNewSession} 
             disabled={!studentId} 
-            className='w-full' 
-            size='lg'
+            className='w-full bg-primary hover:bg-primary/90 h-12 text-base font-medium text-white' 
           >
-            <Play className='h-4 w-4 mr-2' /> 
+            <Play className='h-5 w-5 mr-2' /> 
             Launch Interview Session
           </Button>
           
