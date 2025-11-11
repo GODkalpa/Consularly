@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation';
 import { auth, db, firebaseEnabled } from '@/lib/firebase';
 import { getUserProfile, isUserAdmin, UserProfile } from '@/lib/database';
 import { sendWelcomeEmail } from '@/lib/email/send-helpers';
+import { prefetch } from '@/lib/cache';
 
 interface AuthContextType {
   user: User | null;
@@ -72,6 +73,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsAdmin(adminStatus);
 
           console.log('✅ User profile loaded:', profile);
+          
+          // Prefetch dashboard data immediately for instant loads
+          const token = await user.getIdToken();
+          const headers = { Authorization: `Bearer ${token}` };
+          
+          if (adminStatus) {
+            // Prefetch admin dashboard data
+            console.log('🚀 Prefetching admin dashboard data...');
+            prefetch('admin_stats', async () => {
+              const res = await fetch('/api/admin/stats/overview', { headers });
+              return await res.json();
+            }, { ttl: 2 * 60 * 1000 });
+            
+            prefetch('admin_trends', async () => {
+              const res = await fetch('/api/admin/stats/trends', { headers });
+              return await res.json();
+            }, { ttl: 10 * 60 * 1000 });
+          } else if (profile?.orgId) {
+            // Prefetch org dashboard data
+            console.log('🚀 Prefetching org dashboard data...');
+            prefetch(`org_${profile.orgId}`, async () => {
+              const res = await fetch('/api/org/organization', { headers });
+              return await res.json();
+            }, { ttl: 5 * 60 * 1000 });
+            
+            prefetch(`stats_${profile.orgId}`, async () => {
+              const res = await fetch('/api/org/statistics', { headers });
+              return await res.json();
+            }, { ttl: 30 * 1000 });
+          }
 
           // Live subscribe to user profile to reflect role/org changes immediately
           unsubProfile = onSnapshot(

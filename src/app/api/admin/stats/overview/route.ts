@@ -63,25 +63,23 @@ export async function GET(request: NextRequest) {
     
     const activeUsers = activeUsersCount.data().count
 
-    // Calculate monthly revenue - fetch only organizations with select()
-    const orgsSnap = await db.collection('organizations')
-      .select('plan')
-      .get()
-    
-    let monthlyRevenue = 0
+    // Calculate monthly revenue using efficient count queries by plan type
     const planPricing = {
       basic: 99,
       premium: 299,
       enterprise: 999,
     }
     
-    orgsSnap.forEach((doc) => {
-      const data = doc.data()
-      const plan = data?.plan as keyof typeof planPricing
-      if (plan && planPricing[plan]) {
-        monthlyRevenue += planPricing[plan]
-      }
-    })
+    const [basicCount, premiumCount, enterpriseCount] = await Promise.all([
+      db.collection('organizations').where('plan', '==', 'basic').count().get(),
+      db.collection('organizations').where('plan', '==', 'premium').count().get(),
+      db.collection('organizations').where('plan', '==', 'enterprise').count().get(),
+    ])
+    
+    const monthlyRevenue = 
+      (basicCount.data().count * planPricing.basic) +
+      (premiumCount.data().count * planPricing.premium) +
+      (enterpriseCount.data().count * planPricing.enterprise)
 
     // Count pending support tickets (if you have a support collection)
     // For now, return 0 as placeholder

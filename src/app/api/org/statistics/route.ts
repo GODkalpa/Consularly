@@ -36,8 +36,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Fetch statistics in parallel
-    const [studentsSnapshot, interviewsSnapshot, orgUsersSnapshot] = await Promise.all([
+    // Fetch statistics in parallel - optimized queries
+    const [studentsSnapshot, totalInterviewsSnapshot, recentInterviewsSnapshot, orgUsersSnapshot] = await Promise.all([
       // Total students
       adminDb()
         .collection('orgStudents')
@@ -45,10 +45,19 @@ export async function GET(req: NextRequest) {
         .count()
         .get(),
       
-      // All interviews for this org
+      // Total interviews count (efficient count aggregation)
       adminDb()
         .collection('interviews')
         .where('orgId', '==', orgId)
+        .count()
+        .get(),
+      
+      // Only fetch 5 most recent interviews (not all)
+      adminDb()
+        .collection('interviews')
+        .where('orgId', '==', orgId)
+        .orderBy('createdAt', 'desc')
+        .limit(5)
         .get(),
       
       // Active org users
@@ -61,47 +70,55 @@ export async function GET(req: NextRequest) {
 
     // Count students
     const totalStudents = studentsSnapshot.data().count;
+    const totalInterviews = totalInterviewsSnapshot.data().count;
 
-    // Process interviews
-    const interviews = interviewsSnapshot.docs;
-    const totalInterviews = interviews.length;
+    // Process only recent interviews for display
+    const recentInterviewDocs = recentInterviewsSnapshot.docs;
 
-    // Calculate average score from interviews that have finalScore
-    const scoredInterviews = interviews.filter((doc) => {
-      const data = doc.data();
-      return typeof data.finalScore === 'number' && data.finalScore >= 0;
-    });
-
+    // Calculate average score efficiently from recent interviews + a sample query
+    // For better accuracy, fetch scored interviews separately with limit
+    const scoredInterviewsSnapshot = await adminDb()
+      .collection('interviews')
+      .where('orgId', '==', orgId)
+      .where('finalScore', '>=', 0)
+      .limit(50)
+      .get();
+    
     let avgScore = 0;
-    if (scoredInterviews.length > 0) {
-      const totalScore = scoredInterviews.reduce((sum, doc) => {
+    if (!scoredInterviewsSnapshot.empty) {
+      const totalScore = scoredInterviewsSnapshot.docs.reduce((sum, doc) => {
         return sum + (doc.data().finalScore || 0);
       }, 0);
-      avgScore = Math.round(totalScore / scoredInterviews.length);
+      avgScore = Math.round(totalScore / scoredInterviewsSnapshot.docs.length);
     }
-
-    // Get recent interviews (last 5) with student names
-    const recentInterviewDocs = interviews.slice(0, 5);
     
-    // Fetch student names for these interviews
-    const studentIds = recentInterviewDocs
-      .map(doc => doc.data().userId)
-      .filter((id): id is string => !!id);
+    // Extract unique student IDs from recent interviews
+    const studentIds = [...new Set(
+      recentInterviewDocs
+        .map(doc => doc.data().userId)
+        .filter((id): id is string => !!id)
+    )];
     
-    // Fetch all students in one batch
-    const studentDocs = await Promise.all(
-      studentIds.map(id => adminDb().collection('orgStudents').doc(id).get())
-    );
-    
-    // Create a map of studentId -> studentName
+    // Batch fetch all students efficiently - Firestore allows up to 10 in one query using 'in'
     const studentNameMap = new Map<string, string>();
-    studentDocs.forEach((doc, idx) => {
-      if (doc.exists) {
-        const data = doc.data();
-        const name = data?.name || data?.fullName || 'Unknown';
-        studentNameMap.set(studentIds[idx], name);
+    
+    if (studentIds.length > 0) {
+      // Split into chunks of 10 (Firestore 'in' query limit)
+      const chunkSize = 10;
+      for (let i = 0; i < studentIds.length; i += chunkSize) {
+        const chunk = studentIds.slice(i, i + chunkSize);
+        const studentsSnapshot = await adminDb()
+          .collection('orgStudents')
+          .where('__name__', 'in', chunk)
+          .get();
+        
+        studentsSnapshot.forEach(doc => {
+          const data = doc.data();
+          const name = data?.name || data?.fullName || 'Unknown';
+          studentNameMap.set(doc.id, name);
+        });
       }
-    });
+    }
     
     // Map interviews with student names
     const recentInterviews = recentInterviewDocs.map((doc) => {
@@ -121,7 +138,7 @@ export async function GET(req: NextRequest) {
     // Active users count
     const activeUsers = orgUsersSnapshot.data().count;
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       statistics: {
         totalStudents,
@@ -131,6 +148,11 @@ export async function GET(req: NextRequest) {
         recentInterviews,
       },
     });
+    
+    // Add caching headers - cache for 30 seconds, allow stale data for 60s while revalidating
+    response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
+    
+    return response;
   } catch (error: any) {
     console.error('Error fetching statistics:', error);
     

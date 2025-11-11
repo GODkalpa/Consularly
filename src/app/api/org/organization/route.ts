@@ -58,7 +58,12 @@ export async function GET(req: NextRequest) {
       updatedAt: data.updatedAt || null,
     }
 
-    return NextResponse.json({ organization })
+    const response = NextResponse.json({ organization })
+    
+    // Cache for 60 seconds - org data changes infrequently
+    response.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+    
+    return response
   } catch (e: any) {
     console.error('[api/org/organization] GET error', e)
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { auth, firebaseEnabled } from "@/lib/firebase"
 import type { OrganizationWithId } from "@/types/firestore"
+import { fetchWithCache, cache } from "@/lib/cache"
 
 import {
   Sidebar,
@@ -102,38 +103,68 @@ export function OrganizationDashboard() {
   )
 
   useEffect(() => {
+    if (!firebaseEnabled || !orgId) { 
+      setLoading(false)
+      return 
+    }
+    
     let mounted = true
-    async function load() {
-      if (!firebaseEnabled || !orgId) { setLoading(false); return }
+    
+    // INSTANT: Check cache synchronously before any async operations
+    const cachedOrg = cache.get<{ organization: OrganizationWithId }>(`org_${orgId}`)
+    const cachedStats = cache.get<{ statistics: any }>(`stats_${orgId}`)
+    
+    // If we have cached data, show it IMMEDIATELY
+    if (cachedOrg.data) {
+      setOrg(cachedOrg.data.organization)
+      setLoading(false) // Hide skeleton instantly
+    }
+    if (cachedStats.data) {
+      setStatistics(cachedStats.data.statistics)
+    }
+    
+    // Then fetch fresh data in background (async, non-blocking)
+    async function fetchFreshData() {
       try {
         const token = await auth.currentUser?.getIdToken()
         if (!token) throw new Error('Not authenticated')
 
-        // Fetch organization data and statistics in parallel
-        const [orgRes, statsRes] = await Promise.all([
-          fetch('/api/org/organization', { headers: { Authorization: `Bearer ${token}` } }),
-          fetch('/api/org/statistics', { headers: { Authorization: `Bearer ${token}` } }),
+        const headers = { Authorization: `Bearer ${token}` }
+        
+        const fetchOrg = async () => {
+          const res = await fetch('/api/org/organization', { headers })
+          const json = await res.json()
+          if (!res.ok) throw new Error(json?.error || 'Org fetch failed')
+          return json
+        }
+        
+        const fetchStats = async () => {
+          const res = await fetch('/api/org/statistics', { headers })
+          const json = await res.json()
+          if (res.ok) return json
+          return { statistics: null }
+        }
+        
+        // Use cache with background refresh
+        const [orgData, statsData] = await Promise.all([
+          fetchWithCache(`org_${orgId}`, fetchOrg, { ttl: 5 * 60 * 1000 }),
+          fetchWithCache(`stats_${orgId}`, fetchStats, { ttl: 30 * 1000 }),
         ])
 
-        const orgJson = await orgRes.json()
-        if (!orgRes.ok) throw new Error(orgJson?.error || `Organization fetch failed (${orgRes.status})`)
-        const orgDoc = orgJson.organization as OrganizationWithId
-
-        const statsJson = await statsRes.json()
-        if (statsRes.ok && statsJson.statistics) {
-          if (!mounted) return
-          setStatistics(statsJson.statistics)
-        }
-
         if (!mounted) return
-        setOrg(orgDoc)
+        setOrg(orgData.organization)
+        if (statsData.statistics) {
+          setStatistics(statsData.statistics)
+        }
       } catch (e) {
         console.error("Failed to load org dashboard data", e)
       } finally {
         if (mounted) setLoading(false)
       }
     }
-    load()
+    
+    fetchFreshData()
+    
     return () => { mounted = false }
   }, [orgId])
 
@@ -685,12 +716,52 @@ export function OrganizationDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading organization dashboard...</p>
-        </div>
-      </div>
+      <SidebarProvider>
+        <Sidebar variant="inset" collapsible="icon">
+          <SidebarHeader>
+            <div className="flex items-center gap-3 rounded-md px-2 py-1.5">
+              <div className="h-10 w-10 rounded-lg bg-muted animate-pulse" />
+              <div className="flex-1 space-y-2 group-data-[collapsible=icon]:hidden">
+                <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                <div className="h-3 w-32 bg-muted rounded animate-pulse" />
+              </div>
+            </div>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <div className="space-y-2 p-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-10 bg-muted rounded animate-pulse" />
+                ))}
+              </div>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarRail />
+        </Sidebar>
+        <SidebarInset>
+          <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4 md:px-6">
+            <SidebarTrigger />
+            <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+          </header>
+          <main className="flex-1 overflow-auto p-4 md:p-6">
+            <div className="space-y-6">
+              {/* Hero skeleton */}
+              <div className="rounded-2xl h-48 bg-muted animate-pulse" />
+              {/* Metrics grid skeleton */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-32 bg-muted rounded-lg animate-pulse" />
+                ))}
+              </div>
+              {/* Content skeleton */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 h-64 bg-muted rounded-lg animate-pulse" />
+                <div className="h-64 bg-muted rounded-lg animate-pulse" />
+              </div>
+            </div>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
     )
   }
 

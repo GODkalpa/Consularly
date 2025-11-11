@@ -43,22 +43,35 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // Compute completed interview counts per student (simple N requests)
-    const withCounts = await Promise.all(students.map(async (s) => {
-      try {
-        const snap = await adminDb()
-          .collection('interviews')
-          .where('orgId', '==', orgId)
-          .where('userId', '==', s.id)
-          .where('status', '==', 'completed')
-          .get()
-        return { ...s, interviewsCompleted: snap.size }
-      } catch {
-        return { ...s, interviewsCompleted: 0 }
+    // Compute completed interview counts efficiently - ONE query for all students
+    const interviewsSnap = await adminDb()
+      .collection('interviews')
+      .where('orgId', '==', orgId)
+      .where('status', '==', 'completed')
+      .select('userId') // Only fetch userId field
+      .get()
+    
+    // Count interviews per student in memory (fast)
+    const interviewCounts = new Map<string, number>()
+    interviewsSnap.docs.forEach(doc => {
+      const userId = doc.data().userId
+      if (userId) {
+        interviewCounts.set(userId, (interviewCounts.get(userId) || 0) + 1)
       }
+    })
+    
+    // Attach counts to students
+    const withCounts = students.map(s => ({
+      ...s,
+      interviewsCompleted: interviewCounts.get(s.id) || 0
     }))
 
-    return NextResponse.json({ students: withCounts })
+    const response = NextResponse.json({ students: withCounts })
+    
+    // Cache for 2 minutes - students don't change frequently
+    response.headers.set('Cache-Control', 'private, max-age=120, stale-while-revalidate=240')
+    
+    return response
   } catch (e: any) {
     console.error('[api/org/students] GET error', e)
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })

@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { fetchWithCache, cache, invalidate } from "@/lib/cache"
 
 import type { DegreeLevel } from '@/lib/database'
 
@@ -85,25 +86,46 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
 
   async function loadStudents() {
     if (!firebaseEnabled) { setLoading(false); return }
+    
+    const orgId = userProfile?.orgId
+    if (!orgId) { setLoading(false); return }
+    
+    // Check cache first for instant display
+    const cached = cache.get<OrgStudent[]>(`students_${orgId}`)
+    if (cached.data) {
+      setStudents(cached.data)
+      setLoading(false) // Show cached data instantly
+    }
+    
     try {
-      setLoading(true)
       const token = await auth.currentUser?.getIdToken()
       if (!token) throw new Error('Not authenticated')
-      const res = await fetch('/api/org/students', {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || `Failed to load students (${res.status})`)
-      const rows: OrgStudent[] = (data.students || []).map((s: any) => ({
-        id: s.id,
-        name: s.name,
-        email: s.email,
-        interviewCountry: s.interviewCountry,
-        lastActive: s.lastActive ? new Date(s.lastActive) : undefined,
-        interviewsCompleted: s.interviewsCompleted ?? 0,
-        studentProfile: s.studentProfile,
-      }))
+      
+      // Fetch with cache (background refresh if already displayed)
+      const rows = await fetchWithCache(
+        `students_${orgId}`,
+        async () => {
+          const res = await fetch('/api/org/students', {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          const data = await res.json()
+          if (!res.ok) throw new Error(data?.error || `Failed to load students (${res.status})`)
+          
+          // Process and return the array (this is what gets cached)
+          return (data.students || []).map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            email: s.email,
+            interviewCountry: s.interviewCountry,
+            lastActive: s.lastActive ? new Date(s.lastActive) : undefined,
+            interviewsCompleted: s.interviewsCompleted ?? 0,
+            studentProfile: s.studentProfile,
+          })) as OrgStudent[]
+        },
+        { ttl: 2 * 60 * 1000 } // 2-minute cache
+      )
+      
       setStudents(rows)
       setError(null)
     } catch (e: any) {
@@ -188,6 +210,8 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
       toast.success('Student updated successfully')
       setEditOpen(false)
       setSelectedStudent(null)
+      // Invalidate cache to force fresh fetch
+      invalidate('students_')
       await loadStudents()
     } catch (e: any) {
       toast.error('Update failed', { description: e?.message })
@@ -213,6 +237,8 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Failed to delete student')
       toast.success('Student deleted successfully')
+      // Invalidate cache to force fresh fetch
+      invalidate('students_')
       await loadStudents()
     } catch (e: any) {
       toast.error('Delete failed', { description: e?.message })
@@ -471,6 +497,8 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                       const data = await res.json()
                       if (!res.ok) throw new Error(data?.error || 'Failed to add student')
                       toast.success('Student added successfully')
+                      // Invalidate cache to force fresh fetch
+                      invalidate('students_')
                       setAddOpen(false)
                       setNewName('')
                       setNewEmail('')

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { fetchWithCache, cache } from "@/lib/cache"
 import { 
   Users, 
   Building2, 
@@ -59,6 +60,22 @@ export function DashboardOverview() {
 
     async function loadDashboardData() {
       try {
+        // Load from cache first for instant display
+        const cachedStats = cache.get<DashboardStats>('admin_stats')
+        const cachedTrends = cache.get<TrendData>('admin_trends')
+        const cachedLogs = cache.get<Activity[]>('admin_logs')
+        
+        if (cachedStats.data) {
+          setStats(cachedStats.data)
+          setLoading(false)
+        }
+        if (cachedTrends.data) {
+          setTrends(cachedTrends.data)
+        }
+        if (cachedLogs.data) {
+          setActivities(cachedLogs.data)
+        }
+        
         const token = await auth.currentUser?.getIdToken()
         if (!token) {
           throw new Error('Not authenticated')
@@ -66,26 +83,38 @@ export function DashboardOverview() {
 
         const headers = { Authorization: `Bearer ${token}` }
 
-        // Fetch all data in parallel
-        const [statsRes, trendsRes, logsRes] = await Promise.all([
-          fetch('/api/admin/stats/overview', { headers }),
-          fetch('/api/admin/stats/trends', { headers }),
-          fetch('/api/admin/audit-logs?limit=4', { headers }),
-        ])
-
-        if (!statsRes.ok || !trendsRes.ok || !logsRes.ok) {
-          throw new Error('Failed to load dashboard data')
+        // Define fetchers
+        const fetchStats = async () => {
+          const res = await fetch('/api/admin/stats/overview', { headers })
+          if (!res.ok) throw new Error('Stats failed')
+          return await res.json()
         }
-
-        const statsData = await statsRes.json()
-        const trendsData = await trendsRes.json()
-        const logsData = await logsRes.json()
+        
+        const fetchTrends = async () => {
+          const res = await fetch('/api/admin/stats/trends', { headers })
+          if (!res.ok) throw new Error('Trends failed')
+          return await res.json()
+        }
+        
+        const fetchLogs = async () => {
+          const res = await fetch('/api/admin/audit-logs?limit=4', { headers })
+          if (!res.ok) return { logs: [] }
+          const data = await res.json()
+          return data.logs || []
+        }
+        
+        // Fetch with cache (instant from cache, background refresh)
+        const [statsData, trendsData, logsData] = await Promise.all([
+          fetchWithCache('admin_stats', fetchStats, { ttl: 2 * 60 * 1000 }),
+          fetchWithCache('admin_trends', fetchTrends, { ttl: 10 * 60 * 1000 }),
+          fetchWithCache('admin_logs', fetchLogs, { ttl: 2 * 60 * 1000 }).catch(() => []),
+        ])
 
         if (!mounted) return
 
         setStats(statsData)
         setTrends(trendsData)
-        setActivities(logsData.logs || [])
+        setActivities(logsData)
         setError(null)
       } catch (e: any) {
         console.error('[DashboardOverview] Load error', e)
@@ -101,21 +130,32 @@ export function DashboardOverview() {
 
     loadDashboardData()
 
-    // Refresh every 30 seconds
-    const interval = setInterval(loadDashboardData, 30000)
+    // Don't auto-refresh - rely on browser cache and manual refresh
+    // Aggressive polling causes unnecessary database load
 
     return () => {
       mounted = false
-      clearInterval(interval)
     }
   }, [])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading dashboard...</p>
+      <div className="space-y-6">
+        {/* Key Metrics Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-32 bg-muted rounded-lg animate-pulse" />
+          ))}
+        </div>
+        {/* Charts Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-[400px] bg-muted rounded-lg animate-pulse" />
+          <div className="h-[400px] bg-muted rounded-lg animate-pulse" />
+        </div>
+        {/* Bottom Cards Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-64 bg-muted rounded-lg animate-pulse" />
+          <div className="h-64 bg-muted rounded-lg animate-pulse" />
         </div>
       </div>
     )

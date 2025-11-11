@@ -39,12 +39,23 @@ export async function GET(request: NextRequest) {
     const limitParam = searchParams.get('limit')
     const limitCount = limitParam ? parseInt(limitParam, 10) : 10
 
-    // Fetch recent audit logs
-    const logsSnap = await adminDb()
-      .collection('auditLogs')
-      .orderBy('timestamp', 'desc')
-      .limit(limitCount)
-      .get()
+    // Fetch recent audit logs - gracefully handle if collection doesn't exist
+    let logsSnap
+    try {
+      logsSnap = await adminDb()
+        .collection('auditLogs')
+        .orderBy('timestamp', 'desc')
+        .limit(limitCount)
+        .get()
+    } catch (indexError) {
+      // If index doesn't exist or collection is empty, return empty logs
+      console.warn('[audit-logs] Collection not indexed or empty:', indexError)
+      return NextResponse.json({
+        logs: [],
+        total: 0,
+        message: 'Audit logs not yet configured'
+      })
+    }
 
     const logs = logsSnap.docs.map((doc) => {
       const data = doc.data()
@@ -100,10 +111,15 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       logs: activities,
       total: logs.length,
     })
+    
+    // Cache for 2 minutes - logs don't change frequently
+    response.headers.set('Cache-Control', 'private, max-age=120, stale-while-revalidate=240')
+    
+    return response
   } catch (e: any) {
     console.error('[api/admin/audit-logs] Error', e)
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
