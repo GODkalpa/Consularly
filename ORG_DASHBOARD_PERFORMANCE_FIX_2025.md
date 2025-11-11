@@ -21,7 +21,7 @@ const scoredInterviews = await query5(); // Sequential! +1-2s
 for (let chunk of chunks) {
   await fetchStudents(chunk); // Sequential loop! +1-2s per chunk
 }
-```
+
 
 ### 2. **Missing Composite Indexes**
 Firestore queries with multiple conditions (e.g., `where + orderBy`) require composite indexes:
