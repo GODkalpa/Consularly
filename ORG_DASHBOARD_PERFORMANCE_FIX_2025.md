@@ -23,7 +23,7 @@ for (let chunk of chunks) {
 }
 
 
-### 2. **Missing Composite Indexes**
+## 2. **Missing Composite Indexes**
 Firestore queries with multiple conditions (e.g., `where + orderBy`) require composite indexes:
 - `orgId + createdAt DESC` for recent interviews
 - `orgId + finalScore` for average score calculation
