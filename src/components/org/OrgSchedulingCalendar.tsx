@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Calendar, momentLocalizer, View } from 'react-big-calendar'
-import moment from 'moment'
+import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar'
+import { format, parse, startOfWeek as dfStartOfWeek, getDay, startOfMonth, endOfMonth, startOfDay, endOfDay, endOfWeek, isSameDay, isWithinInterval } from 'date-fns'
+import { enUS } from 'date-fns/locale'
 import { Calendar as CalendarIcon, Plus, Clock, Users, Filter, X } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -10,7 +11,13 @@ import { Card, CardContent } from '@/components/ui/card'
 import type { InterviewSlotWithId } from '@/types/firestore'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 
-const localizer = momentLocalizer(moment)
+const localizer = dateFnsLocalizer({
+  format,
+  parse,
+  startOfWeek: (date: Date) => dfStartOfWeek(date, { weekStartsOn: 0 }),
+  getDay,
+  locales: { 'en-US': enUS },
+})
 
 interface CalendarEvent {
   id: string
@@ -47,9 +54,11 @@ export default function OrgSchedulingCalendar({
       setLoading(true)
       const token = await user.getIdToken()
 
-      // Calculate date range based on current view
-      const start = moment(date).startOf(view === 'month' ? 'month' : view === 'week' ? 'week' : 'day').toISOString()
-      const end = moment(date).endOf(view === 'month' ? 'month' : view === 'week' ? 'week' : 'day').toISOString()
+      // Calculate date range based on current view (date-fns)
+      const rangeStart = view === 'month' ? startOfMonth(date) : view === 'week' ? dfStartOfWeek(date, { weekStartsOn: 0 }) : startOfDay(date)
+      const rangeEnd = view === 'month' ? endOfMonth(date) : view === 'week' ? endOfWeek(date, { weekStartsOn: 0 }) : endOfDay(date)
+      const start = rangeStart.toISOString()
+      const end = rangeEnd.toISOString()
 
       const params = new URLSearchParams({ start, end })
       if (statusFilter !== 'all') {
@@ -183,12 +192,26 @@ export default function OrgSchedulingCalendar({
 
   // Stats
   const stats = useMemo(() => {
-    const today = moment().startOf('day')
-    const endOfWeek = moment().endOf('week')
+    const today = startOfDay(new Date())
+    const weekEnd = endOfWeek(new Date(), { weekStartsOn: 0 })
+
+    const toJsDate = (v: unknown): Date | null => {
+      if (!v) return null
+      if (v instanceof Date) return v
+      if (typeof v === 'string' || typeof v === 'number') return new Date(v)
+      if (typeof v === 'object' && typeof (v as any).toDate === 'function') return (v as any).toDate()
+      return null
+    }
 
     return {
-      today: slots.filter(s => moment(s.startTime).isSame(today, 'day')).length,
-      thisWeek: slots.filter(s => moment(s.startTime).isBetween(today, endOfWeek)).length,
+      today: slots.filter(s => {
+        const d = toJsDate(s.startTime as any)
+        return d ? isSameDay(d, today) : false
+      }).length,
+      thisWeek: slots.filter(s => {
+        const d = toJsDate(s.startTime as any)
+        return d ? isWithinInterval(d, { start: today, end: weekEnd }) : false
+      }).length,
       available: slots.filter(s => s.status === 'available').length,
       booked: slots.filter(s => s.status === 'booked').length
     }

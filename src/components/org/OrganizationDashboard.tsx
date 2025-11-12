@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import dynamic from "next/dynamic"
+import Image from "next/image"
 import { useAuth } from "@/contexts/AuthContext"
 import { auth, firebaseEnabled } from "@/lib/firebase"
 import type { OrganizationWithId } from "@/types/firestore"
@@ -37,13 +39,13 @@ import {
   Calendar,
   CheckCircle,
 } from "lucide-react"
-import { OrgStudentManagement } from "@/components/org/OrgStudentManagement"
-import { OrgInterviewSimulation } from "@/components/org/OrgInterviewSimulation"
-import { OrgStudentResults } from "@/components/org/OrgStudentResults"
-import { OrgBrandingSettings } from "@/components/org/OrgBrandingSettings"
-import OrgSchedulingCalendar from "@/components/org/OrgSchedulingCalendar"
-import CreateSlotDialog from "@/components/org/CreateSlotDialog"
-import EditSlotDialog from "@/components/org/EditSlotDialog"
+const OrgStudentManagement = dynamic(() => import("@/components/org/OrgStudentManagement").then(m => ({ default: m.OrgStudentManagement })), { ssr: false })
+const OrgInterviewSimulation = dynamic(() => import("@/components/org/OrgInterviewSimulation").then(m => ({ default: m.OrgInterviewSimulation })), { ssr: false })
+const OrgStudentResults = dynamic(() => import("@/components/org/OrgStudentResults").then(m => ({ default: m.OrgStudentResults })), { ssr: false })
+const OrgBrandingSettings = dynamic(() => import("@/components/org/OrgBrandingSettings").then(m => ({ default: m.OrgBrandingSettings })), { ssr: false })
+const OrgSchedulingCalendar = dynamic(() => import("@/components/org/OrgSchedulingCalendar"), { ssr: false })
+const CreateSlotDialog = dynamic(() => import("@/components/org/CreateSlotDialog"), { ssr: false })
+const EditSlotDialog = dynamic(() => import("@/components/org/EditSlotDialog"), { ssr: false })
 import type { InterviewSlotWithId } from "@/types/firestore"
 
 const menuItems = [
@@ -221,13 +223,8 @@ export function OrganizationDashboard() {
         {/* Company Branding Header */}
         <div className="flex items-center gap-4">
           {brandLogo && (
-            <div className="h-16 w-16 flex items-center justify-center overflow-hidden shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={brandLogo} 
-                alt={brandName} 
-                className="max-h-16 max-w-[64px] object-contain"
-              />
+            <div className="relative h-16 w-16 flex items-center justify-center overflow-hidden shrink-0">
+              <Image src={brandLogo} alt={brandName} fill sizes="64px" className="object-contain" />
             </div>
           )}
           <div>
@@ -504,15 +501,9 @@ export function OrganizationDashboard() {
                 <div>
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Company Identity</h3>
                   <div className="flex items-center gap-3">
-                    <div className="h-14 w-14 rounded-lg bg-white border shadow-sm overflow-hidden flex items-center justify-center shrink-0">
+                    <div className="relative h-14 w-14 rounded-lg bg-white border shadow-sm overflow-hidden flex items-center justify-center shrink-0">
                       {brandLogo ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img 
-                          src={brandLogo} 
-                          alt={brandName} 
-                          className="max-h-12 max-w-[52px] object-contain p-1.5"
-                          style={{ imageRendering: 'auto' }}
-                        />
+                        <Image src={brandLogo} alt={brandName} fill sizes="56px" className="object-contain p-1.5" />
                       ) : (
                         <span className="font-semibold text-lg" style={{ color: brandColor }}>
                           {brandName.slice(0,2).toUpperCase()}
@@ -746,15 +737,9 @@ export function OrganizationDashboard() {
       <Sidebar variant="inset" collapsible="icon" className="border-r bg-background">
         <SidebarHeader className="border-b px-4 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 shadow-sm border border-primary/20 shrink-0">
+            <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 shadow-sm border border-primary/20 shrink-0">
               {brandLogo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img 
-                  src={brandLogo} 
-                  alt={brandName} 
-                  className="max-h-10 max-w-[44px] object-contain"
-                  style={{ imageRendering: 'auto' }}
-                />
+                <Image src={brandLogo} alt={brandName} fill sizes="48px" className="object-contain" />
               ) : (
                 <span className="font-bold text-lg" style={{ color: brandColor }}>
                   {brandName.slice(0,2).toUpperCase()}

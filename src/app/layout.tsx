@@ -4,9 +4,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { ClientAuthProvider } from '@/components/ClientAuthProvider'
 import { Toaster } from '@/components/ui/sonner'
-import ConditionalHeader from '@/components/ConditionalHeader'
-import ConditionalFooter from '@/components/ConditionalFooter'
-import ScrollRevealProvider from '@/components/animations/ScrollRevealProvider'
+import ChromeSwitcher from '@/components/ChromeSwitcher'
 
 // ClientAuthProvider is a client component; importing it statically avoids first-load spinners
 
@@ -44,11 +42,10 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <ClientAuthProvider>
-          <ScrollRevealProvider />
-          <ConditionalHeader />
+          <ChromeSwitcher position="header" />
           {children}
         </ClientAuthProvider>
-        <ConditionalFooter />
+        <ChromeSwitcher position="footer" />
         <Toaster richColors />
       </body>
     </html>
