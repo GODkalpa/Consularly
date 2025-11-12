@@ -6,7 +6,7 @@ import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/fireb
 // Body: { quotaLimit?: number, quotaUsed?: number, plan?: string, settings?: {...} }
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await ensureFirebaseAdmin()
@@ -29,7 +29,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const orgId = params.id
+    const { id: orgId } = await params
     if (!orgId) {
       return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
     }
@@ -83,7 +83,7 @@ export async function PATCH(
 // Deletes an organization and all its related data. Admin only.
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await ensureFirebaseAdmin()
@@ -107,7 +107,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
     }
 
-    const orgId = params.id
+    const { id: orgId } = await params
     if (!orgId) {
       return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
     }

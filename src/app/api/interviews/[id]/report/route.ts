@@ -5,7 +5,7 @@ import { ensureFirebaseAdmin, adminAuth, adminDb } from '@/lib/firebase-admin'
 // Get complete interview report with finalReport, perAnswerScores, conversationHistory
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await ensureFirebaseAdmin()
@@ -18,7 +18,7 @@ export async function GET(
 
     const decoded = await adminAuth().verifyIdToken(token)
     const callerUid = decoded.uid
-    const interviewId = params.id
+    const { id: interviewId } = await params
 
     // Load caller profile
     const callerSnap = await adminDb().collection('users').doc(callerUid).get()

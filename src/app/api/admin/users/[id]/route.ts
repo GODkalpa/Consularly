@@ -6,7 +6,7 @@ import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/fireb
 // Body: { quotaLimit?: number, quotaUsed?: number, role?: 'user'|'admin', isActive?: boolean, displayName?: string }
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await ensureFirebaseAdmin()
@@ -29,7 +29,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const userId = params.id
+    const { id: userId } = await params
     if (!userId) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 })
     }
@@ -86,7 +86,7 @@ export async function PATCH(
 // Deletes a user from both Firebase Auth and Firestore. Admin-only.
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await ensureFirebaseAdmin()
@@ -109,7 +109,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const userId = params.id
+    const { id: userId } = await params
     if (!userId) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 })
     }

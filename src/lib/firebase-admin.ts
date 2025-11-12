@@ -57,17 +57,16 @@ function loadServiceAccountFromFile(): any | null {
   return null
 }
 
-export async function ensureFirebaseAdmin() {
-  if (getApps().length) {
-    // If default app exists but lacks projectId (broken ADC), re-create it cleanly
-    const existing = getApp()
-    const opts = existing?.options as any
-    if (!opts?.projectId) {
-      try { await deleteApp(existing) } catch { /* ignore */ }
-    } else {
-      app = (app as App) || existing
-      return
-    }
+export async function ensureFirebaseAdmin(): Promise<void> {
+  // Check if app already exists (handles hot reload in development)
+  const existingApps = getApps()
+  if (existingApps.length > 0) {
+    app = existingApps[0]
+    return
+  }
+  
+  if (app) {
+    return
   }
 
   const saFromEnv = loadServiceAccountFromEnv()
