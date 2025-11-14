@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 // Simplified DataTable component without heavy dependencies
 // This replaces the complex DataTable to eliminate bundle bloat
@@ -16,39 +15,6 @@ interface SimpleColumn<T> {
 interface SimpleDataTableProps<T> {
   columns: SimpleColumn<T>[]
   data: T[]
-}
-
-// Export the simple DataTable component
-export function DataTable<T>({ columns, data }: SimpleDataTableProps<T>) {
-  return (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {columns.map((column) => (
-              <TableHead key={column.id}>{column.header}</TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.map((item, index) => (
-            <TableRow key={index}>
-              {columns.map((column) => (
-                <TableCell key={column.id}>
-                  {column.cell 
-                    ? column.cell(item)
-                    : column.accessorKey 
-                    ? String(item[column.accessorKey])
-                    : ''
-                  }
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  )
 }
 
 // Temporarily disable the original complex implementation
@@ -71,6 +37,42 @@ import {
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
 import { toast } from "sonner"
 import { z } from "zod"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  MouseSensor,
+  TouchSensor,
+  type DragEndEvent,
+  type UniqueIdentifier,
+} from "@dnd-kit/core"
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers"
+import { CSS } from "@dnd-kit/utilities"
+import {
+  useReactTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
+  flexRender,
+  type ColumnDef,
+  type ColumnFiltersState,
+  type SortingState,
+  type VisibilityState,
+  type Row,
+} from "@tanstack/react-table"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Badge } from "@/components/ui/badge"
@@ -111,7 +113,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import {
-  Table,
+  Table as TableComponent,
   TableBody,
   TableCell,
   TableHead,
@@ -519,7 +521,7 @@ export function DataTable({
             sensors={sensors}
             id={sortableId}
           >
-            <Table>
+            <TableComponent>
               <TableHeader className="sticky top-0 z-10 bg-muted">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
@@ -559,7 +561,7 @@ export function DataTable({
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+            </TableComponent>
           </DndContext>
         </div>
         <div className="flex items-center justify-between px-4">

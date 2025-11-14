@@ -25,9 +25,11 @@ export default function SignInPage() {
   useEffect(() => {
     if (user && !profileLoading && !isLoading) {
       console.log('[SignIn useEffect] User detected, redirecting to dashboard')
-      redirectToDashboard()
+      redirectToDashboard().catch(err => {
+        console.error('[SignIn] Redirect failed:', err)
+      })
     }
-  }, [user, profileLoading, isLoading])
+  }, [user, profileLoading, isLoading, redirectToDashboard])
 
   // Check if email belongs to a student
   const checkIfStudent = async (email: string): Promise<boolean> => {

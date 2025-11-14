@@ -25,7 +25,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
-  redirectToDashboard: () => void;
+  redirectToDashboard: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,7 +43,7 @@ export function useAuth() {
       signIn: async () => { throw new Error('Auth not available on public pages') },
       signInWithGoogle: async () => { throw new Error('Auth not available on public pages') },
       logout: async () => { throw new Error('Auth not available on public pages') },
-      redirectToDashboard: () => { throw new Error('Auth not available on public pages') }
+      redirectToDashboard: async () => { throw new Error('Auth not available on public pages') }
     };
   }
   return context;
@@ -317,7 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const redirectToDashboard = () => {
+  const redirectToDashboard = async () => {
     if (!user) {
       console.log('❌ [redirectToDashboard] No user, cannot redirect');
       return;
@@ -329,24 +329,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    console.log('🎯 [redirectToDashboard] Routing user:', {
-      email: user.email,
-      isAdmin,
-      userProfile: userProfile,
-      orgId: (userProfile as any)?.orgId,
-      profileLoading
-    });
-    
-    // Route based on available information
-    if (isAdmin) {
-      console.log('👑 [redirectToDashboard] Admin user → /admin');
-      router.push('/admin');
-    } else if (userProfile?.orgId) {
-      console.log('🏢 [redirectToDashboard] Org user → /org');
-      router.push('/org');
-    } else {
-      console.log('🎓 [redirectToDashboard] Default to student → /student');
-      router.push('/student');
+    try {
+      console.log('🎯 [redirectToDashboard] Determining user type for:', user.email);
+      
+      const token = await user.getIdToken();
+      const response = await fetch('/api/auth/user-type', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!response.ok) {
+        console.error('❌ [redirectToDashboard] Failed to get user type:', response.status);
+        return;
+      }
+      
+      const data = await response.json();
+      console.log('📋 [redirectToDashboard] User type:', data.userType, '→', data.dashboard);
+      
+      if (data.dashboard && data.dashboard !== '/') {
+        console.log('✅ [redirectToDashboard] Redirecting to:', data.dashboard);
+        router.replace(data.dashboard);
+      } else {
+        console.log('⚠️ [redirectToDashboard] No dashboard found, staying on current page');
+      }
+    } catch (error) {
+      console.error('❌ [redirectToDashboard] Error:', error);
     }
   };
 
