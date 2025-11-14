@@ -98,8 +98,6 @@ const nextConfig = {
         hostname: 'html.tailus.io',
       },
     ],
-    // Add quality configuration for Next.js 16 compatibility
-    qualities: [50, 75, 80, 100],
   },
   webpack: (config, { isServer, dev }) => {
     // Fix face-api.js trying to use Node.js modules in browser
