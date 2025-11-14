@@ -114,7 +114,7 @@ export const HeroHeader = () => {
                                             variant="outline"
                                             size="sm"
                                         >
-                                            <Link href={isAdmin ? '/admin' : (userProfile?.orgId ? '/org' : '/dashboard')}>
+                                            <Link href={isAdmin ? '/admin' : (userProfile?.orgId ? '/org' : '/student')}>
                                                 <span className="flex items-center gap-2">
                                                     <LayoutDashboard className="size-4" />
                                                     Dashboard
@@ -141,14 +141,6 @@ export const HeroHeader = () => {
                                         >
                                             <Link href="/signin">
                                                 <span>Sign In</span>
-                                            </Link>
-                                        </Button>
-                                        <Button
-                                            asChild
-                                            size="sm"
-                                        >
-                                            <Link href="/signup">
-                                                <span>Sign Up</span>
                                             </Link>
                                         </Button>
                                     </>

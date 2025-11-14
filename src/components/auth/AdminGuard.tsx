@@ -13,16 +13,20 @@ interface AdminGuardProps {
 }
 
 export function AdminGuard({ children, fallback }: AdminGuardProps) {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading, profileLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
+    // Don't make routing decisions while auth or profile is loading
+    if (loading || profileLoading) return;
+    
+    if (!user) {
       router.push('/');
+      return;
     }
-  }, [user, loading, router]);
+  }, [user, loading, profileLoading, router]);
 
-  if (loading) {
+  if (loading || profileLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

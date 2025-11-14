@@ -21,8 +21,8 @@ interface AuthContextType {
   userProfile: any | null;
   isAdmin: boolean;
   loading: boolean;
+  profileLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   redirectToDashboard: () => void;
@@ -33,7 +33,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    // Return safe defaults for public pages where AuthProvider isn't loaded
+    return {
+      user: null,
+      userProfile: null,
+      isAdmin: false,
+      loading: false,
+      profileLoading: false,
+      signIn: async () => { throw new Error('Auth not available on public pages') },
+      signInWithGoogle: async () => { throw new Error('Auth not available on public pages') },
+      logout: async () => { throw new Error('Auth not available on public pages') },
+      redirectToDashboard: () => { throw new Error('Auth not available on public pages') }
+    };
   }
   return context;
 }
@@ -43,7 +54,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(false); // Changed to false to prevent hydration issues
+  const [profileLoading, setProfileLoading] = useState(false);
   const router = useRouter();
+  
+  // Check if we're on a public page where we can defer expensive operations
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const isPublicPage = ['/', '/about', '/pricing', '/contact'].includes(pathname);
+
+  const syncSessionCookie = async (user: User | null) => {
+    try {
+      if (user) {
+        const idToken = await user.getIdToken()
+        await fetch('/api/auth/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken })
+        })
+      } else {
+        await fetch('/api/auth/session', { method: 'DELETE' })
+      }
+    } catch (error) {
+      console.warn('[AuthContext] Failed to sync session cookie:', error)
+    }
+  }
 
   useEffect(() => {
     // If Firebase isn't configured, skip setting up auth listeners
@@ -63,14 +96,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(user);
 
       if (user) {
+        // Sync session cookie when user is authenticated
+        await syncSessionCookie(user);
         try {
+          console.log('🔄 [AuthContext] Starting profile fetch for:', user.email)
+          setProfileLoading(true);
           // Initial fetch to populate quickly
-          const [profile, adminStatus] = await Promise.all([
-            getUserProfile(user.uid),
-            isUserAdmin(user.uid)
-          ]);
+          let profile = await getUserProfile(user.uid);
+          
+          // If profile doesn't exist, create it (one-time fix for existing users)
+          if (!profile) {
+            console.log('🆕 [AuthContext] Profile missing, creating for existing user:', user.email);
+            await setDoc(doc(db, 'users', user.uid), {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName || user.email?.split('@')[0] || 'User',
+              photoURL: user.photoURL,
+              role: 'user', // Default role for new users
+              createdAt: new Date().toISOString(),
+              lastLoginAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              isActive: true,
+              preferences: {
+                theme: 'light',
+                notifications: true,
+                language: 'en'
+              }
+            });
+            // Fetch the newly created profile
+            profile = await getUserProfile(user.uid);
+          }
+          
+          const adminStatus = await isUserAdmin(user.uid);
+          console.log('📊 [AuthContext] Profile fetch complete:', { profile, adminStatus })
           setUserProfile(profile);
           setIsAdmin(adminStatus);
+          setProfileLoading(false);
 
           console.log('✅ User profile loaded:', profile);
           
@@ -90,18 +151,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const res = await fetch('/api/admin/stats/trends', { headers });
               return await res.json();
             }, { ttl: 10 * 60 * 1000 });
-          } else if (profile?.orgId) {
-            // Prefetch org dashboard data
+          } else if (profile?.orgId && !isPublicPage) {
+            // Only prefetch on auth-required pages to improve public page performance
             console.log('🚀 Prefetching org dashboard data...');
-            prefetch(`org_${profile.orgId}`, async () => {
-              const res = await fetch('/api/org/organization', { headers });
+            prefetch(`dashboard_${profile.orgId}`, async () => {
+              const res = await fetch('/api/org/dashboard', { headers });
               return await res.json();
-            }, { ttl: 5 * 60 * 1000 });
-            
-            prefetch(`stats_${profile.orgId}`, async () => {
-              const res = await fetch('/api/org/statistics', { headers });
-              return await res.json();
-            }, { ttl: 30 * 1000 });
+            }, { ttl: 60 * 1000 });
           }
 
           // Live subscribe to user profile to reflect role/org changes immediately
@@ -143,37 +199,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   console.error('[AuthContext] Failed to get auth token:', err);
                 });
               }
-
-              // Auto-redirect to profile setup if profile incomplete
-              // Skip for: admins (role=admin) and org members (users with orgId)
-              const needsProfileSetup = latest && 
-                !isAdminUser && 
-                !latest.orgId && 
-                !latest.studentProfile?.profileCompleted;
-              
-              if (needsProfileSetup) {
-                const currentPath = window.location.pathname;
-                const allowedPaths = ['/profile-setup', '/signin', '/signup', '/'];
-                
-                // Only redirect if not already on allowed paths
-                if (!allowedPaths.includes(currentPath)) {
-                  console.log('[AuthContext] Profile incomplete, redirecting to setup');
-                  router.push('/profile-setup');
-                }
-              }
             },
             (error) => {
               console.error('❌ Profile snapshot error:', error);
             }
           );
         } catch (error) {
-          console.error('Error loading user profile:', error);
+          console.error('❌ [AuthContext] Error loading user profile:', error);
           setUserProfile(null);
           setIsAdmin(false);
+          setProfileLoading(false);
         }
       } else {
+        console.log('👤 [AuthContext] No user, clearing profile state')
+        // Clear session cookie when user is signed out
+        await syncSessionCookie(null)
         setUserProfile(null);
         setIsAdmin(false);
+        setProfileLoading(false);
       }
     });
 
@@ -189,52 +232,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!firebaseEnabled) throw new Error('Authentication is not configured. Please contact support.');
       const result = await signInWithEmailAndPassword(auth, email, password);
-      // Redirect will be handled by the auth state change listener
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const signUp = async (email: string, password: string, displayName: string) => {
-    try {
-      if (!firebaseEnabled) throw new Error('Authentication is not configured. Please contact support.');
       
-      // Use server-side API to create user (bypasses Firestore security rules)
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          displayName,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create account');
+      // Check if user document exists, if not create it (same as Google sign-in)
+      const userDoc = await getDoc(doc(db, 'users', result.user.uid));
+      if (!userDoc.exists()) {
+        console.log('🆕 [signIn] Creating user profile for:', result.user.email);
+        await setDoc(doc(db, 'users', result.user.uid), {
+          uid: result.user.uid,
+          email: result.user.email,
+          displayName: result.user.displayName || result.user.email?.split('@')[0] || 'User',
+          photoURL: result.user.photoURL,
+          role: 'user', // Default role for new users
+          createdAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isActive: true,
+          preferences: {
+            theme: 'light',
+            notifications: true,
+            language: 'en'
+          }
+        });
+      } else {
+        // Update last login time
+        await setDoc(doc(db, 'users', result.user.uid), {
+          lastLoginAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
       }
-
-      // Now sign in the user with the credentials
-      await signInWithEmailAndPassword(auth, email, password);
-
-      // Send welcome email (non-blocking)
-      sendWelcomeEmail({
-        to: email,
-        displayName: displayName,
-        userId: data.uid,
-      }).catch((e) => {
-        console.warn('[AuthContext] Welcome email failed:', e);
-      });
-
+      
       // Redirect will be handled by the auth state change listener
     } catch (error) {
       throw error;
     }
   };
+
 
   const signInWithGoogle = async () => {
     try {
@@ -277,6 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       if (!firebaseEnabled) return;
+      await syncSessionCookie(null)
       await signOut(auth);
       router.push('/'); // Redirect to home after logout
     } catch (error) {
@@ -285,16 +318,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const redirectToDashboard = () => {
-    if (!user || !userProfile) return;
+    if (!user) {
+      console.log('❌ [redirectToDashboard] No user, cannot redirect');
+      return;
+    }
     
-    // Redirect based on user role
-    if (userProfile.role === 'admin') {
+    // Wait for profile to load before making routing decisions
+    if (profileLoading) {
+      console.log('⏳ [redirectToDashboard] Profile still loading, waiting...');
+      return;
+    }
+    
+    console.log('🎯 [redirectToDashboard] Routing user:', {
+      email: user.email,
+      isAdmin,
+      userProfile: userProfile,
+      orgId: (userProfile as any)?.orgId,
+      profileLoading
+    });
+    
+    // Route based on available information
+    if (isAdmin) {
+      console.log('👑 [redirectToDashboard] Admin user → /admin');
       router.push('/admin');
-    } else if ((userProfile as any).orgId) {
+    } else if (userProfile?.orgId) {
+      console.log('🏢 [redirectToDashboard] Org user → /org');
       router.push('/org');
     } else {
-      // Regular users go to their dashboard
-      router.push('/dashboard');
+      console.log('🎓 [redirectToDashboard] Default to student → /student');
+      router.push('/student');
     }
   };
 
@@ -303,8 +355,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userProfile,
     isAdmin,
     loading,
+    profileLoading,
     signIn,
-    signUp,
     signInWithGoogle,
     logout,
     redirectToDashboard

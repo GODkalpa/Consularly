@@ -14,7 +14,8 @@ import {
   Mic,
   Search,
   Home,
-  Loader2
+  Loader2,
+  LogOut
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -40,6 +41,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
+import { useAuth } from "@/contexts/AuthContext"
 
 // Lazy load all admin components to improve initial load time
 const UserManagement = lazy(() => import("./UserManagement").then(m => ({ default: m.UserManagement })))
@@ -122,6 +124,7 @@ const groupedMenu: { label: string; ids: Array<(typeof menuItems)[number]["id"]>
 const SUPPORT_BADGE_COUNT = 3
 
 export function AdminDashboard() {
+  const { logout } = useAuth()
   const [activeSection, setActiveSection] = useState("overview")
 
   const activeTitle = useMemo(
@@ -134,21 +137,53 @@ export function AdminDashboard() {
       case "overview":
         return <DashboardOverview />
       case "users":
-        return <UserManagement />
+        return (
+          <Suspense fallback={<ComponentLoader />}>
+            <UserManagement />
+          </Suspense>
+        )
       case "organizations":
-        return <OrganizationManagement />
+        return (
+          <Suspense fallback={<ComponentLoader />}>
+            <OrganizationManagement />
+          </Suspense>
+        )
       case "quotas":
-        return <QuotaManagement />
+        return (
+          <Suspense fallback={<ComponentLoader />}>
+            <QuotaManagement />
+          </Suspense>
+        )
       case "analytics":
-        return <PlatformAnalytics />
+        return (
+          <Suspense fallback={<ComponentLoader />}>
+            <PlatformAnalytics />
+          </Suspense>
+        )
       case "billing":
-        return <BillingManagement />
+        return (
+          <Suspense fallback={<ComponentLoader />}>
+            <BillingManagement />
+          </Suspense>
+        )
       case "settings":
-        return <GlobalSettings />
+        return (
+          <Suspense fallback={<ComponentLoader />}>
+            <GlobalSettings />
+          </Suspense>
+        )
       case "support":
-        return <SupportCenter />
+        return (
+          <Suspense fallback={<ComponentLoader />}>
+            <SupportCenter />
+          </Suspense>
+        )
       case "interview":
-        return <InterviewSimulation />
+        return (
+          <Suspense fallback={<ComponentLoader />}>
+            <InterviewSimulation />
+          </Suspense>
+        )
       default:
         return <DashboardOverview />
     }
@@ -235,11 +270,15 @@ export function AdminDashboard() {
             </Breadcrumb>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
-              <Link href="/">
+            <Link href="/?from=dashboard">
+              <Button variant="outline" size="sm" className="hidden sm:inline-flex">
                 <Home className="h-4 w-4 mr-2" />
-                Back to website
-              </Link>
+                Back to Website
+              </Button>
+            </Link>
+            <Button onClick={logout} variant="outline" size="sm" className="hidden sm:inline-flex">
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
             </Button>
             <div className="relative hidden md:block">
               <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -269,9 +308,7 @@ export function AdminDashboard() {
         </header>
 
         <main className="flex-1 overflow-auto p-4 md:p-6">
-          <Suspense fallback={<ComponentLoader />}>
-            {renderContent()}
-          </Suspense>
+          {renderContent()}
         </main>
       </SidebarInset>
     </SidebarProvider>

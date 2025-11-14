@@ -31,6 +31,10 @@ export type OrgStudent = {
   interviewCountry?: 'usa' | 'uk' | 'france'
   lastActive?: Date
   interviewsCompleted?: number
+  // Credit system fields
+  creditsAllocated?: number
+  creditsUsed?: number
+  creditsRemaining?: number
   studentProfile?: {
     degreeLevel?: DegreeLevel
     programName?: string
@@ -120,6 +124,10 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
             interviewCountry: s.interviewCountry,
             lastActive: s.lastActive ? new Date(s.lastActive) : undefined,
             interviewsCompleted: s.interviewsCompleted ?? 0,
+            // Credit system fields
+            creditsAllocated: s.creditsAllocated || 0,
+            creditsUsed: s.creditsUsed || 0,
+            creditsRemaining: s.creditsRemaining || 0,
             studentProfile: s.studentProfile,
           })) as OrgStudent[]
         },
@@ -488,7 +496,11 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                       const payload: any = {
                         name: newName.trim(), 
                         email: newEmail.trim(),
-                        interviewCountry: newCountry
+                        interviewCountry: newCountry,
+                        sendInvitation: true,  // Always send invitation email
+                        initialCredits: 5,     // Default initial credits
+                        dashboardEnabled: true,
+                        canSelfStartInterviews: true
                       }
                       
                       // Only include profile for USA
@@ -552,8 +564,9 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                 <TableRow className="bg-gray-50 hover:bg-gray-50">
                   <TableHead className="font-semibold text-xs uppercase text-gray-600">Student</TableHead>
                   <TableHead className="font-semibold text-xs uppercase text-gray-600">Email</TableHead>
+                  <TableHead className="font-semibold text-xs uppercase text-gray-600">Country</TableHead>
+                  <TableHead className="font-semibold text-xs uppercase text-gray-600">Credits</TableHead>
                   <TableHead className="font-semibold text-xs uppercase text-gray-600">Completed</TableHead>
-                  <TableHead className="font-semibold text-xs uppercase text-gray-600">Last Active</TableHead>
                   <TableHead className="font-semibold text-xs uppercase text-gray-600">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -573,9 +586,23 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{s.email || '-'}</TableCell>
                     <TableCell>
+                      <Badge variant="outline" className="rounded-full px-2 py-1 text-xs">
+                        {s.interviewCountry?.toUpperCase() || 'Not Set'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-blue-600">
+                          {s.creditsRemaining || 0}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          / {s.creditsAllocated || 0}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
                       <Badge variant="secondary" className="rounded-full px-3">{s.interviewsCompleted ?? 0}</Badge>
                     </TableCell>
-                    <TableCell>{s.lastActive ? new Date(s.lastActive).toLocaleDateString() : '-'}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openViewDialog(s)}>

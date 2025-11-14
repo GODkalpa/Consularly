@@ -61,91 +61,106 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Fetch interviews for each student
-    const results = await Promise.all(
-      targetStudents.map(async (student) => {
-        try {
-          let query = adminDb()
-            .collection('interviews')
-            .where('orgId', '==', orgId)
-            .where('userId', '==', student.id)
+    // OPTIMIZED: Single query for all interviews, then group by student
+    const fetchStart = Date.now()
+    
+    let interviewsQuery = adminDb()
+      .collection('interviews')
+      .where('orgId', '==', orgId)
 
-          // Apply route filter
-          if (routeFilter && routeFilter !== 'all') {
-            query = query.where('route', '==', routeFilter) as any
-          }
+    // Apply route filter to main query
+    if (routeFilter && routeFilter !== 'all') {
+      interviewsQuery = interviewsQuery.where('route', '==', routeFilter)
+    }
 
-          const interviewsSnap = await query.get()
+    // Apply time filter if possible at query level
+    if (cutoffDate) {
+      interviewsQuery = interviewsQuery.where('startTime', '>=', cutoffDate)
+    }
 
-          const interviews = interviewsSnap.docs
-            .map((d) => {
-              const data = d.data()
-              const startTime = data?.startTime?.toDate?.() ?? null
-              const endTime = data?.endTime?.toDate?.() ?? null
+    // Fetch all interviews in a single query
+    const allInterviewsSnap = await interviewsQuery.get()
+    
+    const fetchTime = Date.now() - fetchStart
+    console.log(`[Results API] ✅ Fetched ${allInterviewsSnap.docs.length} interviews in ${fetchTime}ms`)
 
-              // Apply time filter in memory (since we can't combine multiple where clauses efficiently)
-              if (cutoffDate && startTime && startTime < cutoffDate) {
-                return null
-              }
+    // Group interviews by student ID
+    const interviewsByStudent = new Map<string, any[]>()
+    
+    allInterviewsSnap.docs.forEach((doc) => {
+      const data = doc.data()
+      const userId = data.userId
+      const startTime = data?.startTime?.toDate?.() ?? null
+      const endTime = data?.endTime?.toDate?.() ?? null
 
-              return {
-                id: d.id,
-                status: data?.status || 'unknown',
-                score: typeof data?.score === 'number' ? Math.round(data.score) : null,
-                route: data?.route || null,
-                startTime: startTime ? startTime.toISOString() : null,
-                endTime: endTime ? endTime.toISOString() : null,
-                finalReport: data?.finalReport || null,
-                duration: data?.duration || null,
-              }
-            })
-            .filter((iv) => iv !== null)
-            .sort((a, b) => {
-              const aTime = a?.startTime ? new Date(a.startTime).getTime() : 0
-              const bTime = b?.startTime ? new Date(b.startTime).getTime() : 0
-              return bTime - aTime // Most recent first
-            })
+      // Skip if no userId or doesn't match filter
+      if (!userId) return
+      
+      // Apply additional time filtering if needed
+      if (cutoffDate && startTime && startTime < cutoffDate) return
 
-          // Calculate stats for this student
-          const completedInterviews = interviews.filter((iv) => iv.status === 'completed')
-          const scores = completedInterviews
-            .map((iv) => iv.score)
-            .filter((s): s is number => typeof s === 'number')
-          const avgScore = scores.length > 0
-            ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
-            : null
-          const latestScore = scores.length > 0 ? scores[0] : null
+      const interview = {
+        id: doc.id,
+        status: data?.status || 'unknown',
+        score: typeof data?.score === 'number' ? Math.round(data.score) : null,
+        route: data?.route || null,
+        startTime: startTime ? startTime.toISOString() : null,
+        endTime: endTime ? endTime.toISOString() : null,
+        finalReport: data?.finalReport || null,
+        duration: data?.duration || null,
+      }
 
-          return {
-            student,
-            interviews,
-            stats: {
-              totalInterviews: interviews.length,
-              completedInterviews: completedInterviews.length,
-              averageScore: avgScore,
-              latestScore,
-            },
-          }
-        } catch (err) {
-          console.error(`Error fetching interviews for student ${student.id}:`, err)
-          return {
-            student,
-            interviews: [],
-            stats: {
-              totalInterviews: 0,
-              completedInterviews: 0,
-              averageScore: null,
-              latestScore: null,
-            },
-          }
-        }
+      if (!interviewsByStudent.has(userId)) {
+        interviewsByStudent.set(userId, [])
+      }
+      interviewsByStudent.get(userId)!.push(interview)
+    })
+
+    // Process results for each student
+    const results = targetStudents.map((student) => {
+      const interviews = interviewsByStudent.get(student.id) || []
+      
+      // Sort interviews by date (most recent first)
+      interviews.sort((a, b) => {
+        const aTime = a?.startTime ? new Date(a.startTime).getTime() : 0
+        const bTime = b?.startTime ? new Date(b.startTime).getTime() : 0
+        return bTime - aTime
       })
-    )
+
+      // Calculate stats for this student
+      const completedInterviews = interviews.filter((iv) => iv.status === 'completed')
+      const scores = completedInterviews
+        .map((iv) => iv.score)
+        .filter((s): s is number => typeof s === 'number')
+      const avgScore = scores.length > 0
+        ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
+        : null
+      const latestScore = scores.length > 0 ? scores[0] : null
+
+      return {
+        student,
+        interviews,
+        stats: {
+          totalInterviews: interviews.length,
+          completedInterviews: completedInterviews.length,
+          averageScore: avgScore,
+          latestScore,
+        },
+      }
+    })
 
     // Sort by total interviews (most active first)
     results.sort((a, b) => b.stats.totalInterviews - a.stats.totalInterviews)
 
-    return NextResponse.json({ results })
+    const totalTime = Date.now() - fetchStart
+    console.log(`[Results API] ✅ Total request completed in ${totalTime}ms`)
+
+    const response = NextResponse.json({ results })
+    
+    // Add aggressive caching headers - cache for 2 minutes, allow stale data for 5 minutes while revalidating
+    response.headers.set('Cache-Control', 'private, max-age=120, stale-while-revalidate=300')
+    
+    return response
   } catch (e: any) {
     console.error('[api/org/results] GET error', e)
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })

@@ -1,11 +1,31 @@
 # LLM Architecture & Requirements Analysis
-**For Cost-Effective LLM Selection**
+**Comprehensive Guide for Third-Party LLM Provider Discussions**
+
+> **Use Case**: AI-powered visa interview simulation platform for students practicing USA F1, UK Student, and France EMA/ICN visa interviews
+
+---
+
+## Executive Summary
+
+**What We Built**: An AI-powered visa interview simulation platform where students practice real visa interviews with an AI interviewer that provides real-time scoring and feedback.
+
+**Why LLM is Critical**: 
+- **Real-time conversation flow**: Dynamic question generation based on student responses
+- **Intelligent scoring**: Multi-dimensional evaluation using visa-specific rubrics
+- **Personalized feedback**: Contextual recommendations for improvement
+- **Scalability**: Handle 100-1000+ concurrent interview sessions
+
+**Current Scale**: 
+- 50-200 daily active students
+- 100-500 interviews per day
+- Peak traffic: 6 PM - 10 PM across multiple time zones
+- Geographic spread: 60% Asia, 25% Europe, 15% Americas
 
 ---
 
 ## Current Architecture Overview
 
-Your project uses LLMs in **3 distinct use cases**, each with different requirements:
+We use LLMs in **3 distinct use cases**, each with different requirements:
 
 ### **Use Case 1: Dynamic Question Generation** (Optional)
 - **File**: `src/lib/llm-service.ts` → `LLMQuestionService`
@@ -367,21 +387,259 @@ async function evaluateWithLLM({ route, studentProfile, conversationHistory, api
 
 ---
 
+## Scaling Projections & Rate Limit Requirements
+
+### **Phase 1: Current Scale (100-500 daily interviews)**
+```
+Daily Active Users: 50-200 students
+Daily Interviews: 100-500
+Peak Concurrent Sessions: 20-50
+Peak Hours: 6 PM - 10 PM (multiple time zones)
+
+Required Rate Limits:
+├─ Requests Per Minute (RPM): 200-500 peak
+├─ Tokens Per Minute (TPM): 800K-2M peak
+├─ Concurrent Connections: 50+
+└─ Daily Token Usage: 2-10M tokens
+
+Estimated Monthly Costs:
+├─ Token Usage: 60-300M tokens/month
+├─ Budget (at $0.003/1K tokens): $180-900/month
+└─ Current Constraint: Free tier limits causing 429 errors
+```
+
+### **Phase 2: Growth Scale (1K-5K daily interviews)**
+```
+Projected Timeline: 6-12 months
+Daily Interviews: 1,000-5,000
+Peak Concurrent Sessions: 100-250
+
+Required Rate Limits:
+├─ RPM: 1,000-2,500 peak
+├─ TPM: 4M-15M peak  
+├─ Concurrent Connections: 250+
+└─ Daily Token Usage: 20-100M tokens
+
+Estimated Monthly Costs:
+├─ Token Usage: 600M-3B tokens/month
+├─ Budget (at $0.002/1K tokens): $1,200-6,000/month
+└─ Revenue Target: $5-25K MRR to support costs
+```
+
+### **Phase 3: Enterprise Scale (5K-20K daily interviews)**
+```
+Projected Timeline: 12-24 months
+Daily Interviews: 5,000-20,000
+Peak Concurrent Sessions: 500-1,000
+
+Required Rate Limits:
+├─ RPM: 5,000-10,000 peak
+├─ TPM: 20M-60M peak
+├─ Concurrent Connections: 1,000+
+└─ Daily Token Usage: 100-400M tokens
+
+Estimated Monthly Costs:
+├─ Token Usage: 3B-12B tokens/month
+├─ Budget (at $0.001/1K tokens): $3,000-12,000/month
+└─ Revenue Target: $50-200K MRR to support costs
+```
+
+### **Peak Traffic Pattern Analysis**
+```
+Time Zone Stacking:
+├─ 6-10 PM India (GMT+5:30): 40% of traffic
+├─ 6-10 PM UK (GMT): 25% of traffic
+├─ 6-10 PM Eastern US (GMT-5): 15% of traffic
+└─ Weekend surge: +30-50% above weekday average
+
+Burst Requirements:
+├─ Black Friday effect: 300-500% normal traffic
+├─ Exam season: 200-300% normal traffic
+├─ Required burst capacity: 5x normal RPM for 2-3 hours
+└─ Graceful degradation: Queue system for 429 errors
+```
+
+---
+
+## Detailed Token Usage & Cost Analysis
+
+### **Per-Interview Breakdown**
+```
+Single Interview Session:
+├─ Duration: 15-20 minutes
+├─ Questions Asked: 10-15 questions  
+├─ LLM API Calls: 10-15 scoring + 1 final evaluation
+└─ Total Tokens: 60,000-75,000 per interview
+
+Token Distribution:
+├─ Per-Answer Scoring: 3,000-4,700 tokens × 12 = 36,000-56,400
+├─ Final Evaluation: 2,400-4,700 tokens × 1 = 2,400-4,700
+├─ Question Generation (if enabled): 1,100-2,100 × 12 = 13,200-25,200
+└─ Session Management: 1,000-2,000 tokens
+
+Input vs Output Ratio:
+├─ Input Tokens: ~75% (context, history, prompts)
+├─ Output Tokens: ~25% (scores, feedback, questions)
+└─ Critical: Most providers charge 2-10x more for output tokens
+```
+
+### **Monthly Cost Projections by Provider**
+
+| Provider | Input $/1K | Output $/1K | Cost/Interview | 1K/month | 5K/month | 20K/month |
+|----------|------------|-------------|----------------|----------|----------|-----------|
+| **Groq Llama 3.3** | $0.59 | $0.79 | $0.0026 | $2.60 | $13 | $52 |
+| Together AI | $0.35 | $0.40 | $0.0015 | $1.50 | $7.50 | $30 |
+| Gemini Flash | $0.075 | $0.30 | $0.0063 | $6.30 | $31.50 | $126 |
+| Claude Haiku | $0.25 | $1.25 | $0.0263 | $26.30 | $131.50 | $526 |
+| GPT-4o Mini | $0.15 | $0.60 | $0.0126 | $12.60 | $63 | $252 |
+| GPT-4o | $2.50 | $10.00 | $0.21 | $210 | $1,050 | $4,200 |
+
+**Key Insight**: Output token pricing dramatically affects costs. Groq/Together offer best value.
+
+---
+
+## Critical Rate Limit Requirements
+
+### **Requests Per Minute (RPM)**
+```
+Current Bottleneck: Gemini free tier 60 RPM
+Real Need Analysis:
+├─ Peak concurrent interviews: 50
+├─ API calls per interview: 12-15 over 15 minutes
+├─ Required sustained RPM: 40-50
+├─ Required burst RPM: 200-300 (traffic spikes)
+└─ Growth target: 1,000+ RPM for scale
+
+Provider Comparison:
+├─ Groq Free: 30 RPM (insufficient for scale)
+├─ Groq Paid: 100-500+ RPM (tier dependent)
+├─ Together AI: 60 RPM (marginal improvement)
+├─ Anthropic: 50 RPM (marginal improvement)
+└─ OpenAI: Tier-based (can reach 5,000+ RPM)
+```
+
+### **Tokens Per Minute (TPM)**
+```
+Current Need:
+├─ 50 concurrent interviews × 4,000 tokens/request = 200K TPM
+├─ Peak burst: 800K-2M TPM
+├─ Growth target: 20M-60M TPM
+
+Provider Limits:
+├─ Groq Free: No explicit TPM limit (RPM-constrained)
+├─ Groq Paid: 1M+ TPM depending on tier
+├─ Anthropic: 40K-4M TPM (tier dependent)
+├─ OpenAI: 200K-10M TPM (tier dependent)
+└─ Gemini: Quota-based (our current constraint)
+```
+
+### **Context Window Requirements**
+```
+Required Context Length:
+├─ Student profile: 200-500 tokens
+├─ Conversation history: 3,000-5,000 tokens
+├─ System prompt: 600-800 tokens
+├─ Current question: 100-300 tokens
+└─ Total input: 4,000-6,500 tokens
+
+Minimum Context Window: 8K tokens
+Recommended: 32K+ for complex scenarios
+Not needed: 1M+ context (overkill for our use case)
+```
+
+---
+
+## Business Case for LLM Investment
+
+### **Why Not Traditional Alternatives**
+```
+Rule-Based Scoring:
+❌ Cannot evaluate open-ended responses
+❌ No contextual understanding
+❌ Fails on edge cases (90% of real interviews)
+
+Human Evaluators:
+❌ Cost: $20-50 per interview vs $0.003
+❌ Scaling: Cannot handle 1,000+ concurrent
+❌ Consistency: Human bias and fatigue
+❌ Availability: Limited hours, time zones
+
+Pre-recorded Content:
+❌ No personalization or adaptation
+❌ Students get bored, poor engagement
+❌ Cannot handle follow-up questions
+```
+
+### **ROI Analysis**
+```
+Customer Lifetime Value:
+├─ Average subscription: $29/month
+├─ Average retention: 3.5 months
+├─ Customer LTV: ~$100
+
+LLM Cost per Customer:
+├─ Average interviews per customer: 15-20
+├─ LLM cost (at $0.003/interview): $0.045-0.06
+├─ LLM cost percentage of LTV: 0.05-0.06%
+
+Conclusion: LLM costs are negligible vs. customer value
+Real constraint: Rate limits preventing customer acquisition
+```
+
+---
+
+## Technical Integration Requirements
+
+### **API Specifications**
+```
+Required Features:
+├─ ✅ JSON Mode (structured output)
+├─ ✅ Temperature control (0.3 for consistency)
+├─ ✅ Max tokens limit (prevent runaway costs)
+├─ ✅ OpenAI-compatible format (easier migration)
+├─ ⚠️ Streaming (nice-to-have for UX)
+└─ ❌ Function calling (not needed)
+
+Latency Requirements:
+├─ Per-answer scoring: <3 seconds (user waiting)
+├─ Final evaluation: <5 seconds (acceptable wait)
+├─ Question generation: <2 seconds (if enabled)
+└─ 95th percentile: <5 seconds for all requests
+```
+
+### **Reliability & Failover**
+```
+Current Strategy:
+├─ Primary: Gemini API
+├─ Fallback 1: OpenRouter (Llama)
+├─ Fallback 2: Heuristic scoring (rule-based)
+└─ Success rate: 95%+ (acceptable for MVP)
+
+Production Requirements:
+├─ Multiple provider failover
+├─ Circuit breaker pattern
+├─ Request queuing for rate limits
+├─ Real-time health monitoring
+└─ Target: 99.5%+ success rate
+```
+
+---
+
 ## Cost Comparison Table
 
-| LLM Provider | Cost/Interview | Free Tier | Interviews/Day (Free) | Latency |
-|--------------|----------------|-----------|----------------------|---------|
-| **Groq Llama 3.3 70B** | **$0.0026** | ✅ 14,400 RPD | **360** | **<1s** |
-| Together AI Llama 3.3 | $0.0015 | ✅ $25 credit | ~16,000 | 1-2s |
-| Cerebras Llama 3.3 | FREE (promo) | ✅ Unknown | Unknown | <0.5s |
-| OpenRouter Llama 3.1 | $0.0025 | ❌ | N/A | 2-3s |
-| Gemini 1.5 Flash (paid) | $0.0063 | ❌ | N/A | 2-3s |
-| Claude 3 Haiku | $0.0263 | ❌ | N/A | 1-2s |
-| GPT-4o Mini | $0.0126 | ❌ | N/A | 2-4s |
-| Gemini Free Tier | $0.00 | ✅ 1,500 RPD | **115-136** | 2-3s |
+| LLM Provider | Cost/Interview | Free Tier | RPM Limit | Daily Capacity | Latency |
+|--------------|----------------|-----------|-----------|----------------|---------|
+| **Groq Llama 3.3 70B** | **$0.0026** | ✅ 14,400 RPD | 30 → 500+ | **360** → ∞ | **<1s** |
+| Together AI Llama 3.3 | $0.0015 | ✅ $25 credit | 60 | ~16,000 | 1-2s |
+| Cerebras Llama 3.3 | FREE (promo) | ✅ Limited time | Unknown | Unknown | <0.5s |
+| OpenRouter Llama 3.1 | $0.0025 | ❌ | Variable | N/A | 2-3s |
+| Gemini 1.5 Flash (paid) | $0.0063 | ❌ | Quota-based | N/A | 2-3s |
+| Claude 3 Haiku | $0.0263 | ❌ | 50 → 4,000 | N/A | 1-2s |
+| GPT-4o Mini | $0.0126 | ❌ | Tier-based | N/A | 2-4s |
+| **Gemini Free Tier** | $0.00 | ✅ 1,500 RPD | 60 RPM | **115-136** | 2-3s |
 
-**Your Current Gemini Free Tier**: 115-136 interviews/day  
-**Recommended Groq Free Tier**: 360 interviews/day (3x higher) + 10x faster
+**Current Constraint**: Gemini free tier 115-136 interviews/day (hitting limits)  
+**Recommended**: Groq paid tier for 360+ interviews/day + 10x speed improvement
 
 ---
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb } from '@/lib/firebase-admin'
+import { logStep } from '@/lib/api-performance'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -8,8 +9,13 @@ export const runtime = 'nodejs'
 export async function GET(req: NextRequest) {
   try {
     const startTime = Date.now()
+    console.log(`[Dashboard API] 🚀 Starting dashboard request...`)
+    
+    const firebaseStep = logStep('Firebase Admin Initialization', startTime)
     await ensureFirebaseAdmin()
+    firebaseStep.end()
 
+    const authStep = logStep('Authentication', Date.now())
     const authHeader = req.headers.get('authorization') || ''
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
     if (!token) {
@@ -18,15 +24,19 @@ export async function GET(req: NextRequest) {
 
     const decoded = await adminAuth().verifyIdToken(token)
     const callerUid = decoded.uid
+    authStep.end('Token verified')
 
+    const userStep = logStep('User Profile Fetch', Date.now())
     const callerSnap = await adminDb().collection('users').doc(callerUid).get()
     if (!callerSnap.exists) return NextResponse.json({ error: 'Caller profile not found' }, { status: 403 })
 
     const caller = callerSnap.data() as { orgId?: string } | undefined
     const orgId = caller?.orgId || ''
     if (!orgId) return NextResponse.json({ error: 'Forbidden: no organization' }, { status: 403 })
+    userStep.end(`Found orgId: ${orgId}`)
 
     // OPTIMIZED: Fetch ALL dashboard data in parallel
+    const queryStep = logStep('Database Queries', Date.now())
     const [
       orgSnap,
       studentsSnapshot, 
@@ -71,6 +81,7 @@ export async function GET(req: NextRequest) {
         .limit(20) // Reduced from 50
         .get(),
     ])
+    queryStep.end(`6 parallel queries completed`)
 
     if (!orgSnap.exists) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
@@ -146,6 +157,7 @@ export async function GET(req: NextRequest) {
     console.log(`[Dashboard API] ✅ Combined fetch completed in ${queryTime}ms for org: ${orgId}`)
 
     // Build combined response
+    const responseStep = logStep('Response Building', Date.now())
     const organization = {
       id: orgSnap.id,
       name: orgData.name ?? '',
@@ -190,9 +202,13 @@ export async function GET(req: NextRequest) {
       organization, 
       statistics 
     })
+    responseStep.end('Combined response built')
     
-    // Aggressive caching - 60s cache, 120s stale-while-revalidate
+    // Add aggressive caching headers
     response.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+    
+    const totalTime = Date.now() - startTime
+    console.log(`[Dashboard API] 🎯 TOTAL REQUEST TIME: ${totalTime}ms`)
     
     return response
   } catch (e: any) {

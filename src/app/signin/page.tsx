@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { auth } from '@/lib/firebase'
+import { signInWithEmailAndPassword } from 'firebase/auth'
 
 export default function SignInPage() {
   const [email, setEmail] = useState('')
@@ -16,8 +18,30 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   
-  const { signIn, signInWithGoogle } = useAuth()
+  const { user, profileLoading, signIn: adminSignIn, signInWithGoogle, redirectToDashboard } = useAuth()
   const router = useRouter()
+
+  // If already signed in (or becomes signed in), send user to the correct dashboard
+  useEffect(() => {
+    if (user && !profileLoading && !isLoading) {
+      console.log('[SignIn useEffect] User detected, redirecting to dashboard')
+      redirectToDashboard()
+    }
+  }, [user, profileLoading, isLoading])
+
+  // Check if email belongs to a student
+  const checkIfStudent = async (email: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/student/check-email?email=${encodeURIComponent(email)}`)
+      if (response.ok) {
+        const data = await response.json()
+        return data.isStudent || false
+      }
+      return false
+    } catch {
+      return false
+    }
+  }
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,10 +49,48 @@ export default function SignInPage() {
     setError('')
 
     try {
-      await signIn(email, password)
-      router.push('/')
+      // First, check if this is a student email
+      const isStudent = await checkIfStudent(email)
+      
+      if (isStudent) {
+        // Use Firebase auth directly for students
+        console.log('[SignIn] Detected student email, signing in with Firebase')
+        const userCredential = await signInWithEmailAndPassword(auth, email, password)
+        
+        // Set session cookie immediately before redirecting
+        const idToken = await userCredential.user.getIdToken()
+        console.log('[SignIn] Setting session cookie for student...')
+        const response = await fetch('/api/auth/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken })
+        })
+        const result = await response.json()
+        console.log('[SignIn] Session cookie response:', result)
+        
+        // Wait a bit to ensure cookie is set
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Now redirect to student dashboard
+        console.log('[SignIn] Redirecting to /student')
+        router.push('/student')
+      } else {
+        // Use regular admin/org authentication
+        console.log('[SignIn] Using admin/org auth')
+        await adminSignIn(email, password)
+        redirectToDashboard()
+      }
     } catch (error: any) {
-      setError(error.message || 'Failed to sign in')
+      console.error('[SignIn] Error:', error)
+      
+      // Better error messages
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        setError('Invalid email or password. Please check your credentials.')
+      } else if (error.code === 'auth/too-many-requests') {
+        setError('Too many login attempts. Please try again later.')
+      } else {
+        setError(error.message || 'Failed to sign in. Please check your credentials.')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -40,7 +102,7 @@ export default function SignInPage() {
 
     try {
       await signInWithGoogle()
-      router.push('/')
+      redirectToDashboard()
     } catch (error: any) {
       setError(error.message || 'Failed to sign in with Google')
     } finally {
@@ -55,7 +117,7 @@ export default function SignInPage() {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center">Sign in</CardTitle>
             <CardDescription className="text-center">
-              You don&apos;t have administrator privileges to access this page. Enter your email and password to access your account
+              Sign in to access your dashboard
             </CardDescription>
           </CardHeader>
         <CardContent className="space-y-4">
@@ -133,12 +195,6 @@ export default function SignInPage() {
           </form>
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">
-          <div className="text-sm text-center text-muted-foreground">
-            Don&apos;t have an account?{' '}
-            <Link href="/signup" className="text-secondary hover:text-primary hover:underline font-medium">
-              Sign up
-            </Link>
-          </div>
           <div className="text-sm text-center">
             <Link href="/forgot-password" className="text-secondary hover:text-primary hover:underline">
               Forgot your password?

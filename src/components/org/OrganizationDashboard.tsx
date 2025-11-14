@@ -38,19 +38,26 @@ import {
   PlayCircle,
   Calendar,
   CheckCircle,
+  CreditCard,
+  LogOut,
 } from "lucide-react"
 const OrgStudentManagement = dynamic(() => import("@/components/org/OrgStudentManagement").then(m => ({ default: m.OrgStudentManagement })), { ssr: false })
 const OrgInterviewSimulation = dynamic(() => import("@/components/org/OrgInterviewSimulation").then(m => ({ default: m.OrgInterviewSimulation })), { ssr: false })
 const OrgStudentResults = dynamic(() => import("@/components/org/OrgStudentResults").then(m => ({ default: m.OrgStudentResults })), { ssr: false })
 const OrgBrandingSettings = dynamic(() => import("@/components/org/OrgBrandingSettings").then(m => ({ default: m.OrgBrandingSettings })), { ssr: false })
 const OrgSchedulingCalendar = dynamic(() => import("@/components/org/OrgSchedulingCalendar"), { ssr: false })
+const OrgCreditManagement = dynamic(() => import("@/components/org/OrgCreditManagement").then(m => ({ default: m.OrgCreditManagement })), { ssr: false })
 const CreateSlotDialog = dynamic(() => import("@/components/org/CreateSlotDialog"), { ssr: false })
 const EditSlotDialog = dynamic(() => import("@/components/org/EditSlotDialog"), { ssr: false })
+// Temporarily disable calendar dialogs to fix performance
+// const CreateSlotDialog = dynamic(() => import("@/components/org/CreateSlotDialog"), { ssr: false })
+// const EditSlotDialog = dynamic(() => import("@/components/org/EditSlotDialog"), { ssr: false })
 import type { InterviewSlotWithId } from "@/types/firestore"
 
 const menuItems = [
   { title: "Overview", icon: BarChart3, id: "overview" },
   { title: "Students", icon: Users, id: "students" },
+  { title: "Credits", icon: CreditCard, id: "credits" },
   { title: "Schedule", icon: Calendar, id: "schedule" },
   { title: "Interviews", icon: PlayCircle, id: "interviews" },
   { title: "Results", icon: Trophy, id: "results" },
@@ -58,8 +65,8 @@ const menuItems = [
   { title: "Branding", icon: Settings, id: "branding" },
 ] as const
 
-export function OrganizationDashboard() {
-  const { userProfile } = useAuth()
+function OrganizationDashboard() {
+  const { userProfile, logout } = useAuth()
   const orgId: string | undefined = userProfile?.orgId
 
   const [activeSection, setActiveSection] = useState<(typeof menuItems)[number]["id"]>("overview")
@@ -108,16 +115,13 @@ export function OrganizationDashboard() {
     let mounted = true
     
     // INSTANT: Check cache synchronously before any async operations
-    const cachedOrg = cache.get<{ organization: OrganizationWithId }>(`org_${orgId}`)
-    const cachedStats = cache.get<{ statistics: any }>(`stats_${orgId}`)
+    const cachedDashboard = cache.get<{ organization: OrganizationWithId, statistics: any }>(`dashboard_${orgId}`)
     
     // If we have cached data, show it IMMEDIATELY
-    if (cachedOrg.data) {
-      setOrg(cachedOrg.data.organization)
+    if (cachedDashboard.data) {
+      setOrg(cachedDashboard.data.organization)
+      setStatistics(cachedDashboard.data.statistics)
       setLoading(false) // Hide skeleton instantly
-    }
-    if (cachedStats.data) {
-      setStatistics(cachedStats.data.statistics)
     }
     
     // Then fetch fresh data in background (async, non-blocking)
@@ -128,30 +132,23 @@ export function OrganizationDashboard() {
 
         const headers = { Authorization: `Bearer ${token}` }
         
-        const fetchOrg = async () => {
-          const res = await fetch('/api/org/organization', { headers })
+        // OPTIMIZED: Single API call for both organization and statistics data
+        const fetchDashboard = async () => {
+          console.log('🔥 [OrganizationDashboard] Making COMBINED API call to /api/org/dashboard')
+          const res = await fetch('/api/org/dashboard', { headers })
           const json = await res.json()
-          if (!res.ok) throw new Error(json?.error || 'Org fetch failed')
+          if (!res.ok) throw new Error(json?.error || 'Dashboard fetch failed')
+          console.log('✅ [OrganizationDashboard] COMBINED API call completed successfully')
           return json
         }
         
-        const fetchStats = async () => {
-          const res = await fetch('/api/org/statistics', { headers })
-          const json = await res.json()
-          if (res.ok) return json
-          return { statistics: null }
-        }
-        
-        // Use cache with background refresh
-        const [orgData, statsData] = await Promise.all([
-          fetchWithCache(`org_${orgId}`, fetchOrg, { ttl: 5 * 60 * 1000 }),
-          fetchWithCache(`stats_${orgId}`, fetchStats, { ttl: 30 * 1000 }),
-        ])
+        // Use cache with background refresh for combined data
+        const dashboardData = await fetchWithCache(`dashboard_${orgId}`, fetchDashboard, { ttl: 60 * 1000 })
 
         if (!mounted) return
-        setOrg(orgData.organization)
-        if (statsData.statistics) {
-          setStatistics(statsData.statistics)
+        setOrg(dashboardData.organization)
+        if (dashboardData.statistics) {
+          setStatistics(dashboardData.statistics)
         }
       } catch (e) {
         console.error("Failed to load org dashboard data", e)
@@ -168,7 +165,13 @@ export function OrganizationDashboard() {
   const renderOverview = () => {
     const quotaLimit = org?.quotaLimit || 0
     const quotaUsed = org?.quotaUsed || 0
-    const quotaPct = quotaLimit > 0 ? Math.min(100, (quotaUsed / quotaLimit) * 100) : 0
+    const studentCreditsAllocated = org?.studentCreditsAllocated || 0
+    const studentCreditsUsed = org?.studentCreditsUsed || 0
+    
+    // Total usage includes both org direct usage and student allocations
+    const totalUsed = quotaUsed + studentCreditsAllocated
+    const quotaPct = quotaLimit > 0 ? Math.min(100, (totalUsed / quotaLimit) * 100) : 0
+    const availableCredits = Math.max(0, quotaLimit - totalUsed)
 
     // Use real statistics from API
     const stats = statistics || {
@@ -331,11 +334,11 @@ export function OrganizationDashboard() {
                       <span className="text-sm font-medium">Add Student</span>
                     </button>
                     <button
-                      onClick={() => setActiveSection('students')}
+                      onClick={() => setActiveSection('credits')}
                       className="flex flex-col items-center justify-center p-4 bg-background rounded-lg hover:bg-muted transition-colors"
                     >
-                      <Users className="h-5 w-5 mb-2 text-accent-foreground" />
-                      <span className="text-sm font-medium">View Students</span>
+                      <CreditCard className="h-5 w-5 mb-2 text-accent-foreground" />
+                      <span className="text-sm font-medium">Manage Credits</span>
                     </button>
                   </div>
                 </div>
@@ -422,31 +425,43 @@ export function OrganizationDashboard() {
                 {/* Usage Details */}
                 <div className="w-full mt-6 space-y-3">
                   <p className="text-sm text-center text-muted-foreground">
-                    You&apos;ve used <span className="font-semibold">{quotaUsed}</span> of your{' '}
-                    <span className="font-semibold">{quotaLimit}</span> simulations.
+                    Total usage: <span className="font-semibold">{totalUsed}</span> of{' '}
+                    <span className="font-semibold">{quotaLimit}</span> credits
+                    {availableCredits > 0 && (
+                      <> • <span className="font-semibold text-green-600">{availableCredits}</span> available</>
+                    )}
                   </p>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 rounded-full bg-primary" />
-                        <span>Used</span>
+                        <div className="h-3 w-3 rounded-full bg-blue-500" />
+                        <span>Org Interviews</span>
                       </div>
                       <span className="font-medium">{quotaUsed}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 rounded-full bg-accent" />
-                        <span>Scheduled</span>
+                        <div className="h-3 w-3 rounded-full bg-purple-500" />
+                        <span>Student Credits</span>
                       </div>
-                      <span className="font-medium">0</span>
+                      <span className="font-medium">{studentCreditsAllocated}</span>
                     </div>
+                    {studentCreditsUsed > 0 && (
+                      <div className="flex items-center justify-between text-sm pl-6">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-purple-300" />
+                          <span className="text-xs text-muted-foreground">Used by students</span>
+                        </div>
+                        <span className="text-xs font-medium">{studentCreditsUsed}</span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 rounded-full bg-muted" />
-                        <span>Remaining</span>
+                        <div className="h-3 w-3 rounded-full bg-green-500" />
+                        <span>Available</span>
                       </div>
-                      <span className="font-medium">{quotaLimit - quotaUsed}</span>
+                      <span className="font-medium">{availableCredits}</span>
                     </div>
                   </div>
 
@@ -610,7 +625,6 @@ export function OrganizationDashboard() {
             setSelectedSlot(slot)
             setShowEditSlot(true)
           }}
-          refreshTrigger={refreshTrigger}
         />
 
         {/* Create Slot Dialog */}
@@ -655,12 +669,18 @@ export function OrganizationDashboard() {
     )
   }
 
+  const renderCredits = () => {
+    return <OrgCreditManagement />
+  }
+
   const renderContent = () => {
     switch (activeSection) {
       case "overview":
         return renderOverview()
       case "students":
         return renderStudents()
+      case "credits":
+        return renderCredits()
       case "schedule":
         return renderSchedule()
       case "interviews":
@@ -797,14 +817,12 @@ export function OrganizationDashboard() {
               <p className="text-xs text-muted-foreground truncate">{userProfile?.email || 'Organization Member'}</p>
             </div>
             <Button 
-              asChild 
+              onClick={logout}
               size="icon" 
               variant="ghost" 
               className="h-9 w-9 rounded-md group-data-[collapsible=icon]:hidden hover:bg-primary/10"
             >
-              <Link href="/">
-                <Home className="h-4 w-4" />
-              </Link>
+              <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </SidebarFooter>
@@ -813,6 +831,20 @@ export function OrganizationDashboard() {
       </Sidebar>
 
       <SidebarInset>
+        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4 md:px-6">
+          <div className="ml-auto flex items-center gap-2">
+            <Link href="/?from=dashboard">
+              <Button variant="outline" size="sm">
+                <Home className="h-4 w-4 mr-2" />
+                Back to Website
+              </Button>
+            </Link>
+            <Button onClick={logout} variant="outline" size="sm">
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
+        </header>
         <main className="flex-1 overflow-auto p-6 md:p-8">
           {renderContent()}
         </main>
@@ -820,3 +852,5 @@ export function OrganizationDashboard() {
     </SidebarProvider>
   )
 }
+
+export default OrganizationDashboard

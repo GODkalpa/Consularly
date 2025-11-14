@@ -13,31 +13,49 @@ interface OrganizationGuardProps {
 }
 
 export function OrganizationGuard({ children, fallback }: OrganizationGuardProps) {
-  const { user, isAdmin, loading, userProfile } = useAuth()
+  const { user, isAdmin, loading, profileLoading, userProfile } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (loading) return
+    console.log('🔍 [OrganizationGuard] useEffect:', {
+      user: user?.email,
+      isAdmin,
+      loading,
+      profileLoading,
+      userProfile: userProfile?.role,
+      orgId: (userProfile as any)?.orgId
+    })
+    
+    // Don't make routing decisions while auth or profile is loading
+    if (loading || profileLoading) {
+      console.log('⏳ [OrganizationGuard] Still loading, waiting...')
+      return
+    }
 
     if (!user) {
+      console.log('❌ [OrganizationGuard] No user, redirecting to /')
       router.push('/')
       return
     }
 
     // Redirect admins to admin dashboard
     if (isAdmin) {
+      console.log('👑 [OrganizationGuard] Admin user, redirecting to /admin')
       router.push('/admin')
       return
     }
 
     // Require organization membership
     if (!userProfile?.orgId) {
+      console.log('🚫 [OrganizationGuard] No orgId, redirecting to /', { userProfile })
       router.push('/')
       return
     }
-  }, [user, isAdmin, loading, userProfile, router])
+    
+    console.log('✅ [OrganizationGuard] All checks passed, allowing access')
+  }, [user, isAdmin, loading, profileLoading, userProfile, router])
 
-  if (loading) {
+  if (loading || profileLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

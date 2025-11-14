@@ -74,13 +74,20 @@ export const createUserProfile = async (uid: string, userData: Partial<UserProfi
 
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   try {
+    console.log('🔍 [getUserProfile] Fetching profile for UID:', uid);
     const userDoc = await getDoc(doc(db, 'users', uid));
+    console.log('📄 [getUserProfile] Document exists:', userDoc.exists());
+    
     if (userDoc.exists()) {
-      return userDoc.data() as UserProfile;
+      const data = userDoc.data() as UserProfile;
+      console.log('✅ [getUserProfile] Profile data:', data);
+      return data;
     }
+    
+    console.log('❌ [getUserProfile] No document found for UID:', uid);
     return null;
   } catch (error) {
-    console.error('Error getting user profile:', error);
+    console.error('💥 [getUserProfile] Error getting user profile:', error);
     throw error;
   }
 };

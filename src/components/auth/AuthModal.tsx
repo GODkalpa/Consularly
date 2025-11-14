@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { X, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
+import { X, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -12,16 +12,14 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: AuthModalProps) {
-  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  const { signIn, signUp, signInWithGoogle, redirectToDashboard } = useAuth();
+  const { signIn, signInWithGoogle, redirectToDashboard } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,11 +27,7 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
     setError('');
 
     try {
-      if (mode === 'signin') {
-        await signIn(email, password);
-      } else {
-        await signUp(email, password, displayName);
-      }
+      await signIn(email, password);
       onCloseAction();
       resetForm();
       // Redirect will be handled automatically by AuthContext
@@ -94,14 +88,8 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
   const resetForm = () => {
     setEmail('');
     setPassword('');
-    setDisplayName('');
     setError('');
     setShowPassword(false);
-  };
-
-  const switchMode = () => {
-    setMode(mode === 'signin' ? 'signup' : 'signin');
-    setError('');
   };
 
   if (!isOpen) return null;
@@ -112,7 +100,7 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="text-2xl font-bold text-foreground">
-            {mode === 'signin' ? 'Welcome Back' : 'Create Account'}
+            Welcome Back
           </h2>
           <button
             onClick={onCloseAction}
@@ -136,24 +124,6 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'signup' && (
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-input bg-background text-foreground rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                    placeholder="Enter your full name"
-                    required
-                  />
-                </div>
-              </div>
-            )}
 
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
@@ -195,25 +165,23 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
                 </button>
               </div>
             </div>
-            {mode === 'signin' && (
-              <div className="text-right -mt-2">
-                <button
-                  type="button"
-                  onClick={handlePasswordReset}
-                  disabled={loading}
-                  className="text-sm text-secondary hover:text-primary"
-                >
-                  Forgot your password?
-                </button>
-              </div>
-            )}
+            <div className="text-right -mt-2">
+              <button
+                type="button"
+                onClick={handlePasswordReset}
+                disabled={loading}
+                className="text-sm text-secondary hover:text-primary"
+              >
+                Forgot your password?
+              </button>
+            </div>
 
             <Button
               type="submit"
               disabled={loading}
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 rounded-lg font-medium transition-colors"
             >
-              {loading ? 'Please wait...' : mode === 'signin' ? 'Sign In' : 'Create Account'}
+              {loading ? 'Please wait...' : 'Sign In'}
             </Button>
           </form>
 
@@ -252,18 +220,6 @@ export function AuthModal({ isOpen, onCloseAction, initialMode = 'signin' }: Aut
             Continue with Google
           </Button>
 
-          {/* Switch Mode */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}
-              <button
-                onClick={switchMode}
-                className="ml-1 text-secondary hover:text-primary font-medium"
-              >
-                {mode === 'signin' ? 'Sign up' : 'Sign in'}
-              </button>
-            </p>
-          </div>
         </div>
       </div>
     </div>

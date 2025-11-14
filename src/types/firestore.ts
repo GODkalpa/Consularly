@@ -18,6 +18,12 @@ export type OrganizationPlan = 'basic' | 'premium' | 'enterprise';
 // Degree level enum
 export type DegreeLevel = 'undergraduate' | 'graduate' | 'doctorate' | 'other';
 
+// Student account status enum
+export type StudentAccountStatus = 'pending' | 'active' | 'suspended' | 'inactive';
+
+// Credit transaction types
+export type CreditTransactionType = 'allocated' | 'used' | 'deallocated' | 'refunded';
+
 // Student Profile Information (for interview context)
 export interface StudentProfileInfo {
   degreeLevel?: DegreeLevel; // What degree level are they applying for
@@ -28,6 +34,52 @@ export interface StudentProfileInfo {
   fieldOfStudy?: string; // Field of study
   intendedMajor?: string; // Intended major/specialization
   profileCompleted?: boolean; // Whether user has completed profile setup
+}
+
+// Organization Student Interface (for org-managed students)
+export interface OrgStudent {
+  id: string;
+  orgId: string;
+  name: string;
+  email: string;
+  interviewCountry?: 'usa' | 'uk' | 'france';
+  studentProfile?: StudentProfileInfo;
+  
+  // Authentication fields
+  firebaseUid?: string;              // Link to Firebase Auth user
+  accountStatus: StudentAccountStatus;
+  dashboardEnabled: boolean;         // Can access student dashboard?
+  canSelfStartInterviews: boolean;   // Can initiate own interviews?
+  
+  // Credit system
+  creditsAllocated: number;          // Total credits from org
+  creditsUsed: number;               // Interviews completed
+  creditsRemaining: number;          // Computed: allocated - used
+  
+  // Invitation system
+  invitationToken?: string;          // For account setup
+  invitedAt?: Timestamp;
+  invitationAcceptedAt?: Timestamp;
+  lastLoginAt?: Timestamp;
+  
+  // Timestamps
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// Student Credit History Interface
+export interface StudentCreditHistory {
+  id: string;
+  orgId: string;
+  studentId: string;
+  type: CreditTransactionType;
+  amount: number;
+  reason?: string;
+  performedBy: string;               // Who made this change (userId)
+  interviewId?: string;              // If type='used' or 'refunded'
+  timestamp: Timestamp;
+  balanceBefore: number;
+  balanceAfter: number;
 }
 
 // User Profile Interface
@@ -247,6 +299,15 @@ export interface OrganizationSettings {
     allowStudentReschedule: boolean;
     maxReschedules: number;           // per student (default 2)
   };
+  
+  // Student dashboard settings
+  studentDashboard?: {
+    enabled: boolean;                 // Feature flag for student dashboard
+    allowSelfStart: boolean;          // Can students start own interviews?
+    defaultCreditsPerStudent: number; // Default credit allocation
+    enableCreditRequests: boolean;    // Can students request more credits?
+    maxCreditsPerStudent: number;     // Maximum credits per student
+  };
 }
 
 // Organization Interface
@@ -258,6 +319,12 @@ export interface Organization {
   quotaUsed: number;
   adminUsers: string[]; // array of user IDs
   settings: OrganizationSettings;
+  
+  // Student credit management
+  studentCreditsAllocated: number;   // Total credits allocated to students
+  studentCreditsUsed: number;        // Credits actually used by students
+  
+  // Timestamps
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -414,6 +481,14 @@ export interface ReminderLogWithId extends ReminderLog {
   id: string; // document ID
 }
 
+export interface OrgStudentWithId extends OrgStudent {
+  id: string; // document ID
+}
+
+export interface StudentCreditHistoryWithId extends StudentCreditHistory {
+  id: string; // document ID
+}
+
 // API request/response types
 export interface CreateInterviewRequest {
   interviewType: InterviewType;
@@ -433,6 +508,39 @@ export interface CreateUserRequest {
   displayName: string;
   orgId: string;
   role?: UserRole;
+}
+
+// Student-related API types
+export interface CreateStudentRequest {
+  name: string;
+  email: string;
+  interviewCountry?: 'usa' | 'uk' | 'france';
+  studentProfile?: StudentProfileInfo;
+  initialCredits: number;
+  dashboardEnabled: boolean;
+  canSelfStartInterviews: boolean;
+  sendInvitation: boolean;
+}
+
+export interface AllocateCreditsRequest {
+  amount: number;
+  reason?: string;
+}
+
+export interface StudentLoginResponse {
+  student: OrgStudent;
+  organization: {
+    id: string;
+    name: string;
+    branding: OrganizationBranding;
+  };
+}
+
+export interface StudentCreditSummary {
+  creditsAllocated: number;
+  creditsUsed: number;
+  creditsRemaining: number;
+  recentTransactions: StudentCreditHistory[];
 }
 
 export interface UpdateUserRequest {

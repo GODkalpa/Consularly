@@ -62,6 +62,12 @@ interface RescheduleConfirmationParams extends EmailBaseParams {
   routeDisplay: string
 }
 
+interface StudentInvitationParams extends EmailBaseParams {
+  initialCredits: number
+  invitationUrl: string
+  expiryDays: number
+}
+
 /**
  * Generate white-labeled HTML email template
  */
@@ -601,6 +607,130 @@ export async function sendRescheduleConfirmation(params: RescheduleConfirmationP
     console.log(`[Email] Reschedule confirmation sent to ${to}`)
   } catch (error) {
     console.error('[Email] Failed to send reschedule confirmation:', error)
+    throw error
+  }
+}
+
+/**
+ * Send student invitation email for account setup
+ */
+export async function sendStudentInvitation(params: StudentInvitationParams): Promise<void> {
+  if (!apiKey) {
+    console.warn('[Email] Brevo API key not configured, skipping email')
+    return
+  }
+
+  const {
+    to,
+    studentName,
+    orgName,
+    orgBranding,
+    initialCredits,
+    invitationUrl,
+    expiryDays
+  } = params
+
+  const content = `
+    <div style="text-align: center; margin-bottom: 40px;">
+      <div style="display: inline-block; background: linear-gradient(135deg, ${orgBranding?.primaryColor || '#3B82F6'} 0%, ${orgBranding?.secondaryColor || '#1E40AF'} 100%); padding: 20px; border-radius: 16px; color: white; margin-bottom: 20px;">
+        <div style="font-size: 32px; margin-bottom: 8px;">🎯</div>
+        <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">Welcome Aboard!</h1>
+        <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0 0; font-size: 16px;">You're just one step away from mastering your visa interview</p>
+      </div>
+    </div>
+
+    <div style="background: #F8FAFC; border-radius: 12px; padding: 24px; margin-bottom: 32px; border-left: 4px solid ${orgBranding?.primaryColor || '#3B82F6'};">
+      <p style="font-size: 18px; color: #1E293B; margin: 0 0 12px 0; font-weight: 600;">
+        Hi ${studentName},
+      </p>
+      <p style="font-size: 16px; color: #475569; margin: 0; line-height: 1.6;">
+        ${orgName} has created your personal account to practice visa interviews using our advanced AI platform. Get ready to ace your real interview!
+      </p>
+    </div>
+    
+    <div style="background: white; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; margin-bottom: 32px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+      <h3 style="color: #1E293B; margin: 0 0 16px 0; font-size: 18px; font-weight: 600;">Account Details</h3>
+      <div style="display: grid; gap: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #F1F5F9;">
+          <span style="color: #64748B; font-weight: 500;">📧 Email:</span>
+          <span style="color: #1E293B; font-weight: 600;">${to}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #F1F5F9;">
+          <span style="color: #64748B; font-weight: 500;">💳 Interview Credits:</span>
+          <span style="color: #059669; font-weight: 700; background: #DCFCE7; padding: 4px 12px; border-radius: 20px;">${initialCredits} sessions</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0;">
+          <span style="color: #64748B; font-weight: 500;">⏰ Setup Deadline:</span>
+          <span style="color: #DC2626; font-weight: 600;">${expiryDays} days remaining</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="background: white; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
+      <h3 style="color: #1E293B; margin: 0 0 20px 0; font-size: 18px; font-weight: 600;">What's included in your account:</h3>
+      <div style="display: grid; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 8px; height: 8px; background: #10B981; border-radius: 50%; flex-shrink: 0;"></div>
+          <span style="color: #475569; font-size: 15px;">AI-powered interview simulations</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 8px; height: 8px; background: #10B981; border-radius: 50%; flex-shrink: 0;"></div>
+          <span style="color: #475569; font-size: 15px;">Detailed performance analytics and feedback</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 8px; height: 8px; background: #10B981; border-radius: 50%; flex-shrink: 0;"></div>
+          <span style="color: #475569; font-size: 15px;">Progress tracking and improvement insights</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 8px; height: 8px; background: #10B981; border-radius: 50%; flex-shrink: 0;"></div>
+          <span style="color: #475569; font-size: 15px;">Downloadable interview reports</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin: 40px 0;">
+      <a href="${invitationUrl}" style="display: inline-block; background: linear-gradient(135deg, ${orgBranding?.primaryColor || '#3B82F6'} 0%, ${orgBranding?.secondaryColor || '#1E40AF'} 100%); color: white; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3); transition: all 0.2s;">
+        🚀 Set Up My Account Now
+      </a>
+    </div>
+
+    <div style="background: #FEF3C7; border: 1px solid #F59E0B; border-radius: 8px; padding: 16px; margin-bottom: 32px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="color: #D97706; font-size: 18px;">⚠️</div>
+        <div>
+          <strong style="color: #92400E;">Action Required</strong>
+          <p style="color: #92400E; margin: 4px 0 0 0; font-size: 14px;">This invitation expires in ${expiryDays} days. Click the button above to secure your account access.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="background: #F8FAFC; border-radius: 8px; padding: 20px; text-align: center; margin-top: 32px;">
+      <p style="color: #64748B; margin: 0; font-size: 14px;">
+        Questions? Contact <strong>${orgName}</strong> support - we're here to help you succeed! 🎓
+      </p>
+    </div>
+  `
+
+  const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+
+  const email = new SendSmtpEmail()
+  email.subject = `Welcome to ${orgName} - Set Up Your Interview Practice Account`
+  email.htmlContent = htmlContent
+  email.sender = { 
+    name: orgBranding?.companyName || orgName,
+    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
+  }
+  email.to = [{ email: to, name: studentName }]
+  email.replyTo = {
+    email: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.app',
+    name: `${orgName} Support`
+  }
+
+  try {
+    await brevo.sendTransacEmail(email)
+    console.log(`[Email] Student invitation sent to ${to}`)
+  } catch (error) {
+    console.error('[Email] Failed to send student invitation:', error)
     throw error
   }
 }

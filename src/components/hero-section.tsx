@@ -10,11 +10,7 @@ import Image from 'next/image'
 import { TextEffect } from '@/components/ui/text-effect'
 import { AnimatedGroup } from '@/components/ui/animated-group'
 import type { Variants } from 'motion/react'
-import gsap from 'gsap'
-import { useGSAP } from '@gsap/react'
 import heroImg from '../../public/hero.png'
-
-gsap.registerPlugin(useGSAP)
 
 const transitionVariants = {
     item: {
@@ -43,55 +39,56 @@ export default function HeroSection() {
     // Prefer modern compressed assets if present in /public
     const [heroSrc, setHeroSrc] = useState<string>(heroImg.src)
 
-    useGSAP(() => {
-        const badges = [
-            { ref: badge1Ref, speed: 0.03 },
-            { ref: badge2Ref, speed: 0.05 },
-            { ref: badge3Ref, speed: 0.04 },
-            { ref: badge4Ref, speed: 0.06 }
-        ]
+    // Temporarily commented out GSAP for performance - TODO: Re-enable with lazy loading
+    // useGSAP(() => {
+    //     const badges = [
+    //         { ref: badge1Ref, speed: 0.03 },
+    //         { ref: badge2Ref, speed: 0.05 },
+    //         { ref: badge3Ref, speed: 0.04 },
+    //         { ref: badge4Ref, speed: 0.06 }
+    //     ]
 
-        // Create quickTo functions for smooth, performant animations
-        const xTos = badges.map(({ ref }) => 
-            gsap.quickTo(ref.current, 'x', { duration: 0.6, ease: 'power3.out' })
-        )
-        const yTos = badges.map(({ ref }) => 
-            gsap.quickTo(ref.current, 'y', { duration: 0.6, ease: 'power3.out' })
-        )
+    //     // Create quickTo functions for smooth, performant animations
+    //     const xTos = badges.map(({ ref }) => 
+    //         gsap.quickTo(ref.current, 'x', { duration: 0.6, ease: 'power3.out' })
+    //     )
+    //     const yTos = badges.map(({ ref }) => 
+    //         gsap.quickTo(ref.current, 'y', { duration: 0.6, ease: 'power3.out' })
+    //     )
 
-        // Initial float animation
-        badges.forEach(({ ref }, index) => {
-            gsap.to(ref.current, {
-                y: '+=15',
-                duration: 2 + index * 0.5,
-                repeat: -1,
-                yoyo: true,
-                ease: 'sine.inOut'
-            })
-        })
+    //     // Initial float animation
+    //     badges.forEach(({ ref }, index) => {
+    //         gsap.to(ref.current, {
+    //             y: '+=15',
+    //             duration: 2 + index * 0.5,
+    //             repeat: -1,
+    //             yoyo: true,
+    //             ease: 'sine.inOut'
+    //         })
+    //     })
 
-        const handleMouseMove = (e: MouseEvent) => {
-            if (!containerRef.current) return
+    //     const handleMouseMove = (e: MouseEvent) => {
+    //         if (!containerRef.current) return
 
-            const rect = containerRef.current.getBoundingClientRect()
-            const centerX = rect.left + rect.width / 2
-            const centerY = rect.top + rect.height / 2
+    //         const rect = containerRef.current.getBoundingClientRect()
+    //         const centerX = rect.left + rect.width / 2
+    //         const centerY = rect.top + rect.height / 2
             
-            const deltaX = (e.clientX - centerX) 
-            const deltaY = (e.clientY - centerY)
+    //         const deltaX = (e.clientX - centerX) 
+    //         const deltaY = (e.clientY - centerY)
 
-            badges.forEach(({ speed }, index) => {
-                xTos[index](deltaX * speed)
-                yTos[index](deltaY * speed)
-            })
-        }
+    //         badges.forEach(({ speed }, index) => {
+    //             xTos[index](deltaX * speed)
+    //             yTos[index](deltaY * speed)
+    //         })
+    //     }
 
-        window.addEventListener('mousemove', handleMouseMove)
+    //     window.addEventListener('mousemove', handleMouseMove)
 
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove)
-        }
-    }, { scope: containerRef })
+    //     return () => {
+    //         window.removeEventListener('mousemove', handleMouseMove)
+    //     }
+    // }, { scope: containerRef })
 
     // Probe for hero.avif or hero.webp at runtime and use them if available
     useEffect(() => {
@@ -214,8 +211,8 @@ export default function HeroSection() {
                                         asChild
                                         size="lg"
                                         className="h-12 sm:h-14 rounded-full px-8 sm:px-10 text-base sm:text-lg font-semibold bg-primary text-primary-foreground shadow-lg hover:bg-primary-600 hover:scale-105 transition-all duration-200">
-                                        <Link href="/signup">
-                                            Start Free Now
+                                        <Link href="/signin">
+                                            Sign In to Start
                                         </Link>
                                     </Button>
 

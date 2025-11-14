@@ -4,7 +4,7 @@ import dynamic from "next/dynamic"
 import { OrganizationGuard } from "@/components/auth/OrganizationGuard"
 
 const OrganizationDashboard = dynamic(
-  () => import("@/components/org/OrganizationDashboard").then(m => ({ default: m.OrganizationDashboard })),
+  () => import("@/components/org/OrganizationDashboard"),
   {
     ssr: false,
     loading: () => (

@@ -70,15 +70,9 @@ export function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
-  const { user, logout, isAdmin, userProfile } = useAuth()
+  const { user, logout, isAdmin, userProfile, redirectToDashboard } = useAuth()
 
-  // Log on every render
-  console.log('🔄 NAVBAR RENDER:', { 
-    user: user?.email, 
-    isAdmin, 
-    userProfile: userProfile?.role,
-    hasOrgId: !!(userProfile as any)?.orgId
-  })
+
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -170,41 +164,13 @@ export function Navbar() {
 
           {/* Desktop CTA Buttons */}
           <div className="hidden lg:flex items-center gap-3">
-            {isAdmin && (
-              <Link href="/admin">
-                <Button variant="outline" className="gap-2">
-                  <LayoutDashboard className="w-4 h-4" />
-                  Dashboard
-                </Button>
-              </Link>
+            {/* Neutral dashboard button - AuthContext handles routing */}
+            {user && (
+              <Button variant="outline" className="gap-2" onClick={redirectToDashboard}>
+                <LayoutDashboard className="w-4 h-4" />
+                Dashboard
+              </Button>
             )}
-            {!isAdmin && user && userProfile?.orgId && (
-              <Link href="/org">
-                <Button variant="outline" className="gap-2">
-                  <LayoutDashboard className="w-4 h-4" />
-                  Org Dashboard
-                </Button>
-              </Link>
-            )}
-            {(() => {
-              const shouldShow = !isAdmin && !!user && !!userProfile && !(userProfile as any).orgId;
-              console.log('🎯 Dashboard button check:', { 
-                isAdmin, 
-                hasUser: !!user, 
-                hasUserProfile: !!userProfile,
-                userProfileRole: userProfile?.role,
-                hasOrgId: !!(userProfile as any)?.orgId,
-                shouldShow 
-              });
-              return shouldShow && (
-                <Link href="/dashboard">
-                  <Button variant="outline" className="gap-2">
-                    <LayoutDashboard className="w-4 h-4" />
-                    Dashboard
-                  </Button>
-                </Link>
-              );
-            })()}
             {user ? (
               <div className="relative" ref={userMenuRef}>
                 <button
@@ -235,23 +201,13 @@ export function Navbar() {
                 )}
               </div>
             ) : (
-              <>
-                <Link href="/signin">
-                  <Button 
-                    variant="ghost"
-                  >
-                    Sign In
-                  </Button>
-                </Link>
-                <Link href="/signup">
-                  <Button className="h-10 rounded-full px-5 bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:scale-[1.01] transition-transform">
-                    <span className="inline-flex items-center">
-                      Start Free Trial
-                      <ArrowRight className="ml-2 w-4 h-4" />
-                    </span>
-                  </Button>
-                </Link>
-              </>
+              <Link href="/signin">
+                <Button 
+                  variant="ghost"
+                >
+                  Sign In
+                </Button>
+              </Link>
             )}
           </div>
 
@@ -275,29 +231,19 @@ export function Navbar() {
           <div className="container mx-auto px-4 py-4 space-y-4">
             {/* Navigation Links */}
             <div className="space-y-3">
-              {isAdmin && (
-                <Link href="/admin" className="block" onClick={() => setIsOpen(false)}>
-                  <Button variant="outline" className="w-full justify-start gap-2">
-                    <LayoutDashboard className="w-4 h-4" />
-                    Dashboard
-                  </Button>
-                </Link>
-              )}
-              {!isAdmin && user && userProfile?.orgId && (
-                <Link href="/org" className="block" onClick={() => setIsOpen(false)}>
-                  <Button variant="outline" className="w-full justify-start gap-2">
-                    <LayoutDashboard className="w-4 h-4" />
-                    Org Dashboard
-                  </Button>
-                </Link>
-              )}
-              {!isAdmin && user && userProfile && !(userProfile as any).orgId && (
-                <Link href="/dashboard" className="block" onClick={() => setIsOpen(false)}>
-                  <Button variant="outline" className="w-full justify-start gap-2">
-                    <LayoutDashboard className="w-4 h-4" />
-                    Dashboard
-                  </Button>
-                </Link>
+              {/* Neutral dashboard button - AuthContext handles routing */}
+              {user && (
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start gap-2"
+                  onClick={() => {
+                    setIsOpen(false)
+                    redirectToDashboard()
+                  }}
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </Button>
               )}
               {navigationItems.map((item) => (
                 <Link
@@ -357,28 +303,15 @@ export function Navbar() {
                   </Button>
                 </div>
               ) : (
-                <>
-                  <Link href="/signin">
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      Sign In
-                    </Button>
-                  </Link>
-                  <Link href="/signup">
-                    <Button 
-                      className="w-full h-11 rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:scale-[1.01] transition-transform"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      <span className="inline-flex items-center justify-center w-full">
-                        Start Free Trial
-                        <ArrowRight className="ml-2 w-4 h-4" />
-                      </span>
-                    </Button>
-                  </Link>
-                </>
+                <Link href="/signin">
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Sign In
+                  </Button>
+                </Link>
               )}
             </div>
           </div>

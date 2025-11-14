@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
 import type { Viewport } from 'next'
+import dynamic from 'next/dynamic'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { ClientAuthProvider } from '@/components/ClientAuthProvider'
 import { Toaster } from '@/components/ui/sonner'
 import ChromeSwitcher from '@/components/ChromeSwitcher'
+import RevealOnScroll from '@/components/animations/RevealOnScroll'
 
 // ClientAuthProvider is a client component; importing it statically avoids first-load spinners
 
@@ -47,6 +49,8 @@ export default function RootLayout({
         </ClientAuthProvider>
         <ChromeSwitcher position="footer" />
         <Toaster richColors />
+        {/* Client-side animation orchestrator for data-animate elements */}
+        <RevealOnScroll />
       </body>
     </html>
   )

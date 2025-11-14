@@ -82,7 +82,7 @@ function Pricing() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="w-full shadow-2xl rounded-md" data-animate="up" data-duration="0.7" data-delay="0.1">
+            <Card className="w-full rounded-md" data-animate="up" data-duration="0.7" data-delay="0.2">
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle>
                   <span className="flex flex-row gap-3 sm:gap-4 items-center text-lg sm:text-xl md:text-2xl font-semibold tracking-[-0.005em]">
@@ -138,7 +138,7 @@ function Pricing() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="w-full rounded-md" data-animate="up" data-duration="0.7" data-delay="0.2">
+            <Card className="w-full rounded-md" data-animate="up" data-duration="0.7" data-delay="0.4">
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle>
                   <span className="flex flex-row gap-3 sm:gap-4 items-center text-lg sm:text-xl md:text-2xl font-semibold tracking-[-0.005em]">

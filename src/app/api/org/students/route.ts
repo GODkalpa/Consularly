@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin'
+import { generateInvitationToken, sendStudentInvitationEmail } from '@/lib/student-invitation'
+import type { CreateStudentRequest } from '@/types/firestore'
 
 // GET /api/org/students
 // Returns database-only students in caller's organization with minimal fields and completed interviews count
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
     const students = studsSnap.docs.map((d) => {
       const data = d.data() as any
       const createdAt: Date | undefined = data?.createdAt?.toDate?.() ?? (data?.createdAt ? new Date(data.createdAt) : undefined)
-      const lastActive: Date | undefined = data?.lastActiveAt ? new Date(data.lastActiveAt) : (data?.updatedAt?.toDate?.() ?? createdAt)
+      const lastActive: Date | undefined = data?.lastLoginAt?.toDate?.() ?? (data?.lastActiveAt ? new Date(data.lastActiveAt) : (data?.updatedAt?.toDate?.() ?? createdAt))
       return {
         id: d.id,
         name: data?.name || data?.displayName || 'Unknown',
@@ -40,6 +42,18 @@ export async function GET(req: NextRequest) {
         interviewCountry: data?.interviewCountry || null,
         lastActive: lastActive ? lastActive.toISOString() : null,
         studentProfile: data?.studentProfile || null,
+        // Credit system fields
+        creditsAllocated: data?.creditsAllocated || 0,
+        creditsUsed: data?.creditsUsed || 0,
+        creditsRemaining: (data?.creditsAllocated || 0) - (data?.creditsUsed || 0),
+        // Authentication fields
+        accountStatus: data?.accountStatus || 'pending',
+        dashboardEnabled: data?.dashboardEnabled || false,
+        canSelfStartInterviews: data?.canSelfStartInterviews || false,
+        firebaseUid: data?.firebaseUid || null,
+        invitedAt: data?.invitedAt?.toDate?.()?.toISOString() || null,
+        invitationAcceptedAt: data?.invitationAcceptedAt?.toDate?.()?.toISOString() || null,
+        lastLoginAt: data?.lastLoginAt?.toDate?.()?.toISOString() || null,
       }
     })
 
@@ -79,8 +93,8 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/org/students
-// Body: { name: string, email?: string, studentProfile?: {...} }
-// Creates a database-only student record scoped to the caller's organization
+// Body: CreateStudentRequest
+// Creates a student record with authentication and credit allocation
 export async function POST(req: NextRequest) {
   try {
     await ensureFirebaseAdmin()
@@ -101,34 +115,106 @@ export async function POST(req: NextRequest) {
     const orgId = caller?.orgId || ''
     if (!orgId) return NextResponse.json({ error: 'Forbidden: no organization' }, { status: 403 })
 
-    const body = await req.json()
-    const name = String(body?.name || '').trim()
-    const email = body?.email ? String(body.email).trim() : ''
-    const interviewCountry = body?.interviewCountry || null
-    const studentProfile = body?.studentProfile || null
-    if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
+    const body = await req.json() as CreateStudentRequest
+    const { name, email, interviewCountry, studentProfile, dashboardEnabled, canSelfStartInterviews, sendInvitation } = body
+    
+    // Validation
+    if (!name?.trim()) return NextResponse.json({ error: 'name is required' }, { status: 400 })
+    if (!email?.trim()) return NextResponse.json({ error: 'email is required' }, { status: 400 })
+    
+    // Check if email is already used
+    const existingStudent = await adminDb()
+      .collection('orgStudents')
+      .where('email', '==', email.trim())
+      .limit(1)
+      .get()
+    
+    if (!existingStudent.empty) {
+      return NextResponse.json({ error: 'Email already exists' }, { status: 409 })
+    }
 
+    // NOTE: Credits will be auto-allocated (5) when student sets their password
+    // No need to check or allocate credits here
+    
+    // Generate invitation token if sending invitation
+    const invitationToken = sendInvitation ? generateInvitationToken() : undefined
+    
     const studentData: any = {
       orgId,
-      name,
-      email,
+      name: name.trim(),
+      email: email.trim(),
+      
+      // Credit system (will be auto-allocated when student sets password)
+      creditsAllocated: 0,
+      creditsUsed: 0,
+      creditsRemaining: 0,
+      
+      // Authentication fields
+      accountStatus: 'pending',
+      dashboardEnabled: !!dashboardEnabled,
+      canSelfStartInterviews: !!canSelfStartInterviews,
+      
+      // Invitation fields
+      ...(invitationToken && {
+        invitationToken,
+        invitedAt: FieldValue.serverTimestamp()
+      }),
+      
+      // Optional fields
+      ...(interviewCountry && { interviewCountry }),
+      ...(studentProfile && { studentProfile }),
+      
+      // Timestamps
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }
 
-    // Include interview country if provided
-    if (interviewCountry) {
-      studentData.interviewCountry = interviewCountry
+    // Create student record (credits will be allocated when password is set)
+    const docRef = adminDb().collection('orgStudents').doc()
+    await docRef.set(studentData)
+    const studentId = docRef.id
+    
+    // Send invitation email if requested
+    let invitationSent = false
+    console.log('[Student Creation] Email check:', { sendInvitation, hasInvitationToken: !!invitationToken })
+    
+    if (sendInvitation && invitationToken) {
+      try {
+        console.log('[Student Creation] Sending invitation email to:', email.trim())
+        
+        // Get organization details for branding
+        const orgSnap = await adminDb().collection('organizations').doc(orgId).get()
+        const orgData = orgSnap.data() as any
+        
+        console.log('[Student Creation] Org data for branding:', { 
+          orgName: orgData?.name, 
+          hasBranding: !!orgData?.settings?.customBranding 
+        })
+        
+        await sendStudentInvitationEmail({
+          studentName: name.trim(),
+          studentEmail: email.trim(),
+          organizationName: orgData?.name || 'Your Organization',
+          organizationBranding: orgData?.settings?.customBranding || {},
+          initialCredits: 5, // Will be auto-allocated when password is set
+          invitationToken
+        })
+        
+        console.log('[Student Creation] ✅ Invitation email sent successfully')
+        invitationSent = true
+      } catch (emailError) {
+        console.error('[Student Creation] ❌ Email failed:', emailError)
+        // Don't fail the entire request if email fails
+      }
+    } else {
+      console.log('[Student Creation] ⚠️ Skipping email:', { sendInvitation, hasToken: !!invitationToken })
     }
 
-    // Include student profile if provided
-    if (studentProfile) {
-      studentData.studentProfile = studentProfile
-    }
-
-    const docRef = await adminDb().collection('orgStudents').add(studentData)
-
-    return NextResponse.json({ id: docRef.id }, { status: 201 })
+    return NextResponse.json({ 
+      id: studentId,
+      invitationSent,
+      ...(invitationToken && { invitationToken }) // Include token for testing
+    }, { status: 201 })
   } catch (e: any) {
     console.error('[api/org/students] POST error', e)
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })

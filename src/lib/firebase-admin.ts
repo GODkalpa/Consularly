@@ -58,14 +58,20 @@ function loadServiceAccountFromFile(): any | null {
 }
 
 export async function ensureFirebaseAdmin(): Promise<void> {
+  const initStart = Date.now()
+  
   // Check if app already exists (handles hot reload in development)
   const existingApps = getApps()
   if (existingApps.length > 0) {
     app = existingApps[0]
+    const initTime = Date.now() - initStart
+    console.log(`[firebase-admin] ✅ Using existing app in ${initTime}ms`)
     return
   }
   
   if (app) {
+    const initTime = Date.now() - initStart
+    console.log(`[firebase-admin] ✅ Using cached app in ${initTime}ms`)
     return
   }
 
@@ -75,7 +81,7 @@ export async function ensureFirebaseAdmin(): Promise<void> {
   if (saFromEnv || saFromFile) {
     const svc = saFromEnv || saFromFile
     // eslint-disable-next-line no-console
-    console.info('[firebase-admin] Initializing with service account (env/file). Project:', svc.project_id)
+    console.info('[firebase-admin] 🔄 Initializing with service account (env/file). Project:', svc.project_id)
     app = initializeApp({
       credential: cert({
         projectId: svc.project_id,
@@ -83,12 +89,14 @@ export async function ensureFirebaseAdmin(): Promise<void> {
         privateKey: svc.private_key,
       }),
     })
+    const initTime = Date.now() - initStart
+    console.log(`[firebase-admin] ✅ New app initialized in ${initTime}ms`)
   } else {
     // As a last resort, attempt application default credentials (GCP envs).
     // Provide projectId explicitly to avoid metadata server lookup locally.
     const fallbackProjectId = process.env.FIREBASE_PROJECT_ID || process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT
     // eslint-disable-next-line no-console
-    console.info('[firebase-admin] Using applicationDefault credentials. Project:', fallbackProjectId || '(unknown)')
+    console.info('[firebase-admin] 🔄 Using applicationDefault credentials. Project:', fallbackProjectId || '(unknown)')
     app = initializeApp({
       credential: applicationDefault(),
       projectId: fallbackProjectId,

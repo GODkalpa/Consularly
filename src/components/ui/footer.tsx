@@ -57,7 +57,7 @@ export default function FooterSection() {
                         </Link>
                     ))}
                 </div>
-                <div className="my-8 flex flex-wrap justify-center gap-6 text-sm" data-animate="up" data-delay="0.1">
+                <div className="my-8 flex flex-wrap justify-center gap-6 text-sm">
                     {/* Using generic icons for social links */}
                     <Link
                         href="#"

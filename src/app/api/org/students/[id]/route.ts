@@ -3,7 +3,7 @@ import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/fireb
 
 // PATCH /api/org/students/[id]
 // Body: { name?: string, email?: string, interviewCountry?: string, studentProfile?: object }
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await ensureFirebaseAdmin()
 
@@ -20,7 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const orgId = (callerSnap.data() as any)?.orgId || ''
     if (!orgId) return NextResponse.json({ error: 'Forbidden: no organization' }, { status: 403 })
 
-    const id = params.id
+    const { id } = await params
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
     const studentRef = adminDb().collection('orgStudents').doc(id)
@@ -46,16 +46,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 // DELETE /api/org/students/[id]
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     await ensureFirebaseAdmin()
-
-    const authHeader = req.headers.get('authorization') || ''
+    
+    const authHeader = request.headers.get('authorization') || ''
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
     if (!token) return NextResponse.json({ error: 'Unauthorized: missing token' }, { status: 401 })
 
-    const decoded = await adminAuth().verifyIdToken(token)
-    const callerUid = decoded.uid
+    const decodedToken = await adminAuth().verifyIdToken(token)
+    const callerUid = decodedToken.uid
 
     const callerSnap = await adminDb().collection('users').doc(callerUid).get()
     if (!callerSnap.exists) return NextResponse.json({ error: 'Caller profile not found' }, { status: 403 })
@@ -63,7 +66,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const orgId = (callerSnap.data() as any)?.orgId || ''
     if (!orgId) return NextResponse.json({ error: 'Forbidden: no organization' }, { status: 403 })
 
-    const id = params.id
+    const { id } = await params
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
     const studentRef = adminDb().collection('orgStudents').doc(id)
