@@ -24,6 +24,8 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Sparkline } from "@/components/ui/sparkline"
+import { StatCard } from "@/components/ui/stat-card"
 import { StudentInterviewSimulation } from "@/components/student/StudentInterviewSimulation"
 import { StudentResults } from "@/components/student/StudentResults"
 import {
@@ -61,38 +63,7 @@ const menuItems = [
   { title: "Profile", icon: User, id: "profile" },
 ] as const
 
-// Sparkline component matching org dashboard
-const Sparkline = ({ data, trend }: { data: number[], trend: string }) => {
-  const isPositive = trend.startsWith('+')
-  const color = isPositive ? '#10b981' : '#ef4444'
-  
-  if (!data || data.length === 0) {
-    data = [10, 12, 8, 15, 14, 18, 16] // fallback
-  }
-  
-  const max = Math.max(...data)
-  const min = Math.min(...data)
-  const range = max - min || 1
-  
-  const points = data.map((value, index) => {
-    const x = (index / (data.length - 1)) * 80
-    const y = 24 - ((value - min) / range) * 20 + 4
-    return `${x},${y}`
-  }).join(' ')
-  
-  return (
-    <svg width="80" height="32" viewBox="0 0 80 32" fill="none" className="mt-2">
-      <polyline
-        points={points}
-        stroke={color}
-        strokeWidth="2"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
+
 
 export default function StudentDashboard() {
   const { student, signOutStudent } = useStudentAuth()

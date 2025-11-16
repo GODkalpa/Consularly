@@ -148,7 +148,16 @@ const nextConfig = {
           test: /[\/\\]node_modules[\/\\](firebase)/,
           name: 'firebase',
           chunks: 'async', // Make Firebase async to prevent blocking main bundle
-          priority: 15,
+          priority: 20,
+          enforce: true,
+        },
+        // Chart libraries
+        charts: {
+          test: /[\/\\]node_modules[\/\\](recharts|react-chartjs-2|chart\.js)/,
+          name: 'charts',
+          chunks: 'async',
+          priority: 18,
+          enforce: true,
         },
         // UI libraries chunk
         ui: {

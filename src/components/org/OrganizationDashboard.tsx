@@ -27,6 +27,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Sparkline } from "@/components/ui/sparkline"
+import { StatCard } from "@/components/ui/stat-card"
 import Link from "next/link"
 import {
   Home,
@@ -71,7 +73,12 @@ function OrganizationDashboard() {
 
   const [activeSection, setActiveSection] = useState<(typeof menuItems)[number]["id"]>("overview")
   const [org, setOrg] = useState<OrganizationWithId | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Initialize loading based on cache availability
+  const [loading, setLoading] = useState(() => {
+    if (!firebaseEnabled || !orgId) return false
+    const cachedDashboard = cache.get<{ organization: OrganizationWithId, statistics: any }>(`dashboard_${orgId}`)
+    return !cachedDashboard.data // Only show loading if no cache
+  })
   const [selectedStudentId, setSelectedStudentId] = useState<string | undefined>(undefined)
   const [selectedStudentName, setSelectedStudentName] = useState<string | undefined>(undefined)
   const [statistics, setStatistics] = useState<{
@@ -187,39 +194,6 @@ function OrganizationDashboard() {
     const interviewsTrend = "+12%"
     const scoreTrend = stats.avgScore >= 70 ? "+3%" : "-1.5%"
     const successRate = stats.avgScore > 0 ? Math.round(stats.avgScore) : 92
-
-    // Real sparkline component with actual data points
-    const Sparkline = ({ data, trend }: { data: number[], trend: string }) => {
-      const isPositive = trend.startsWith('+')
-      const color = isPositive ? '#10b981' : '#ef4444'
-      
-      if (!data || data.length === 0) {
-        data = [10, 12, 8, 15, 14, 18, 16] // fallback
-      }
-      
-      const max = Math.max(...data)
-      const min = Math.min(...data)
-      const range = max - min || 1
-      
-      const points = data.map((value, index) => {
-        const x = (index / (data.length - 1)) * 80
-        const y = 24 - ((value - min) / range) * 20 + 4
-        return `${x},${y}`
-      }).join(' ')
-      
-      return (
-        <svg width="80" height="32" viewBox="0 0 80 32" fill="none" className="mt-2">
-          <polyline
-            points={points}
-            stroke={color}
-            strokeWidth="2"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      )
-    }
 
     return (
       <div className="space-y-6">

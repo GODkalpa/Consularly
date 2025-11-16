@@ -3,6 +3,8 @@
  * Uses localStorage with TTL and stale-while-revalidate pattern
  */
 
+import { cacheTracker } from './performance-monitor'
+
 interface CacheEntry<T> {
   data: T
   timestamp: number
@@ -27,7 +29,10 @@ export class ClientCache {
   get<T>(key: string): { data: T | null; isStale: boolean } {
     try {
       const cached = localStorage.getItem(this.prefix + key)
-      if (!cached) return { data: null, isStale: false }
+      if (!cached) {
+        cacheTracker.recordMiss()
+        return { data: null, isStale: false }
+      }
 
       const entry: CacheEntry<T> = JSON.parse(cached)
       const now = Date.now()
@@ -36,15 +41,18 @@ export class ClientCache {
       // Check if expired
       if (age > entry.ttl) {
         this.remove(key)
+        cacheTracker.recordMiss()
         return { data: null, isStale: false }
       }
 
       // Check if stale (but still valid)
       const isStale = age > DEFAULT_STALE_TIME
+      cacheTracker.recordHit()
 
       return { data: entry.data, isStale }
     } catch (e) {
       console.warn('[Cache] Failed to get:', key, e)
+      cacheTracker.recordMiss()
       return { data: null, isStale: false }
     }
   }

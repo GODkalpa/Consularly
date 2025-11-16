@@ -702,13 +702,27 @@ ${context.history.slice(-2).map((h) => `Q: ${h.question}\nA: ${h.answer}`).join(
 Select the best next question ID.`;
 
     try {
-      // Enforce a short timeout for snappy selection; fallback if slow
-      const timeoutMs = 3000;
+      // Timeout for LLM response; fallback to rule-based if slow
+      const timeoutMs = 15000; // 15s timeout for MegaLLM with upgraded plan
       const response = await Promise.race([
-        callLLMProvider(config, systemPrompt, userPrompt, 0.3, 500),
+        callLLMProvider(config, systemPrompt, userPrompt, 0.3, 2048),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('LLM selection timeout')), timeoutMs)),
       ]);
-      const result = JSON.parse(response.content);
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(response.content);
+      } catch (parseError) {
+        console.error('[Question Selector] Failed to parse LLM JSON response:', parseError, 'raw=', response.content);
+        return null;
+      }
+
+      const result = parsed && typeof parsed === 'object' ? parsed : null;
+      if (!result || typeof result.questionId !== 'string') {
+        console.error('[Question Selector] Invalid LLM response shape, expected { questionId, ... } but got:', result, 'raw=', response.content);
+        return null;
+      }
+
       // Enforce selection from the current pool first
       let selectedQuestion = pool.find((q) => q.id === result.questionId);
       if (!selectedQuestion) {
@@ -879,7 +893,7 @@ Candidate answer: "${answer}"
 Generate a follow-up question.`;
 
     try {
-      const response = await callLLMProvider(config, systemPrompt, userPrompt, 0.5, 200);
+      const response = await callLLMProvider(config, systemPrompt, userPrompt, 0.5, 1024);
       const result = JSON.parse(response.content);
       return result.followUp || null;
     } catch (error) {

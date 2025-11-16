@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb } from '@/lib/firebase-admin'
 import { logStep } from '@/lib/api-performance'
+import { studentNameCache } from '@/lib/student-cache'
+import { compressedJsonResponse } from '@/lib/compression-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -103,7 +105,7 @@ export async function GET(req: NextRequest) {
       avgScore = Math.round(totalScore / scoredInterviewsSnapshot.docs.length)
     }
     
-    // Get student names for recent interviews (optimized)
+    // Get student names for recent interviews (OPTIMIZED with cache and single query)
     const recentInterviewDocs = recentInterviewsSnapshot.docs
     const studentIds = [...new Set(
       recentInterviewDocs
@@ -114,29 +116,45 @@ export async function GET(req: NextRequest) {
     const studentNameMap = new Map<string, string>()
     
     if (studentIds.length > 0) {
-      // Batch fetch students efficiently 
-      const chunkSize = 10
-      const chunks: string[][] = []
-      for (let i = 0; i < studentIds.length; i += chunkSize) {
-        chunks.push(studentIds.slice(i, i + chunkSize))
+      const studentFetchStep = logStep('Student Names Fetch', Date.now())
+      
+      // Check cache first
+      const uncachedIds: string[] = []
+      studentIds.forEach(id => {
+        const cachedName = studentNameCache.get(id)
+        if (cachedName) {
+          studentNameMap.set(id, cachedName)
+        } else {
+          uncachedIds.push(id)
+        }
+      })
+      
+      // Fetch uncached students with single query using orgId filter
+      if (uncachedIds.length > 0) {
+        // OPTIMIZED: Single query with orgId filter instead of batched __name__ queries
+        const studentsSnapshot = await adminDb()
+          .collection('orgStudents')
+          .where('orgId', '==', orgId)
+          .get()
+        
+        const fetchedStudents: Array<{ id: string; name: string }> = []
+        
+        studentsSnapshot.forEach(doc => {
+          if (uncachedIds.includes(doc.id)) {
+            const data = doc.data()
+            const name = data?.name || data?.fullName || 'Unknown'
+            studentNameMap.set(doc.id, name)
+            fetchedStudents.push({ id: doc.id, name })
+          }
+        })
+        
+        // Update cache with newly fetched students
+        if (fetchedStudents.length > 0) {
+          studentNameCache.setMany(fetchedStudents)
+        }
       }
       
-      const studentSnapshots = await Promise.all(
-        chunks.map(chunk => 
-          adminDb()
-            .collection('orgStudents')
-            .where('__name__', 'in', chunk)
-            .get()
-        )
-      )
-      
-      studentSnapshots.forEach(snapshot => {
-        snapshot.forEach(doc => {
-          const data = doc.data()
-          const name = data?.name || data?.fullName || 'Unknown'
-          studentNameMap.set(doc.id, name)
-        })
-      })
+      studentFetchStep.end(`Fetched ${uncachedIds.length} students (${studentIds.length - uncachedIds.length} from cache)`)
     }
     
     const recentInterviews = recentInterviewDocs.map((doc) => {
@@ -198,14 +216,30 @@ export async function GET(req: NextRequest) {
       recentInterviews,
     }
 
-    const response = NextResponse.json({ 
+    const responseData = { 
       organization, 
       statistics 
-    })
-    responseStep.end('Combined response built')
+    }
     
-    // Add aggressive caching headers
-    response.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+    // Generate ETag based on data hash for conditional requests
+    const dataString = JSON.stringify(responseData)
+    const etag = `W/"${Buffer.from(dataString).toString('base64').slice(0, 32)}"`
+    
+    // Check if client has matching ETag (304 Not Modified)
+    const clientEtag = req.headers.get('if-none-match')
+    if (clientEtag === etag) {
+      const notModifiedResponse = new NextResponse(null, { status: 304 })
+      notModifiedResponse.headers.set('ETag', etag)
+      notModifiedResponse.headers.set('Cache-Control', 'private, max-age=300, stale-while-revalidate=600')
+      return notModifiedResponse
+    }
+    
+    const response = compressedJsonResponse(responseData)
+    responseStep.end('Combined response built with compression')
+    
+    // Add more aggressive caching headers (5 minutes with stale-while-revalidate)
+    response.headers.set('Cache-Control', 'private, max-age=300, stale-while-revalidate=600')
+    response.headers.set('ETag', etag)
     
     const totalTime = Date.now() - startTime
     console.log(`[Dashboard API] 🎯 TOTAL REQUEST TIME: ${totalTime}ms`)
