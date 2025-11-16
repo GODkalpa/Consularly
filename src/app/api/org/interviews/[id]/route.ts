@@ -41,7 +41,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     if (body.status) updates.status = String(body.status)
     if (body.endTime) updates.endTime = new Date(String(body.endTime))
-    if (typeof body.score === 'number') updates.score = Number(body.score)
+    if (typeof body.score === 'number') {
+      updates.score = Number(body.score)
+      // CRITICAL FIX: Also update finalScore for dashboard queries
+      updates.finalScore = Number(body.score)
+    }
     if (body.scoreDetails && typeof body.scoreDetails === 'object') {
       updates.scoreDetails = {
         communication: Number(body.scoreDetails.communication ?? interviewSnap.get('scoreDetails.communication') ?? 0),

@@ -400,14 +400,14 @@ export function StudentResults() {
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex gap-2">
-                                    <Button variant="outline" size="sm">
-                                      <FileText className="h-4 w-4 mr-1" />
-                                      Report
-                                    </Button>
                                     {interview.status === 'completed' && (
-                                      <Button variant="outline" size="sm">
-                                        <Play className="h-4 w-4 mr-1" />
-                                        Retry
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={() => window.open(`/report/${interview.id}`, '_blank')}
+                                      >
+                                        <FileText className="h-4 w-4 mr-1" />
+                                        View Report
                                       </Button>
                                     )}
                                   </div>

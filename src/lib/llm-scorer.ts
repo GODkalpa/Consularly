@@ -68,7 +68,7 @@ export class LLMScoringService {
     logProviderSelection(route, 'answer_scoring', config);
 
     try {
-      const response = await callLLMProvider(config, systemPrompt, userPrompt, 0.3, 1500);
+      const response = await callLLMProvider(config, systemPrompt, userPrompt, 0.3, 8192);
       const parsed = this.parseResponse(response.content);
       
       // DEBUG: Log if contentScore is suspiciously low

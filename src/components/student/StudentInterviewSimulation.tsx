@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Play, AlertCircle, User, Settings, Target, Clock, BookOpen, CreditCard } from 'lucide-react'
+import { Play, AlertCircle, User, Target, Clock, BookOpen, CreditCard } from 'lucide-react'
 import { useStudentAuth } from '@/contexts/StudentAuthContext'
 import { auth, firebaseEnabled } from '@/lib/firebase'
 import {
@@ -133,7 +133,18 @@ export function StudentInterviewSimulation() {
           userId: student.id,
           visaType: defaultVisaTypeForRoute(route),
           route,
-          studentProfile: { name: student.name, country: 'Nepal' },
+          studentProfile: { 
+            name: student.name, 
+            country: 'Nepal',
+            // Include all student profile data for better question targeting
+            degreeLevel: student.studentProfile?.degreeLevel,
+            programName: student.studentProfile?.programName,
+            universityName: student.studentProfile?.universityName,
+            programLength: student.studentProfile?.programLength,
+            programCost: student.studentProfile?.programCost,
+            fieldOfStudy: student.studentProfile?.fieldOfStudy,
+            intendedMajor: student.studentProfile?.intendedMajor,
+          },
           firestoreInterviewId: created.interview.id,
           mode: 'standard',
           difficulty: 'medium',
@@ -271,60 +282,7 @@ export function StudentInterviewSimulation() {
         </CardContent>
       </Card>
 
-      {/* Interview Configuration - Only for USA F1 */}
-      {route === 'usa_f1' && (
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2.5 bg-primary-100 rounded-lg">
-                <Settings className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold">Interview Configuration</h3>
-                <p className="text-sm text-muted-foreground">Standard format optimized for students</p>
-              </div>
-            </div>
 
-            <div className="space-y-6">
-              {/* Interview Mode */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Interview Mode
-                </Label>
-                <div className="p-3 bg-gray-50 rounded-lg border">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-medium">Standard</span>
-                      <span className="text-xs text-muted-foreground ml-2">12 questions • 15 min</span>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Balanced session simulating a typical embassy interview experience
-                </p>
-              </div>
-
-              {/* Difficulty Level */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Difficulty Level
-                </Label>
-                <div className="p-3 bg-gray-50 rounded-lg border">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-medium">Intermediate</span>
-                      <span className="text-xs text-muted-foreground ml-2">45s/question • Professional officer</span>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Realistic pace and professional questioning style
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Start Button */}
       <Button 

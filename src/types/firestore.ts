@@ -198,10 +198,6 @@ export interface Interview {
     timestamp?: string;
     questionType?: string;
   }>;
-  // Interview mode and difficulty settings
-  interviewMode?: 'practice' | 'standard' | 'comprehensive' | 'stress_test';
-  difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
-  officerPersona?: 'professional' | 'skeptical' | 'friendly' | 'strict';
   targetTopic?: 'financial' | 'academic' | 'intent' | 'weak_areas';
   questionCount?: number; // Actual number of questions asked
   // Enhanced scoring dimensions (12-dimension system)

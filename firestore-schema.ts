@@ -17,8 +17,9 @@ export interface Interview {
   interviewerId?: string; // Optional: Reference to interviewer user
   startTime: Date;
   endTime: Date;
-  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'failed';
   score?: number; // Overall score (0-100)
+  finalScore?: number; // CRITICAL: Used by dashboard queries - should match score
   scoreDetails?: ScoreDetails;
   createdAt: Date;
   updatedAt: Date;
@@ -26,6 +27,7 @@ export interface Interview {
   interviewType?: string; // e.g., 'technical', 'behavioral', 'mock', 'visa'
   route?: string; // e.g., 'uk_student', 'usa_f1', 'france_ema'
   notes?: string;
+  failureReason?: string; // Reason for failed status
   // Enhanced reporting fields
   finalReport?: FinalReport;
   perAnswerScores?: PerAnswerScore[];

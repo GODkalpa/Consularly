@@ -54,8 +54,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       id: interviewId,
       status: interviewData.status || 'unknown',
       route: interviewData.route || null,
-      interviewMode: interviewData.interviewMode || 'standard',
-      difficulty: interviewData.difficulty || 'medium',
       
       // Timing
       startTime: interviewData.startTime?.toDate?.()?.toISOString() || interviewData.startTime,

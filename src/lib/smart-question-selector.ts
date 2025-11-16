@@ -56,6 +56,7 @@ interface QuestionResult {
   type: 'bank' | 'followup';
   questionId?: string;
   reasoning?: string;
+  semanticCluster?: string; // Track cluster to prevent repetition
 }
 
 /**
@@ -86,7 +87,7 @@ const SEMANTIC_CLUSTERS: Record<string, string[]> = {
 /**
  * Get semantic cluster for a question
  */
-function getSemanticCluster(question: string): string | null {
+export function getSemanticCluster(question: string): string | null {
   const q = question.toLowerCase();
   for (const [cluster, keywords] of Object.entries(SEMANTIC_CLUSTERS)) {
     if (keywords.some(kw => q.includes(kw))) {
@@ -406,17 +407,32 @@ export class SmartQuestionSelector {
       const followUp = this.detectFollowUpNeed(context.route, lastInteraction.answer);
       
       if (followUp) {
+        // CRITICAL FIX: Track semantic cluster for follow-ups too
+        const cluster = getSemanticCluster(followUp);
+        
+        // CRITICAL FIX: Generate a synthetic questionId for follow-ups to enable tracking
+        // Format: FOLLOWUP_<route>_<step>_<timestamp>
+        const followUpId = `FOLLOWUP_${context.route}_${context.history.length + 1}_${Date.now()}`;
+        
         return {
           question: followUp,
           type: 'followup',
+          questionId: followUpId, // ✅ Now follow-ups have IDs too
           reasoning: 'Detected incomplete or vague answer requiring clarification',
+          semanticCluster: cluster || undefined,
         };
       }
     }
 
     // Select from question bank using LLM
     const bankQuestion = await this.selectFromBank(context);
-    return bankQuestion;
+    
+    // CRITICAL FIX: Add semantic cluster to bank question result
+    const cluster = getSemanticCluster(bankQuestion.question);
+    return {
+      ...bankQuestion,
+      semanticCluster: cluster || undefined,
+    };
   }
 
   /**
@@ -450,25 +466,37 @@ export class SmartQuestionSelector {
       context.contextFlags = buildContextFlags(context.profile, context.history);
     }
     
-    // Build asked clusters if not provided
-    if (!context.askedClusters) {
+    // CRITICAL FIX: Trust passed askedClusters array, only rebuild as fallback
+    // The session tracking is authoritative - don't rebuild from history
+    if (!context.askedClusters || context.askedClusters.length === 0) {
       context.askedClusters = context.history
         .map(h => getSemanticCluster(h.question))
         .filter((c): c is string => c !== null);
+      console.log(`[Question Selector] Rebuilt ${context.askedClusters.length} clusters from history (fallback)`);
+    } else {
+      console.log(`[Question Selector] Using ${context.askedClusters.length} tracked clusters from session`);
     }
+    
+    // CRITICAL FIX: Filter out FOLLOWUP_* IDs from askedQuestionIds before filtering bank questions
+    // Follow-up IDs are synthetic and won't match bank question IDs
+    const bankAskedIds = context.askedQuestionIds.filter(id => !id.startsWith('FOLLOWUP_'));
     
     // Filter questions by route
     let availableQuestions = this.questionBank.questions.filter(
       (q) => q.route === context.route || q.route === 'both'
     ).filter(
-      (q) => !context.askedQuestionIds.includes(q.id)
+      (q) => !bankAskedIds.includes(q.id)
     );
     
-    // Filter by semantic clusters (don't ask questions from already-covered clusters)
+    console.log(`[Question Selector] Initial pool: ${availableQuestions.length} questions (filtered by route and asked IDs: ${bankAskedIds.length})`);
+    
+    // CRITICAL FIX: More lenient cluster filtering - only block if cluster was asked in last 3 questions
+    // This prevents over-filtering while still avoiding immediate repetition
+    const recentClusters = context.askedClusters.slice(-3); // Only last 3 clusters
     availableQuestions = availableQuestions.filter((q) => {
       const cluster = getSemanticCluster(q.question);
-      if (cluster && context.askedClusters!.includes(cluster)) {
-        console.log(`[Question Selector] Skipping ${q.id} - cluster '${cluster}' already covered`);
+      if (cluster && recentClusters.includes(cluster)) {
+        console.log(`[Question Selector] Skipping ${q.id} - cluster '${cluster}' recently covered`);
         return false;
       }
       return true;
@@ -564,17 +592,26 @@ export class SmartQuestionSelector {
       };
     }
 
-    // Try LLM selection
-    try {
-      const selected = await this.selectWithLLM(context, availableQuestions);
-      if (selected) {
-        return selected;
+    // PERFORMANCE OPTIMIZATION: Use LLM selection for intelligent question picking
+    // Claude Haiku 4.5 or Groq provide fast (<500ms) and smart question selection
+    // Rule-based is instant but less adaptive
+    const shouldUseLLM = true; // Enable LLM for all routes (fast models only)
+    
+    if (shouldUseLLM) {
+      // Try LLM selection for USA F1 (adaptive questioning)
+      try {
+        const selected = await this.selectWithLLM(context, availableQuestions);
+        if (selected) {
+          return selected;
+        }
+      } catch (error) {
+        console.warn('[Question Selector] LLM selection failed, using rule-based fallback:', error);
       }
-    } catch (error) {
-      console.warn('[Question Selector] LLM selection failed, using rule-based fallback:', error);
+    } else {
+      console.log(`[Question Selector] Skipping LLM selection for ${context.route} - using fast rule-based selection`);
     }
 
-    // Fallback to rule-based selection
+    // Fallback to rule-based selection (or primary for UK/France)
     return this.selectRuleBased(context, availableQuestions);
   }
 
@@ -612,13 +649,16 @@ export class SmartQuestionSelector {
       .map(([cat, count]) => `${cat}: ${count}`)
       .join(', ');
 
-    // Question summaries (first 20 from the current pool)
-    const questionSummaries = pool.slice(0, 20).map((q) => ({
+    // CRITICAL FIX: Show ALL available questions to LLM (not just first 20)
+    // The LLM needs to see all options to make a valid selection
+    const questionSummaries = pool.map((q) => ({
       id: q.id,
       category: q.category,
       difficulty: q.difficulty,
       preview: q.question.substring(0, 80),
     }));
+    
+    console.log(`[Question Selector] LLM pool size: ${pool.length}, showing all ${questionSummaries.length} questions to LLM`);
 
     // Build asked clusters summary
     const askedClusters = context.askedClusters || [];
@@ -691,21 +731,28 @@ Selection criteria (in priority order):
 5. Match student profile relevance
 6. Follow up on red flags if detected
 
-Return JSON: {"questionId": "selected_id", "reasoning": "brief explanation"}`;
+CRITICAL OUTPUT FORMAT:
+- Return ONLY valid JSON, nothing else
+- NO explanatory text before or after the JSON
+- NO HTML tags, NO markdown, NO formatting
+- Just the raw JSON object: {"questionId": "selected_id", "reasoning": "brief explanation"}`;
 
-    const userPrompt = `Available questions (${pool.length} in current stage pool, showing first 20):
+    const userPrompt = `Available questions (${pool.length} total in pool, showing first ${questionSummaries.length}):
 ${JSON.stringify(questionSummaries, null, 2)}
 
-Recent conversation context:
-${context.history.slice(-2).map((h) => `Q: ${h.question}\nA: ${h.answer}`).join('\n\n')}
+IMPORTANT: You MUST select a question ID from the list above. Do not invent question IDs.
 
-Select the best next question ID.`;
+Recent conversation context:
+${context.history.slice(-2).map((h) => `Q: ${h.question.substring(0, 100)}\nA: ${h.answer.substring(0, 150)}`).join('\n\n')}
+
+Select the best next question ID from the available questions above and return ONLY the JSON object with no additional text.
+Format: {"questionId": "UK_XXX", "reasoning": "brief explanation"}`;
 
     try {
       // Timeout for LLM response; fallback to rule-based if slow
-      const timeoutMs = 15000; // 15s timeout for MegaLLM with upgraded plan
+      const timeoutMs = 20000; // 20s timeout for MegaLLM (allows time for JSON mode response)
       const response = await Promise.race([
-        callLLMProvider(config, systemPrompt, userPrompt, 0.3, 2048),
+        callLLMProvider(config, systemPrompt, userPrompt, 0.3, 8192),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('LLM selection timeout')), timeoutMs)),
       ]);
 
@@ -723,19 +770,38 @@ Select the best next question ID.`;
         return null;
       }
 
-      // Enforce selection from the current pool first
-      let selectedQuestion = pool.find((q) => q.id === result.questionId);
-      if (!selectedQuestion) {
-        selectedQuestion = availableQuestions.find((q) => q.id === result.questionId);
-      }
+      // CRITICAL FIX: Search in the full available pool, not just the stage-filtered pool
+      // The LLM may select from availableQuestions (already filtered by clusters/context)
+      let selectedQuestion = availableQuestions.find((q) => q.id === result.questionId);
+      
       if (selectedQuestion) {
-        console.log(`[Question Selector] path=llm route=${context.route} step=${context.history.length + 1} id=${selectedQuestion.id}`);
+        // CRITICAL FIX: Double-check this question wasn't already asked (extra safety)
+        const alreadyAsked = context.history.some(h => {
+          const historyId = (h as any).questionId;
+          return historyId === selectedQuestion!.id;
+        });
+        
+        if (alreadyAsked) {
+          console.error(`[Question Selector] ❌ LLM selected already-asked question: ${selectedQuestion.id}`);
+          console.error(`[Question Selector] This should not happen - falling back to rule-based`);
+          return null;
+        }
+        
+        console.log(`[Question Selector] ✅ LLM SUCCESS - path=llm route=${context.route} step=${context.history.length + 1} id=${selectedQuestion.id}`);
         return {
           question: selectedQuestion.question,
           type: 'bank',
           questionId: selectedQuestion.id,
           reasoning: result.reasoning,
         };
+      } else {
+        // LLM returned an invalid ID (already asked or filtered out)
+        console.error(`[Question Selector] ❌ LLM FAILURE - Invalid question ID: ${result.questionId}`);
+        console.error(`[Question Selector] Available pool size: ${availableQuestions.length} questions`);
+        console.error(`[Question Selector] Pool IDs: ${availableQuestions.map(q => q.id).join(', ')}`);
+        console.error(`[Question Selector] Asked IDs: ${context.askedQuestionIds.join(', ')}`);
+        console.error(`[Question Selector] LLM reasoning: ${result.reasoning}`);
+        return null;
       }
     } catch (error) {
       console.error('[Question Selector] LLM selection error:', error);
@@ -748,7 +814,7 @@ Select the best next question ID.`;
    * Rule-based fallback selection
    */
   private selectRuleBased(context: StudentContext, availableQuestions: Question[]): QuestionResult {
-    // Simple deterministic string hash for seeded selection
+    // CRITICAL FIX: Add session-based seeding to prevent same question selection
     const hashString = (s: string): number => {
       let h = 0;
       for (let i = 0; i < s.length; i++) {
@@ -756,12 +822,20 @@ Select the best next question ID.`;
       }
       return Math.abs(h);
     };
+    
+    // Create a stable seed from the first question asked (or current step)
+    const sessionSeed = context.history.length > 0 
+      ? context.history[0].question 
+      : `step_${context.history.length}`;
+    const stepSeed = `${sessionSeed}_${context.history.length}`;
 
     // Topic Focus: If priorityCategory is set, prefer questions from that category (70% of the time)
-    if (context.priorityCategory && Math.random() < 0.7) {
+    if (context.priorityCategory) {
       const topicQuestions = availableQuestions.filter(q => q.category === context.priorityCategory);
       if (topicQuestions.length > 0) {
-        const selected = topicQuestions[Math.floor(Math.random() * topicQuestions.length)];
+        // CRITICAL FIX: Use seeded selection instead of Math.random()
+        const idx = hashString(stepSeed + '_topic') % topicQuestions.length;
+        const selected = topicQuestions[idx];
         console.log(`[Question Selector] path=rule route=${context.route} id=${selected.id} reason=topic-focus:${context.priorityCategory}`);
         return {
           question: selected.question,
@@ -850,13 +924,66 @@ Select the best next question ID.`;
     }
     
     const categoryQuestions = availableQuestions.filter((q) => q.category === leastCoveredCategory);
-    const selected = categoryQuestions.find((q) => q.difficulty !== 'hard') || categoryQuestions[0] || availableQuestions[0];
+    
+    // CRITICAL FIX: Use seeded selection instead of always picking first question
+    // This prevents the same question from being selected repeatedly
+    if (categoryQuestions.length === 0) {
+      // No questions in this category, pick from any available
+      if (availableQuestions.length === 0) {
+        console.error(`[Question Selector] No available questions! This should not happen.`);
+        return {
+          question: "Is there anything else you'd like to share about your plans?",
+          type: 'bank',
+          reasoning: 'Emergency fallback - no questions available',
+          questionId: `EMERGENCY_${Date.now()}`,
+        };
+      }
+      const idx = hashString(stepSeed + '_any') % availableQuestions.length;
+      const selected = availableQuestions[idx];
+      console.log(`[Question Selector] path=rule route=${context.route} step=${context.history.length + 1} id=${selected.id} reason=any_available`);
+      return {
+        question: selected.question,
+        type: 'bank',
+        questionId: selected.id,
+        reasoning: `Rule-based: selected from available questions`,
+      };
+    }
+    
+    // Prefer non-hard questions, but use seeded selection for variety
+    const nonHardQuestions = categoryQuestions.filter((q) => q.difficulty !== 'hard');
+    const pool = nonHardQuestions.length > 0 ? nonHardQuestions : categoryQuestions;
+    
+    const idx = hashString(stepSeed + '_category') % pool.length;
+    const selected = pool[idx];
+    
+    // CRITICAL FIX: Final safety check - ensure this question wasn't already asked
+    const alreadyAsked = context.history.some(h => {
+      const historyId = (h as any).questionId;
+      return historyId === selected.id;
+    });
+    
+    if (alreadyAsked) {
+      console.error(`[Question Selector] ⚠️ Rule-based selected already-asked question: ${selected.id}`);
+      // Try to find an alternative
+      const alternatives = pool.filter(q => !context.history.some(h => (h as any).questionId === q.id));
+      if (alternatives.length > 0) {
+        const altIdx = hashString(stepSeed + '_alt') % alternatives.length;
+        const alternative = alternatives[altIdx];
+        console.log(`[Question Selector] ✅ Using alternative: ${alternative.id}`);
+        return {
+          question: alternative.question,
+          type: 'bank',
+          questionId: alternative.id,
+          reasoning: `Rule-based (alternative): selected from least covered category (${leastCoveredCategory})`,
+        };
+      }
+    }
     
     const routeLabel = context.route === 'uk_student' ? 'UK' : 
                        context.route === 'france_ema' ? 'France EMA' :
                        context.route === 'france_icn' ? 'France ICN' : 'general';
     if (selected) {
-      console.log(`[Question Selector] path=rule route=${context.route} step=${context.history.length + 1} id=${selected.id} reason=least_covered:${leastCoveredCategory}`);
+      console.log(`[Question Selector] path=rule route=${context.route} step=${context.history.length + 1} id=${selected.id} reason=least_covered:${leastCoveredCategory} (${idx}/${pool.length})`);
     }
     return {
       question: selected.question,
@@ -893,7 +1020,7 @@ Candidate answer: "${answer}"
 Generate a follow-up question.`;
 
     try {
-      const response = await callLLMProvider(config, systemPrompt, userPrompt, 0.5, 1024);
+      const response = await callLLMProvider(config, systemPrompt, userPrompt, 0.5, 4096);
       const result = JSON.parse(response.content);
       return result.followUp || null;
     } catch (error) {

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
-import { Play, RotateCcw, Save, AlertCircle, User, Globe, Settings, Target, TrendingUp, Lightbulb, BookOpen, Clock } from 'lucide-react'
+import { Play, RotateCcw, Save, AlertCircle, User, Globe, Target, TrendingUp, Lightbulb, BookOpen, Clock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { auth, firebaseEnabled } from '@/lib/firebase'
 import {
@@ -25,8 +25,7 @@ import { TranscriptionResult } from '@/lib/assemblyai-service'
 import { mapQuestionTypeToCategory, defaultVisaTypeForRoute, type InterviewRoute, routeDisplayName } from '@/lib/interview-routes'
 import type { BodyLanguageScore } from '@/lib/body-language-scoring'
 import { scorePerformance } from '@/lib/performance-scoring'
-import type { InterviewMode, DifficultyLevel, PracticeTopic } from '@/lib/interview-modes'
-import type { OfficerPersona } from '@/lib/officer-personas'
+
 // Using secure API routes instead of direct client Firestore writes
 
 interface InterviewQuestion {
@@ -74,12 +73,6 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
   const [studentId, setStudentId] = useState<string>(initialStudentId || '')
   const [studentName, setStudentName] = useState<string>(initialStudentName || '')
   const [route, setRoute] = useState<InterviewRoute>('usa_f1')
-  
-  // Interview mode configuration
-  const [mode, setMode] = useState<InterviewMode>('standard')
-  const [difficulty, setDifficulty] = useState<DifficultyLevel>('medium')
-  const [persona, setPersona] = useState<OfficerPersona | undefined>(undefined)
-  const [topic, setTopic] = useState<PracticeTopic | undefined>(undefined)
 
   // Interview session state
   const [session, setSession] = useState<UISession | null>(null)
@@ -463,11 +456,6 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
           route,
           studentProfile: studentProfilePayload,
           firestoreInterviewId: created.id,  // Pass the interview ID we just created
-          // NEW: Interview configuration
-          mode,
-          difficulty,
-          officerPersona: persona,
-          targetTopic: topic,
         })
       })
       if (!res.ok) {
@@ -673,8 +661,6 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
               assemblyConfidence: typeof confidence === 'number' ? confidence : undefined,
               interviewContext: ic,
               sessionMemory: (apiSession as any)?.sessionMemory,
-              // Pass difficulty for adjusted scoring
-              difficulty: apiSession?.difficulty,
             }),
           })
           if (res.ok) {
@@ -929,135 +915,7 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
             </CardContent>
           </Card>
 
-          {/* Interview Configuration - Only for USA F1 */}
-          {route === 'usa_f1' && (
-            <Card className="bg-white">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2.5 bg-primary-100 rounded-lg">
-                    <Settings className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-semibold">Interview Configuration</h3>
-                    <p className="text-sm text-muted-foreground">Customize difficulty and format</p>
-                  </div>
-                </div>
 
-                <div className="space-y-6">
-                  {/* Interview Mode */}
-                  <div className="space-y-2">
-                    <Label htmlFor="mode-select" className="text-sm font-medium">
-                      Interview Mode
-                    </Label>
-                    <Select value={mode} onValueChange={(v) => setMode(v as InterviewMode)}>
-                      <SelectTrigger id="mode-select">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="practice">
-                          <span className="font-medium">Practice</span>
-                          <span className="text-xs text-muted-foreground ml-2">8 questions • 10 min</span>
-                        </SelectItem>
-                        <SelectItem value="standard">
-                          <span className="font-medium">Standard</span>
-                          <span className="text-xs text-muted-foreground ml-2">12 questions • 15 min</span>
-                        </SelectItem>
-                        <SelectItem value="comprehensive">
-                          <span className="font-medium">Comprehensive</span>
-                          <span className="text-xs text-muted-foreground ml-2">16 questions • 20 min</span>
-                        </SelectItem>
-                        <SelectItem value="stress_test">
-                          <span className="font-medium">Stress Test</span>
-                          <span className="text-xs text-muted-foreground ml-2">20 questions • 25 min</span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {mode === 'practice' && 'Balanced session simulating a typical embassy interview experience'}
-                      {mode === 'standard' && 'Balanced session simulating a typical embassy interview experience'}
-                      {mode === 'comprehensive' && 'In-depth interview covering all aspects thoroughly with follow-ups'}
-                      {mode === 'stress_test' && 'Challenging rapid-fire format designed to test composure under pressure'}
-                    </p>
-                  </div>
-
-                  {/* Difficulty Level */}
-                  <div className="space-y-2">
-                    <Label htmlFor="difficulty-select" className="text-sm font-medium">
-                      Difficulty Level
-                    </Label>
-                    <Select value={difficulty} onValueChange={(v) => setDifficulty(v as DifficultyLevel)}>
-                      <SelectTrigger id="difficulty-select">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="easy">
-                          <span className="font-medium">Beginner</span>
-                          <span className="text-xs text-muted-foreground ml-2">60s/question • Patient officer</span>
-                        </SelectItem>
-                        <SelectItem value="medium">
-                          <span className="font-medium">Intermediate</span>
-                          <span className="text-xs text-muted-foreground ml-2">45s/question • Professional officer</span>
-                        </SelectItem>
-                        <SelectItem value="hard">
-                          <span className="font-medium">Advanced</span>
-                          <span className="text-xs text-muted-foreground ml-2">30s/question • Challenging</span>
-                        </SelectItem>
-                        <SelectItem value="expert">
-                          <span className="font-medium">Master</span>
-                          <span className="text-xs text-muted-foreground ml-2">25s/question • Maximum pressure</span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Advanced Options */}
-                  <div className="pt-4 border-t space-y-6">
-                    <div className="grid md:grid-cols-2 gap-6">
-                      {/* Officer Persona */}
-                      <div className="space-y-2">
-                        <Label htmlFor="persona-select" className="text-sm font-medium">
-                          Officer Persona <span className="text-muted-foreground font-normal">(Optional)</span>
-                        </Label>
-                        <Select value={persona || 'auto'} onValueChange={(v) => setPersona(v === 'auto' ? undefined : v as OfficerPersona)}>
-                          <SelectTrigger id="persona-select">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="auto">Auto-select</SelectItem>
-                            <SelectItem value="professional">Professional Officer</SelectItem>
-                            <SelectItem value="skeptical">Skeptical Officer</SelectItem>
-                            <SelectItem value="friendly">Friendly Officer</SelectItem>
-                            <SelectItem value="strict">Strict Officer</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Topic Focus (Only for Practice Mode) */}
-                      {mode === 'practice' && (
-                        <div className="space-y-2">
-                          <Label htmlFor="topic-select" className="text-sm font-medium">
-                            Topic Focus <span className="text-muted-foreground font-normal">(Optional)</span>
-                          </Label>
-                          <Select value={topic || 'balanced'} onValueChange={(v) => setTopic(v === 'balanced' ? undefined : v as PracticeTopic)}>
-                            <SelectTrigger id="topic-select">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="balanced">Balanced Practice</SelectItem>
-                              <SelectItem value="financial">Financial Capacity</SelectItem>
-                              <SelectItem value="academic">Academic Background</SelectItem>
-                              <SelectItem value="intent">Return Intent</SelectItem>
-                              <SelectItem value="weak_areas">Weak Areas Practice</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           {/* Start Button */}
           <Button 

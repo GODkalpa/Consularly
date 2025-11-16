@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { selectLLMProvider, callLLMProvider, logProviderSelection, type InterviewRoute } from '@/lib/llm-provider-selector'
-import type { DetailedInsight, FinalReport } from '@/types/firestore'
+import { selectLLMProvider, callLLMProvider, logProviderSelection, type InterviewRoute, type LLMProviderConfig } from '@/lib/llm-provider-selector'
+import type { DetailedInsight } from '@/types/firestore'
+import { buildOptimizedPrompt, logPromptMetrics, type ConversationEntry, type PerAnswerScore } from '@/lib/prompt-compression'
+import { performanceTracker, createEvaluationMetric } from '@/lib/performance-benchmark'
 
 // Final interview evaluation focused on UK pre-CAS metrics with graceful fallback
 // Request body:
@@ -39,8 +41,14 @@ export async function POST(request: NextRequest) {
     
     // Try LLM-based final evaluation using provider selector
     try {
+      console.log('[Final Evaluation] Starting LLM evaluation...')
       const llmRes = await evaluateWithLLM({ route, studentProfile, conversationHistory, perAnswerScores })
-      if (llmRes) return NextResponse.json(llmRes)
+      if (llmRes) {
+        console.log('[Final Evaluation] ✅ LLM evaluation succeeded')
+        return NextResponse.json(llmRes)
+      } else {
+        console.warn('[Final Evaluation] ⚠️ LLM evaluation returned null')
+      }
     } catch (e) {
       console.error('LLM final evaluation failed:', e)
       // fall through to heuristics
@@ -72,6 +80,89 @@ export async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * Build a degraded (more minimal) prompt for retry attempts
+ * Further reduces token count by removing examples and detailed instructions
+ */
+function buildDegradedPrompt(
+  route: InterviewRoute,
+  studentProfile: any,
+  perAnswerScores: PerAnswerScore[]
+): { system: string; user: string } {
+  const isUKFrance = route === 'uk_student' || route === 'france_ema' || route === 'france_icn'
+  const countryName = route === 'uk_student' ? 'UK' : route.startsWith('france_') ? 'France' : 'USA'
+  
+  // Ultra-minimal system prompt
+  const system = isUKFrance
+    ? `${countryName} visa evaluator. Evaluate interview performance.
+
+CRITERIA: courseAndUniversityFit, financialRequirement, accommodationLogistics, complianceCredibility, postStudyIntent, communication
+
+THRESHOLDS:
+- accepted: All ≥75, no red flags
+- borderline: Any 55-74 OR minor red flags
+- rejected: Any <55 OR major red flags
+
+Return JSON: decision, overall, dimensions, summary, detailedInsights, strengths, weaknesses, recommendations.`
+    : `US F1 visa evaluator. Evaluate interview performance.
+
+CRITERIA: communication, content, financials, intent
+
+THRESHOLDS:
+- accepted: All >75, no red flags
+- borderline: Mixed 60-75
+- rejected: Any <60 OR red flags
+
+Return JSON: decision, overall, dimensions, summary, detailedInsights, strengths, weaknesses, recommendations.`
+  
+  // Calculate aggregate scores only
+  const avgOverall = perAnswerScores.reduce((sum, s) => sum + s.overall, 0) / perAnswerScores.length
+  const avgContent = perAnswerScores.reduce((sum, s) => sum + s.categories.content, 0) / perAnswerScores.length
+  const avgSpeech = perAnswerScores.reduce((sum, s) => sum + s.categories.speech, 0) / perAnswerScores.length
+  const avgBody = perAnswerScores.reduce((sum, s) => sum + s.categories.bodyLanguage, 0) / perAnswerScores.length
+  
+  const dimensionsSchema = route === 'uk_student'
+    ? `"courseAndUniversityFit": number, "financialRequirement": number, "accommodationLogistics": number, "complianceCredibility": number, "postStudyIntent": number,`
+    : `"content": number, "financials": number, "intent": number,`
+  
+  // Ultra-minimal user prompt with only aggregate scores
+  const user = `STUDENT: ${studentProfile.name} (${studentProfile.country})
+UNIVERSITY: ${studentProfile.intendedUniversity || 'N/A'}
+
+SCORES (${perAnswerScores.length} questions):
+Overall: ${Math.round(avgOverall)}/100
+Content: ${Math.round(avgContent)}/100
+Speech: ${Math.round(avgSpeech)}/100
+Body: ${Math.round(avgBody)}/100
+
+JSON OUTPUT:
+{"decision": "accepted|rejected|borderline", "overall": <0-100>, "dimensions": {"communication": <0-100>, ${dimensionsSchema}}, "summary": "<2 paragraphs>", "detailedInsights": [{"category": "...", "type": "strength|weakness", "finding": "...", "actionItem": "..."}], "strengths": ["..."], "weaknesses": ["..."], "recommendations": ["..."]}`
+  
+  return { system, user }
+}
+
+/**
+ * Select the fastest available LLM provider for final evaluation
+ * Priority: Claude Haiku 4.5 (best for structured JSON) > Groq Llama 3.3 70B
+ */
+function selectFastestProvider(route: InterviewRoute): LLMProviderConfig | null {
+  // Priority 1: Claude Haiku 4.5 (20-30s for complex evaluations, excellent structured output)
+  // Note: While not the absolute fastest, it's the most reliable for JSON generation
+  if (process.env.MEGALLM_API_KEY) {
+    console.log('🚀 [Fast Provider] Selected Claude Haiku 4.5 (primary - best JSON reliability)')
+    return {
+      provider: 'megallm',
+      model: 'claude-haiku-4-5-20251001',
+      apiKey: process.env.MEGALLM_API_KEY,
+      baseUrl: process.env.MEGALLM_BASE_URL || 'https://ai.megallm.io/v1',
+    }
+  }
+  
+  // Priority 2: Groq Llama 3.3 70B (1-3s typical, but less reliable JSON)
+  console.log('🚀 [Fast Provider] Selected Groq Llama 3.3 70B (fallback)')
+  return selectLLMProvider(route, 'final_evaluation')
+}
+
 async function evaluateWithLLM({ route, studentProfile, conversationHistory, perAnswerScores }: { 
   route?: InterviewRoute; 
   studentProfile: any; 
@@ -80,8 +171,8 @@ async function evaluateWithLLM({ route, studentProfile, conversationHistory, per
 }) {
   const effectiveRoute: InterviewRoute = route || 'usa_f1'
   
-  // Select provider for final evaluation
-  const config = selectLLMProvider(effectiveRoute, 'final_evaluation')
+  // OPTIMIZATION: Use fast provider selection for final evaluation
+  const config = selectFastestProvider(effectiveRoute)
   if (!config) {
     console.warn('[Final Evaluation] No provider available')
     return null
@@ -89,7 +180,159 @@ async function evaluateWithLLM({ route, studentProfile, conversationHistory, per
   
   logProviderSelection(effectiveRoute, 'final_evaluation', config)
   
-  // UK and France use similar strict evaluation system
+  // OPTIMIZATION: Use compressed prompts if per-answer scores are available
+  // Allow slight mismatch (e.g., 6 scores for 8 questions) by requiring at least 75% coverage
+  const hasEnoughScores = perAnswerScores && perAnswerScores.length > 0 && 
+    perAnswerScores.length >= Math.floor(conversationHistory.length * 0.75)
+  
+  if (hasEnoughScores) {
+    console.log('📊 Using optimized prompt compression')
+    const startTime = performance.now()
+    
+    // Pad perAnswerScores to match conversationHistory length if needed
+    const paddedScores: PerAnswerScore[] = conversationHistory.map((_, i) => 
+      perAnswerScores![i] || { overall: 0, categories: { content: 0, speech: 0, bodyLanguage: 0 } }
+    )
+    
+    const { system, user, tokenEstimate } = buildOptimizedPrompt(
+      effectiveRoute,
+      studentProfile,
+      conversationHistory as ConversationEntry[],
+      paddedScores
+    )
+    
+    const promptBuildTime = performance.now() - startTime
+    console.log(`📉 Optimized prompt: ~${tokenEstimate} tokens (built in ${Math.round(promptBuildTime)}ms)`)
+    
+    // RETRY LOGIC: Attempt 1 with MegaLLM, Attempt 2 with Groq fallback
+    let response: any
+    let llmCallTime: number
+    let attempt = 1
+    const maxAttempts = 2
+    let currentConfig = config
+    
+    while (attempt <= maxAttempts) {
+      try {
+        console.log(`🔄 Attempt ${attempt}/${maxAttempts}`)
+        const llmStartTime = performance.now()
+        
+        if (attempt === 1) {
+          // Attempt 1: Full optimized prompt with MegaLLM (45s timeout, 4096 max tokens)
+          // Note: MegaLLM/Claude Haiku needs 20-30s for complex structured JSON with 16 Q&A pairs
+          response = await callLLMProvider(currentConfig, system, user, 0.3, 4096, 45000)
+        } else {
+          // Attempt 2: Retry with same optimized prompt but longer timeout (60s)
+          // Don't degrade the prompt - the issue is timeout, not prompt size
+          console.log('⚠️ Retrying with extended timeout (60s)')
+          response = await callLLMProvider(currentConfig, system, user, 0.3, 4096, 60000)
+        }
+        
+        llmCallTime = performance.now() - llmStartTime
+        console.log(`⚡ LLM response time: ${Math.round(llmCallTime)}ms (${currentConfig.provider}/${currentConfig.model})`)
+        break // Success, exit retry loop
+      } catch (error: any) {
+        console.error(`❌ Attempt ${attempt} failed:`, error?.message)
+        if (attempt === maxAttempts) {
+          throw error // Re-throw on final attempt
+        }
+        attempt++
+        // Small backoff delay
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    }
+    
+    const totalTime = performance.now() - startTime
+    console.log(`📊 Performance metrics:`, {
+      promptBuildMs: Math.round(promptBuildTime),
+      llmCallMs: Math.round(llmCallTime!),
+      totalMs: Math.round(totalTime),
+      estimatedTokens: tokenEstimate,
+      provider: config.provider,
+      model: config.model,
+      attempts: attempt
+    })
+    const content = response.content
+    if (!content) throw new Error('No LLM content returned')
+    
+    const parseStartTime = performance.now()
+    try {
+      const parsed = JSON.parse(content)
+      const parseTime = performance.now() - parseStartTime
+      
+      // Track performance metrics
+      performanceTracker.logMetric(createEvaluationMetric(
+        'interview-' + Date.now(),
+        effectiveRoute,
+        conversationHistory.length,
+        {
+          promptBuild: promptBuildTime,
+          llmCall: llmCallTime!,
+          parse: parseTime,
+          total: totalTime
+        },
+        {
+          prompt: tokenEstimate,
+          completion: response.usage?.completion_tokens || 0,
+          total: response.usage?.total_tokens || tokenEstimate
+        },
+        config.provider,
+        config.model,
+        attempt - 1,
+        true,
+        undefined
+      ))
+      
+      // basic sanity checks
+      const decision = (['accepted', 'rejected', 'borderline'].includes(parsed.decision) ? parsed.decision : 'borderline') as 'accepted' | 'rejected' | 'borderline'
+      const overall = Math.max(0, Math.min(100, Number(parsed.overall) || 0))
+      const dimensions = parsed.dimensions && typeof parsed.dimensions === 'object' ? parsed.dimensions : {}
+      const summary = String(parsed.summary || '').slice(0, 3000)
+      
+      // Parse detailed insights with validation
+      const detailedInsights: DetailedInsight[] = Array.isArray(parsed.detailedInsights)
+        ? parsed.detailedInsights.slice(0, 12).map((insight: any) => ({
+            category: insight.category || 'Content Quality',
+            type: insight.type === 'strength' || insight.type === 'weakness' ? insight.type : 'weakness',
+            finding: String(insight.finding || '').slice(0, 300),
+            example: insight.example ? String(insight.example).slice(0, 300) : undefined,
+            actionItem: String(insight.actionItem || '').slice(0, 300)
+          }))
+        : []
+      
+      const strengths = Array.isArray(parsed.strengths) ? parsed.strengths.slice(0, 5).map((s: any) => String(s).slice(0, 200)) : []
+      const weaknesses = Array.isArray(parsed.weaknesses) ? parsed.weaknesses.slice(0, 5).map((w: any) => String(w).slice(0, 200)) : []
+      const recommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations.slice(0, 10) : []
+      
+      return { decision, overall, dimensions, summary, detailedInsights, strengths, weaknesses, recommendations }
+    } catch (error: any) {
+      // Track parse error
+      performanceTracker.logMetric(createEvaluationMetric(
+        'interview-' + Date.now(),
+        effectiveRoute,
+        conversationHistory.length,
+        {
+          promptBuild: promptBuildTime,
+          llmCall: llmCallTime!,
+          parse: performance.now() - parseStartTime,
+          total: totalTime
+        },
+        {
+          prompt: tokenEstimate,
+          completion: 0,
+          total: tokenEstimate
+        },
+        config.provider,
+        config.model,
+        attempt - 1,
+        false,
+        'JSON parse error: ' + (error?.message || 'Unknown')
+      ))
+      return null
+    }
+  }
+  
+  // FALLBACK: Use original prompt format if per-answer scores not available
+  console.log('⚠️ Using legacy prompt format (no per-answer scores)')
   const isUKFrance = effectiveRoute === 'uk_student' || effectiveRoute === 'france_ema' || effectiveRoute === 'france_icn'
   const countryName = effectiveRoute === 'uk_student' ? 'UK' : effectiveRoute.startsWith('france_') ? 'France' : 'UK'
   
@@ -235,7 +478,8 @@ OUTPUT FORMAT (STRICT JSON - no markdown, no extra text):
   "recommendations": ["<deprecated - included for compatibility>"]
 }`
 
-  const response = await callLLMProvider(config, system, userPrompt, 0.3, 2500) // Increased token limit for detailed insights
+  // CRITICAL FIX: Use 60-second timeout for final evaluation (long prompt with 16 Q&A pairs)
+  const response = await callLLMProvider(config, system, userPrompt, 0.3, 8192, 60000)
   const content = response.content
   if (!content) throw new Error('No LLM content returned')
   

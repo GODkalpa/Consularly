@@ -5,7 +5,7 @@ import { auth, firebaseEnabled } from '@/lib/firebase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Trophy, TrendingUp, Target, Search, Users, Eye, Download, FileText, BarChart3, CheckCircle, AlertTriangle, Calendar, ChevronDown, ChevronRight } from 'lucide-react'
+import { Trophy, TrendingUp, Target, Search, Users, Eye, Download, FileText, BarChart3, CheckCircle, AlertTriangle, Calendar, ChevronDown, ChevronRight, Folder, FolderOpen, ArrowLeft } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -42,7 +42,7 @@ export function OrgStudentResults() {
   const [timeRange, setTimeRange] = useState<'all' | '90d' | '30d' | '7d'>('all')
   const [routeFilter, setRouteFilter] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
-  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
+  const [selectedStudent, setSelectedStudent] = useState<StudentResult | null>(null)
   const [expandedInterviews, setExpandedInterviews] = useState<Set<string>>(new Set())
   const [selectedInterview, setSelectedInterview] = useState<{interview: any, student: any} | null>(null)
 
@@ -99,16 +99,14 @@ export function OrgStudentResults() {
     return Array.from(routes)
   }, [results])
 
-  const toggleStudent = (studentId: string) => {
-    setExpandedStudents((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(studentId)) {
-        newSet.delete(studentId)
-      } else {
-        newSet.add(studentId)
-      }
-      return newSet
-    })
+  const openStudentFolder = (student: StudentResult) => {
+    setSelectedStudent(student)
+    setExpandedInterviews(new Set())
+  }
+
+  const closeStudentFolder = () => {
+    setSelectedStudent(null)
+    setExpandedInterviews(new Set())
   }
 
   const toggleInterview = (interviewId: string) => {
@@ -318,7 +316,7 @@ export function OrgStudentResults() {
             </Select>
           </div>
 
-          {/* Comprehensive Interview Results */}
+          {/* Windows Explorer Style View */}
           {filteredResults.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -327,247 +325,355 @@ export function OrgStudentResults() {
                 {searchTerm ? 'Try adjusting your search or filters' : 'No students have completed interviews yet'}
               </p>
             </div>
-          ) : (
+          ) : selectedStudent ? (
+            /* Inside Student Folder - Show Interviews */
             <div className="space-y-4">
-              {filteredResults.map((result) => (
-                <div key={result.student.id} className="space-y-3">
-                  {result.interviews.map((interview) => (
-                    <Card key={interview.id} className="border transition-all duration-200 hover:shadow-md">
-                      <Collapsible open={expandedInterviews.has(interview.id)}>
-                        <CardContent className="p-6">
-                          <div className="flex items-center justify-between">
-                            <div 
-                              className="flex items-start gap-4 text-left flex-1 cursor-pointer" 
-                              onClick={() => toggleInterview(interview.id)}
-                            >
-                              {getStatusIcon(interview.status)}
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-3">
-                                  <h3 className="font-semibold">{result.student.name}</h3>
-                                  <span className="text-sm text-muted-foreground">•</span>
-                                  <span className="text-sm font-medium">{getRouteDisplay(interview.route)}</span>
-                                  {getStatusBadge(interview.status)}
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                  {result.student.email} • {formatDate(interview.startTime)}
-                                </p>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-4 text-right">
-                              {interview.score && (
-                                <div className="text-right">
-                                  <div className={`text-2xl font-bold ${getScoreColor(interview.score)}`}>
-                                    {interview.score}%
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">Performance Score</p>
-                                </div>
+              {/* Back Button */}
+              <Button
+                variant="outline"
+                onClick={closeStudentFolder}
+                className="mb-4"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Students
+              </Button>
+
+              {/* Student Info Header */}
+              <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg border">
+                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold">
+                  {selectedStudent.student.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-2xl font-bold">{selectedStudent.student.name}</h2>
+                  <p className="text-muted-foreground">{selectedStudent.student.email}</p>
+                </div>
+                <div className="flex gap-6">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-primary">{selectedStudent.stats.totalInterviews}</div>
+                    <p className="text-xs text-muted-foreground">Total</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-green-600">{selectedStudent.stats.completedInterviews}</div>
+                    <p className="text-xs text-muted-foreground">Completed</p>
+                  </div>
+                  {selectedStudent.stats.averageScore !== null && (
+                    <div className="text-center">
+                      <div className={`text-3xl font-bold ${getScoreColor(selectedStudent.stats.averageScore)}`}>
+                        {(selectedStudent.stats.averageScore / 10).toFixed(1)}/10
+                      </div>
+                      <p className="text-xs text-muted-foreground">Avg Score</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Interviews List */}
+              <div className="space-y-3">
+                {selectedStudent.interviews.length === 0 ? (
+                  <div className="py-12 text-center text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="text-sm">No interviews found for this student</p>
+                  </div>
+                ) : (
+                  selectedStudent.interviews.map((interview) => (
+                              <Card key={interview.id} className="border bg-white transition-all duration-200 hover:shadow-md">
+                                <Collapsible open={expandedInterviews.has(interview.id)}>
+                                  <CardContent className="p-4">
+                                    <div className="flex items-center justify-between">
+                                      <div 
+                                        className="flex items-start gap-3 text-left flex-1 cursor-pointer" 
+                                        onClick={() => toggleInterview(interview.id)}
+                                      >
+                                        {getStatusIcon(interview.status)}
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-3">
+                                            <span className="text-sm font-medium">{getRouteDisplay(interview.route)}</span>
+                                            {getStatusBadge(interview.status)}
+                                          </div>
+                                          <p className="text-sm text-muted-foreground">
+                                            <Calendar className="h-3 w-3 inline mr-1" />
+                                            {formatDate(interview.startTime)}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex items-center gap-4 text-right">
+                                        {interview.score !== null && (
+                                          <div className="text-right">
+                                            <div className={`text-2xl font-bold ${getScoreColor(interview.score)}`}>
+                                              {interview.score}%
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Score</p>
+                                          </div>
+                                        )}
+                                        <div className="text-right">
+                                          <div className="font-medium">{formatDuration(interview.startTime, interview.endTime)}</div>
+                                          <p className="text-xs text-muted-foreground">Duration</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {interview.status === 'completed' && interview.finalReport && (
+                                            <>
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={async (e) => {
+                                                  e.stopPropagation()
+                                      try {
+                                        const token = await auth.currentUser?.getIdToken()
+                                        if (!token) return
+                                        window.open(`/api/report/${interview.id}/pdf?token=${token}`, '_blank')
+                                      } catch (err) {
+                                        console.error('Failed to open PDF:', err)
+                                      }
+                                    }}
+                                  >
+                                    <FileText className="h-4 w-4 mr-1" />
+                                    View Report
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0"
+                                    onClick={async (e) => {
+                                      e.stopPropagation()
+                                      try {
+                                        const token = await auth.currentUser?.getIdToken()
+                                        if (!token) return
+                                        const response = await fetch(`/api/report/${interview.id}/pdf?token=${token}&download=true`)
+                                        const blob = await response.blob()
+                                        const url = URL.createObjectURL(blob)
+                                        const a = document.createElement('a')
+                                        a.href = url
+                                        a.download = `${selectedStudent.student.name.replace(/\s+/g, '_')}_interview_report.html`
+                                        document.body.appendChild(a)
+                                        a.click()
+                                        document.body.removeChild(a)
+                                        URL.revokeObjectURL(url)
+                                      } catch (err) {
+                                        console.error('Failed to download PDF:', err)
+                                      }
+                                    }}
+                                  >
+                                    <Download className="h-4 w-4" />
+                                  </Button>
+                                </>
                               )}
-                              <div className="text-right">
-                                <div className="font-medium">{formatDuration(interview.startTime, interview.endTime)}</div>
-                                <p className="text-xs text-muted-foreground">Duration</p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => {
-                                    const reportData = {
-                                      student: result.student,
-                                      interview: interview
-                                    }
-                                    const blob = new Blob([JSON.stringify(reportData, null, 2)], { 
-                                      type: 'application/json' 
-                                    })
-                                    const url = URL.createObjectURL(blob)
-                                    const a = document.createElement('a')
-                                    a.href = url
-                                    a.download = `${result.student.name.replace(/\s+/g, '_')}_interview_${interview.id}.json`
-                                    document.body.appendChild(a)
-                                    a.click()
-                                    document.body.removeChild(a)
-                                    URL.revokeObjectURL(url)
-                                  }}
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                                <button
-                                  onClick={() => toggleInterview(interview.id)}
-                                  className="flex items-center justify-center h-8 w-8 hover:bg-muted rounded-md transition-colors"
-                                >
-                                  {expandedInterviews.has(interview.id) ? (
-                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                  )}
-                                </button>
-                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleInterview(interview.id)
+                                }}
+                                className="flex items-center justify-center h-8 w-8 hover:bg-muted rounded-md transition-colors"
+                              >
+                                {expandedInterviews.has(interview.id) ? (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </button>
                             </div>
                           </div>
-                        </CardContent>
-                        
-                        <CollapsibleContent>
-                          <div className="border-t px-6 pb-6">
-                            {interview.status === 'completed' && interview.finalReport ? (
-                              <div className="pt-4 space-y-6">
-                                {/* Decision Header */}
-                                <div className="text-center p-6 rounded-xl" style={{
-                                  backgroundColor: interview.finalReport.decision === 'accepted' ? '#f0fdf4' :
-                                                  interview.finalReport.decision === 'rejected' ? '#fef2f2' : '#fefce8'
-                                }}>
-                                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-bold ${
-                                    interview.finalReport.decision === 'accepted' ? 'text-green-800 bg-green-100' :
-                                    interview.finalReport.decision === 'rejected' ? 'text-red-800 bg-red-100' : 
-                                    'text-yellow-800 bg-yellow-100'
-                                  }`}>
-                                    {interview.finalReport.decision === 'accepted' ? '✅ Likely Approved' :
-                                     interview.finalReport.decision === 'rejected' ? '❌ Likely Rejected' : 
-                                     '⚠️ Borderline Case'}
-                                  </div>
-                                  <div className="text-3xl font-bold mt-2">{interview.finalReport.overall}%</div>
-                                  <p className="text-sm text-muted-foreground mt-1">AI Performance Evaluation</p>
-                                </div>
-
-                                {/* AI Summary */}
-                                <div className="space-y-3">
-                                  <h4 className="font-semibold text-lg flex items-center gap-2">
-                                    <FileText className="h-5 w-5 text-blue-600" />
-                                    Performance Summary
-                                  </h4>
-                                  <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                                    <p className="text-sm leading-relaxed">{interview.finalReport.summary}</p>
-                                  </div>
-                                </div>
-
-                                {/* Dimension Scores */}
-                                {interview.finalReport.dimensions && Object.keys(interview.finalReport.dimensions).length > 0 && (
-                                  <div className="space-y-3">
-                                    <h4 className="font-semibold text-lg flex items-center gap-2">
-                                      <BarChart3 className="h-5 w-5 text-purple-600" />
-                                      Performance Breakdown
-                                    </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                      {Object.entries(interview.finalReport.dimensions).map(([category, score]: [string, any]) => (
-                                        <div key={category} className="bg-gradient-to-br from-purple-50 to-blue-50 p-4 rounded-lg border">
-                                          <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-medium capitalize">
-                                              {category.replace(/([A-Z])/g, ' $1').trim()}
-                                            </span>
-                                            <span className={`font-bold text-lg ${
-                                              score >= 80 ? 'text-green-600' :
-                                              score >= 60 ? 'text-yellow-600' : 'text-red-600'
+                        </div>
+                      </CardContent>
+                                  
+                                  <CollapsibleContent>
+                                    <div className="border-t px-4 pb-4">
+                                      {interview.status === 'completed' && interview.finalReport ? (
+                                        <div className="pt-4 space-y-6">
+                                          {/* Decision Header */}
+                                          <div className="text-center p-6 rounded-xl" style={{
+                                            backgroundColor: interview.finalReport.decision === 'accepted' ? '#f0fdf4' :
+                                                            interview.finalReport.decision === 'rejected' ? '#fef2f2' : '#fefce8'
+                                          }}>
+                                            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-bold ${
+                                              interview.finalReport.decision === 'accepted' ? 'text-green-800 bg-green-100' :
+                                              interview.finalReport.decision === 'rejected' ? 'text-red-800 bg-red-100' : 
+                                              'text-yellow-800 bg-yellow-100'
                                             }`}>
-                                              {score}%
-                                            </span>
+                                              {interview.finalReport.decision === 'accepted' ? '✅ Likely Approved' :
+                                               interview.finalReport.decision === 'rejected' ? '❌ Likely Rejected' : 
+                                               '⚠️ Borderline Case'}
+                                            </div>
+                                            <div className="text-3xl font-bold mt-2">{interview.finalReport.overall}%</div>
+                                            <p className="text-sm text-muted-foreground mt-1">AI Performance Evaluation</p>
                                           </div>
-                                          <div className="w-full bg-gray-200 rounded-full h-2">
-                                            <div 
-                                              className={`h-2 rounded-full ${
-                                                score >= 80 ? 'bg-green-500' :
-                                                score >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                                              }`}
-                                              style={{ width: `${score}%` }}
-                                            />
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
 
-                                {/* Strengths and Weaknesses */}
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                  {/* Strengths */}
-                                  {interview.finalReport.strengths && interview.finalReport.strengths.length > 0 && (
-                                    <div className="space-y-3">
-                                      <h4 className="font-semibold text-lg flex items-center gap-2 text-green-700">
-                                        <Trophy className="h-5 w-5" />
-                                        Key Strengths
-                                      </h4>
-                                      <div className="space-y-2">
-                                        {interview.finalReport.strengths.map((strength: string, index: number) => (
-                                          <div key={index} className="flex items-start gap-3 p-3 bg-green-50 border-l-4 border-green-500 rounded-r-lg">
-                                            <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
-                                            <p className="text-sm text-green-900">{strength}</p>
+                                          {/* AI Summary */}
+                                          <div className="space-y-3">
+                                            <h4 className="font-semibold text-lg flex items-center gap-2">
+                                              <FileText className="h-5 w-5 text-blue-600" />
+                                              Performance Summary
+                                            </h4>
+                                            <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                                              <p className="text-sm leading-relaxed">{interview.finalReport.summary}</p>
+                                            </div>
                                           </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
 
-                                  {/* Areas for Improvement */}
-                                  {interview.finalReport.weaknesses && interview.finalReport.weaknesses.length > 0 && (
-                                    <div className="space-y-3">
-                                      <h4 className="font-semibold text-lg flex items-center gap-2 text-orange-700">
-                                        <Target className="h-5 w-5" />
-                                        Areas for Improvement
-                                      </h4>
-                                      <div className="space-y-2">
-                                        {interview.finalReport.weaknesses.map((weakness: string, index: number) => (
-                                          <div key={index} className="flex items-start gap-3 p-3 bg-orange-50 border-l-4 border-orange-500 rounded-r-lg">
-                                            <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
-                                            <p className="text-sm text-orange-900">{weakness}</p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Detailed Insights */}
-                                {interview.finalReport.detailedInsights && interview.finalReport.detailedInsights.length > 0 && (
-                                  <div className="space-y-3">
-                                    <h4 className="font-semibold text-lg flex items-center gap-2 text-blue-700">
-                                      <TrendingUp className="h-5 w-5" />
-                                      Detailed Analysis & Recommendations
-                                    </h4>
-                                    <div className="space-y-4">
-                                      {interview.finalReport.detailedInsights.map((insight: any, index: number) => (
-                                        <div key={index} className={`p-4 rounded-lg border-l-4 ${
-                                          insight.type === 'strength' ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'
-                                        }`}>
-                                          <div className="flex items-center gap-2 mb-2">
-                                            <span className={`text-xs font-semibold px-2 py-1 rounded ${
-                                              insight.type === 'strength' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                            }`}>
-                                              {insight.category}
-                                            </span>
-                                            <span className={`text-xs px-2 py-1 rounded ${
-                                              insight.type === 'strength' ? 'bg-green-200 text-green-900' : 'bg-red-200 text-red-900'
-                                            }`}>
-                                              {insight.type === 'strength' ? 'Strength' : 'Needs Work'}
-                                            </span>
-                                          </div>
-                                          <p className="text-sm font-medium mb-2">{insight.finding}</p>
-                                          {insight.example && (
-                                            <p className="text-xs text-muted-foreground mb-2 italic">
-                                              Example: {insight.example}
-                                            </p>
+                                          {/* Dimension Scores */}
+                                          {interview.finalReport.dimensions && Object.keys(interview.finalReport.dimensions).length > 0 && (
+                                            <div className="space-y-3">
+                                              <h4 className="font-semibold text-lg flex items-center gap-2">
+                                                <BarChart3 className="h-5 w-5 text-purple-600" />
+                                                Performance Breakdown
+                                              </h4>
+                                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {Object.entries(interview.finalReport.dimensions).map(([category, score]: [string, any]) => (
+                                                  <div key={category} className="bg-gradient-to-br from-purple-50 to-blue-50 p-4 rounded-lg border">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                      <span className="text-sm font-medium capitalize">
+                                                        {category.replace(/([A-Z])/g, ' $1').trim()}
+                                                      </span>
+                                                      <span className={`font-bold text-lg ${
+                                                        score >= 80 ? 'text-green-600' :
+                                                        score >= 60 ? 'text-yellow-600' : 'text-red-600'
+                                                      }`}>
+                                                        {score}%
+                                                      </span>
+                                                    </div>
+                                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                                      <div 
+                                                        className={`h-2 rounded-full ${
+                                                          score >= 80 ? 'bg-green-500' :
+                                                          score >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                                                        }`}
+                                                        style={{ width: `${score}%` }}
+                                                      />
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
                                           )}
-                                          <div className="text-xs font-medium text-blue-800 bg-blue-100 p-2 rounded">
-                                            💡 Action: {insight.actionItem}
+
+                                          {/* Strengths and Weaknesses */}
+                                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                            {/* Strengths */}
+                                            {interview.finalReport.strengths && interview.finalReport.strengths.length > 0 && (
+                                              <div className="space-y-3">
+                                                <h4 className="font-semibold text-lg flex items-center gap-2 text-green-700">
+                                                  <Trophy className="h-5 w-5" />
+                                                  Key Strengths
+                                                </h4>
+                                                <div className="space-y-2">
+                                                  {interview.finalReport.strengths.map((strength: string, index: number) => (
+                                                    <div key={index} className="flex items-start gap-3 p-3 bg-green-50 border-l-4 border-green-500 rounded-r-lg">
+                                                      <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                                                      <p className="text-sm text-green-900">{strength}</p>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Areas for Improvement */}
+                                            {interview.finalReport.weaknesses && interview.finalReport.weaknesses.length > 0 && (
+                                              <div className="space-y-3">
+                                                <h4 className="font-semibold text-lg flex items-center gap-2 text-orange-700">
+                                                  <Target className="h-5 w-5" />
+                                                  Areas for Improvement
+                                                </h4>
+                                                <div className="space-y-2">
+                                                  {interview.finalReport.weaknesses.map((weakness: string, index: number) => (
+                                                    <div key={index} className="flex items-start gap-3 p-3 bg-orange-50 border-l-4 border-orange-500 rounded-r-lg">
+                                                      <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
+                                                      <p className="text-sm text-orange-900">{weakness}</p>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
                                           </div>
+
+                                          {/* Detailed Insights */}
+                                          {interview.finalReport.detailedInsights && interview.finalReport.detailedInsights.length > 0 && (
+                                            <div className="space-y-3">
+                                              <h4 className="font-semibold text-lg flex items-center gap-2 text-blue-700">
+                                                <TrendingUp className="h-5 w-5" />
+                                                Detailed Analysis & Recommendations
+                                              </h4>
+                                              <div className="space-y-4">
+                                                {interview.finalReport.detailedInsights.map((insight: any, index: number) => (
+                                                  <div key={index} className={`p-4 rounded-lg border-l-4 ${
+                                                    insight.type === 'strength' ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'
+                                                  }`}>
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                      <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                                                        insight.type === 'strength' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                                      }`}>
+                                                        {insight.category}
+                                                      </span>
+                                                      <span className={`text-xs px-2 py-1 rounded ${
+                                                        insight.type === 'strength' ? 'bg-green-200 text-green-900' : 'bg-red-200 text-red-900'
+                                                      }`}>
+                                                        {insight.type === 'strength' ? 'Strength' : 'Needs Work'}
+                                                      </span>
+                                                    </div>
+                                                    <p className="text-sm font-medium mb-2">{insight.finding}</p>
+                                                    {insight.example && (
+                                                      <p className="text-xs text-muted-foreground mb-2 italic">
+                                                        Example: {insight.example}
+                                                      </p>
+                                                    )}
+                                                    <div className="text-xs font-medium text-blue-800 bg-blue-100 p-2 rounded">
+                                                      💡 Action: {insight.actionItem}
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
                                         </div>
-                                      ))}
+                                      ) : (
+                                        <div className="pt-4">
+                                          <p className="text-sm text-muted-foreground">
+                                            {interview.status === 'in_progress' ? 'Interview in progress...' : 
+                                             interview.status === 'expired' ? 'Interview session expired' :
+                                             'Interview data not available'}
+                                          </p>
+                                        </div>
+                                      )}
                                     </div>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="pt-4">
-                                <p className="text-sm text-muted-foreground">
-                                  {interview.status === 'in_progress' ? 'Interview in progress...' : 
-                                   interview.status === 'expired' ? 'Interview session expired' :
-                                   'Interview data not available'}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    </Card>
-                  ))}
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              </Card>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Grid View - Student Folders */
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-4">
+              {filteredResults.map((result) => (
+                <div
+                  key={result.student.id}
+                  className="flex flex-col items-center p-4 rounded-lg hover:bg-muted/50 cursor-pointer transition-all duration-200 group"
+                  onDoubleClick={() => openStudentFolder(result)}
+                  onClick={() => openStudentFolder(result)}
+                >
+                  {/* Folder Icon */}
+                  <div className="relative mb-2">
+                    <Folder className="h-20 w-20 text-yellow-500 group-hover:text-yellow-600 transition-colors" fill="currentColor" />
+                    {result.stats.completedInterviews > 0 && (
+                      <div className="absolute -top-1 -right-1 h-6 w-6 bg-green-500 rounded-full flex items-center justify-center text-white text-xs font-bold border-2 border-white">
+                        {result.stats.completedInterviews}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Student Name */}
+                  <div className="text-center w-full">
+                    <p className="text-sm font-medium truncate px-1" title={result.student.name}>
+                      {result.student.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {result.stats.totalInterviews} {result.stats.totalInterviews === 1 ? 'interview' : 'interviews'}
+                    </p>
+                    {result.stats.averageScore !== null && (
+                      <p className={`text-xs font-semibold mt-1 ${getScoreColor(result.stats.averageScore)}`}>
+                        Avg: {(result.stats.averageScore / 10).toFixed(1)}/10
+                      </p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

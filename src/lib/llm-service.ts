@@ -6,7 +6,7 @@ import { getRemainingQuestionsForUniversity, FranceUniversity } from './france-q
 import { SmartQuestionSelector, loadQuestionBank } from './smart-question-selector'
 import type { InterviewRoute as LLMRoute } from './llm-provider-selector'
 
-interface QuestionGenerationRequest {
+export interface QuestionGenerationRequest {
   previousQuestion?: string;
   studentAnswer?: string;
   interviewContext: {
@@ -30,20 +30,20 @@ interface QuestionGenerationRequest {
       answer: string;
       timestamp: string;
     }>;
-    // Interview mode configuration
-    interviewMode?: 'practice' | 'standard' | 'comprehensive' | 'stress_test';
-    difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
-    officerPersona?: 'professional' | 'skeptical' | 'friendly' | 'strict';
-    targetTopic?: 'financial' | 'academic' | 'intent' | 'weak_areas';
+    // CRITICAL FIX: Track asked clusters and question IDs to prevent repetition
+    askedSemanticClusters?: string[];
+    askedQuestionIds?: string[];
   };
 }
 
-interface QuestionGenerationResponse {
+export interface QuestionGenerationResponse {
   question: string;
   questionType: 'academic' | 'financial' | 'intent' | 'background' | 'follow-up';
   difficulty: 'easy' | 'medium' | 'hard' | 'expert';
   expectedAnswerLength: 'short' | 'medium' | 'long';
   tips?: string;
+  semanticCluster?: string; // CRITICAL FIX: Track cluster to prevent repetition
+  questionId?: string; // Track question ID from bank
 }
 
 // PERFORMANCE FIX: Cache question selector globally to avoid repeated loads
@@ -130,15 +130,7 @@ export class LLMQuestionService {
     }
 
     const route = request.interviewContext.route || 'usa_f1';
-    const { studentProfile, conversationHistory, currentQuestionNumber, interviewMode, difficulty, officerPersona, targetTopic } = request.interviewContext;
-
-    // Log interview configuration
-    console.log('[Question Generation] Configuration:', { 
-      mode: interviewMode || 'standard', 
-      difficulty: difficulty || 'medium', 
-      persona: officerPersona || 'professional', 
-      topic: targetTopic || 'balanced' 
-    });
+    const { studentProfile, conversationHistory, currentQuestionNumber } = request.interviewContext;
 
     // Try smart question selector first
     if (this.questionSelector) {
@@ -154,14 +146,29 @@ export class LLMQuestionService {
           else categoryCoverage['personal'] = (categoryCoverage['personal'] || 0) + 1;
         });
 
-        // Derive asked question IDs from the question bank to prevent repeats
+        // CRITICAL FIX: Derive asked question IDs from conversation history
+        // Priority 1: Use stored questionId (100% reliable)
+        // Priority 2: Match question text to bank (fallback for old sessions)
         const bank = await getQuestionBankCached()
         const askedIds: string[] = []
         const seen = new Set<string>()
+        
         for (const h of conversationHistory) {
+          // CRITICAL FIX: If questionId is stored in history, use it directly
+          if ((h as any).questionId) {
+            const qid = (h as any).questionId;
+            if (!seen.has(qid)) {
+              askedIds.push(qid);
+              seen.add(qid);
+              console.log(`[Question Service] ✅ Direct ID from history: ${qid}`);
+            }
+            continue;
+          }
+          
+          // Fallback: Match question text to bank (for old sessions without questionId)
           const normH = normalizeQ(h.question)
           if (seen.has(normH)) continue
-          seen.add(normH)
+          
           // Exact match first
           let match = bank.questions.find(q => normalizeQ(q.question) === normH)
           if (!match) {
@@ -174,49 +181,34 @@ export class LLMQuestionService {
             }
             if (best && best.score >= 0.8) {
               match = bank.questions.find(q => q.id === best!.id) as any
+              console.log(`[Question Service] Soft-matched history question to ${match?.id} (score: ${best.score.toFixed(2)})`);
+            } else if (best) {
+              console.log(`[Question Service] ⚠️ No match for history question (best score: ${best.score.toFixed(2)}, threshold: 0.8): "${h.question.substring(0, 60)}..."`);
             }
+          } else {
+            console.log(`[Question Service] Exact-matched history question to ${match.id}`);
           }
-          if (match) askedIds.push(match.id)
-        }
-
-        // Apply topic focus filtering if specified
-        let priorityCategory: string | undefined = undefined;
-        if (targetTopic) {
-          const topicToCategoryMap: Record<typeof targetTopic, string> = {
-            'financial': 'financial',
-            'academic': 'academic',
-            'intent': 'post_study',
-            'weak_areas': 'general', // Will be determined dynamically later
-          };
-          priorityCategory = topicToCategoryMap[targetTopic];
-          console.log(`[Topic Focus] Prioritizing ${priorityCategory} questions (topic: ${targetTopic})`);
-        }
-        
-        // Get mode configuration for difficulty distribution and category requirements
-        let difficultyDist: { easy: number; medium: number; hard: number } | undefined;
-        let categoryReqs: Array<{ category: string; minQuestions: number; maxQuestions: number }> | undefined;
-        
-        if (interviewMode) {
-          try {
-            const { getModeConfig } = await import('./interview-modes');
-            const modeConfig = getModeConfig(interviewMode);
-            
-            // Extract difficulty distribution
-            if (modeConfig.difficultyDistribution) {
-              difficultyDist = modeConfig.difficultyDistribution;
-            }
-            
-            // Extract category requirements
-            if (modeConfig.categoryRequirements) {
-              categoryReqs = modeConfig.categoryRequirements;
-            }
-            
-            console.log(`[Mode Config] Using ${interviewMode} mode: ${modeConfig.questionCount} questions, difficulty dist:`, difficultyDist);
-          } catch (error) {
-            console.error('[Mode Config] Failed to load mode config:', error);
+          if (match) {
+            askedIds.push(match.id);
+            seen.add(normH);
           }
         }
 
+
+
+        // CRITICAL FIX: Use tracked clusters and IDs from session (authoritative source)
+        // Only derive from history as fallback for old sessions
+        const trackedClusters = request.interviewContext.askedSemanticClusters || [];
+        const trackedQuestionIds = request.interviewContext.askedQuestionIds || [];
+        
+        // Filter out FOLLOWUP_* IDs from tracked IDs before merging
+        const bankTrackedIds = trackedQuestionIds.filter(id => !id.startsWith('FOLLOWUP_') && !id.startsWith('UNKNOWN_'));
+        
+        // Merge tracked IDs with derived IDs (for backwards compatibility with old sessions)
+        const allAskedIds = [...new Set([...bankTrackedIds, ...askedIds])];
+        
+        console.log(`[Question Service] Tracked clusters: ${trackedClusters.length}, Tracked IDs: ${trackedQuestionIds.length}, Derived IDs: ${askedIds.length}, Final IDs: ${allAskedIds.length}`);
+        
         const context = {
           route: route as LLMRoute,
           profile: {
@@ -231,35 +223,32 @@ export class LLMQuestionService {
             question: h.question,
             answer: h.answer,
           })),
-          askedQuestionIds: askedIds,
+          askedQuestionIds: allAskedIds,
           detectedRedFlags: this.detectRedFlags(conversationHistory),
           categoryCoverage,
-          priorityCategory, // Pass topic focus to selector
-          targetDifficulty: difficulty, // Pass difficulty setting
-          difficultyDistribution: difficultyDist, // Pass mode's difficulty distribution
-          categoryRequirements: categoryReqs, // Pass mode's category requirements
-          // Context flags and semantic clusters will be built in smart-question-selector
+          // CRITICAL FIX: Always pass tracked clusters array (even if empty)
+          // The selector should trust this array, not rebuild from history
+          askedClusters: trackedClusters,
         };
 
         const result = await this.questionSelector.selectNextQuestion(context);
         
         console.log(`[Question Service] ${result.type} question selected:`, result.reasoning);
-
-        // Apply difficulty from configuration
-        const effectiveDifficulty = difficulty || 'medium';
-        
-        // Apply persona-based question phrasing if configured
-        let finalQuestion = result.question;
-        if (officerPersona) {
-          finalQuestion = this.applyPersonaPhrasing(result.question, officerPersona);
+        if (result.semanticCluster) {
+          console.log(`[Question Service] Semantic cluster: ${result.semanticCluster}`);
         }
 
+        // CRITICAL DEBUG: Log the questionId being returned
+        console.log(`[Question Service] Returning questionId: ${result.questionId || 'UNDEFINED'}`);
+        
         return {
-          question: finalQuestion,
+          question: result.question,
           questionType: this.inferQuestionType(result.question),
-          difficulty: effectiveDifficulty,
+          difficulty: 'medium',
           expectedAnswerLength: 'medium',
           tips: result.reasoning,
+          semanticCluster: result.semanticCluster, // CRITICAL FIX: Pass cluster back
+          questionId: result.questionId, // Pass question ID back
         };
       } catch (error) {
         console.error('[Question Service] Smart selector failed, using fallback:', error);
@@ -724,4 +713,4 @@ If any check fails, select a different question from the appropriate category.`
   }
 }
 
-export type { QuestionGenerationRequest, QuestionGenerationResponse };
+// Types already exported above with interface declarations

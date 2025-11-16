@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { auth, firebaseEnabled } from "@/lib/firebase"
 import type { OrganizationWithId } from "@/types/firestore"
 import { fetchWithCache, cache } from "@/lib/cache"
+import { DynamicFavicon } from "@/components/branding/DynamicFavicon"
 
 import {
   Sidebar,
@@ -727,8 +728,10 @@ function OrganizationDashboard() {
   }
 
   return (
-    <SidebarProvider>
-      <Sidebar variant="inset" collapsible="icon" className="border-r bg-background">
+    <>
+      <DynamicFavicon faviconUrl={branding.favicon} />
+      <SidebarProvider>
+        <Sidebar variant="inset" collapsible="icon" className="border-r bg-background">
         <SidebarHeader className="border-b px-4 py-5">
           <div className="flex items-center gap-3">
             <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 shadow-sm border border-primary/20 shrink-0">
@@ -824,6 +827,7 @@ function OrganizationDashboard() {
         </main>
       </SidebarInset>
     </SidebarProvider>
+    </>
   )
 }
 

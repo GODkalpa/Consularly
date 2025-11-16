@@ -83,37 +83,30 @@ export function InterviewDetailsModal({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`
   }
 
-  const handleDownloadReport = () => {
-    // Create a comprehensive report
-    const reportData = {
-      student: {
-        name: student.name,
-        email: student.email
-      },
-      interview: {
-        id: interview.id,
-        type: getRouteDisplay(interview.route),
-        status: interview.status,
-        score: interview.score,
-        startTime: interview.startTime,
-        endTime: interview.endTime,
-        duration: calculateDuration()
-      },
-      report: interview.finalReport
+  const handleDownloadReport = async () => {
+    try {
+      const { auth } = await import('@/lib/firebase')
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) {
+        alert('Authentication required')
+        return
+      }
+      
+      // Fetch HTML and trigger download
+      const response = await fetch(`/api/report/${interview.id}/pdf?token=${token}&download=true`)
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${student.name.replace(/\s+/g, '_')}_interview_report.html`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to download PDF:', err)
+      alert('Failed to download report')
     }
-
-    const blob = new Blob([JSON.stringify(reportData, null, 2)], { 
-      type: 'application/json' 
-    })
-    
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${student.name.replace(/\s+/g, '_')}_interview_${interview.id}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
   }
 
   return (

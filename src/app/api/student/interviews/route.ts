@@ -55,8 +55,6 @@ export async function GET(req: NextRequest) {
         endTime: data?.endTime?.toDate?.()?.toISOString() || data?.endTime,
         duration: data?.duration || null,
         creditSource: data?.creditSource || 'org', // org vs student initiated
-        interviewMode: data?.interviewMode || 'standard',
-        difficulty: data?.difficulty || 'medium',
         completedQuestions: data?.completedQuestions || 0,
         
         // Score breakdown
@@ -157,8 +155,6 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const route = body.route || (studentData.interviewCountry ? `${studentData.interviewCountry}_student` : 'usa_f1')
-    const interviewMode = body.interviewMode || 'standard'
-    const difficulty = body.difficulty || 'medium'
 
     // Check organization quotas
     const orgSnap = await adminDb().collection('organizations').doc(studentData.orgId).get()
@@ -201,8 +197,6 @@ export async function POST(req: NextRequest) {
         route,
         duration: 30,
         creditSource: 'student', // Mark as student-initiated
-        interviewMode,
-        difficulty,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         
@@ -257,8 +251,6 @@ export async function POST(req: NextRequest) {
       interview: {
         id: interviewId,
         route,
-        mode: interviewMode,
-        difficulty,
         scheduledFor: 'now'
       },
       student: {

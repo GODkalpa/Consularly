@@ -6,6 +6,7 @@
 export type UKQuestionType = 'academic' | 'financial' | 'intent' | 'background' | 'follow-up'
 
 export interface UKQuestionItem {
+  id?: string // CRITICAL FIX: Add ID for question tracking
   question: string
   questionType: UKQuestionType
   difficulty?: 'easy' | 'medium' | 'hard'

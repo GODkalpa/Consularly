@@ -20,7 +20,9 @@
     "firebase:admin": "node scripts/create-admin.js",
     "face:models": "node scripts/download-face-models.js",
     "test:email": "npx tsx scripts/test-email.ts",
-    "check:senders": "npx tsx scripts/check-brevo-senders.ts"
+    "check:senders": "npx tsx scripts/check-brevo-senders.ts",
+    "interview:check": "npx tsx scripts/check-interview-status.ts",
+    "interview:fix": "npx tsx scripts/fix-stuck-interviews.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

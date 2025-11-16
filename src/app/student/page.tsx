@@ -5,6 +5,7 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useStudentAuth } from "@/contexts/StudentAuthContext"
 import { StudentAuthGuard } from "@/components/student/StudentAuthGuard"
+import { DynamicFavicon } from "@/components/branding/DynamicFavicon"
 
 import {
   Sidebar,
@@ -470,6 +471,7 @@ export default function StudentDashboard() {
 
   return (
     <StudentAuthGuard>
+      <DynamicFavicon faviconUrl={branding.favicon} />
       <SidebarProvider>
         <Sidebar variant="inset" collapsible="icon" className="border-r bg-background">
           <SidebarHeader className="border-b px-4 py-5">

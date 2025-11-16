@@ -37,9 +37,20 @@ export function selectLLMProvider(
     console.log(`[LLM Provider Debug] Available keys: MegaLLM=${hasMega}, Groq=${hasGroq}`);
   }
 
-  // Primary provider: MegaLLM (Gemini 2.5 Flash via OpenAI-compatible API)
-  // If MEGALLM_API_KEY is configured, use this for all routes and use cases.
+  // PERFORMANCE OPTIMIZATION: Use Claude Haiku 4.5 for question selection (fast + smart)
+  // For other use cases, use Gemini 2.5 Flash (cheaper)
   if (process.env.MEGALLM_API_KEY) {
+    // Question selection: Use Claude Haiku 4.5 (200-400ms, structured outputs)
+    if (useCase === 'question_selection') {
+      return {
+        provider: 'megallm',
+        model: 'claude-haiku-4-5-20251001', // Fast + reliable structured outputs (MegaLLM model ID)
+        apiKey: process.env.MEGALLM_API_KEY,
+        baseUrl: process.env.MEGALLM_BASE_URL || 'https://ai.megallm.io/v1',
+      };
+    }
+    
+    // Scoring/Evaluation: Use Gemini 2.5 Flash (cheaper, still good quality)
     return {
       provider: 'megallm',
       model: process.env.MEGALLM_MODEL || 'gemini-2.5-flash',
@@ -108,10 +119,11 @@ export async function callLLMProvider(
   systemPrompt: string,
   userPrompt: string,
   temperature: number = 0.3,
-  maxTokens: number = 4096
+  maxTokens: number = 8192,
+  timeoutMs?: number // Optional custom timeout
 ): Promise<LLMResponse> {
   if (config.provider === 'groq' || config.provider === 'megallm') {
-    return callOpenAICompatible(config, systemPrompt, userPrompt, temperature, maxTokens);
+    return callOpenAICompatible(config, systemPrompt, userPrompt, temperature, maxTokens, timeoutMs);
   }
 
   throw new Error(`Unsupported provider: ${config.provider}`);
@@ -125,11 +137,14 @@ async function callOpenAICompatible(
   systemPrompt: string,
   userPrompt: string,
   temperature: number,
-  maxTokens: number
+  maxTokens: number,
+  customTimeout?: number
 ): Promise<LLMResponse> {
   // PERFORMANCE FIX: Add timeout to prevent hanging requests
+  // Default: 25s for quick requests, 60s for final evaluation
+  const timeoutDuration = customTimeout || 25000;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout for MegaLLM
+  const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
   
   try {
     const payload: any = {
@@ -142,10 +157,10 @@ async function callOpenAICompatible(
       max_tokens: maxTokens,
     };
 
-    // Keep JSON-mode for providers that fully support OpenAI response_format
-    if (config.provider !== 'megallm') {
-      payload.response_format = { type: 'json_object' };
-    }
+    // Enable JSON mode for all providers
+    // Claude Haiku 4.5 has native structured output support
+    // Gemini 2.5 Flash has buggy JSON mode (see MEGALLM_JSON_MODE_BUG.md)
+    payload.response_format = { type: 'json_object' };
 
     const response = await fetch(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -168,17 +183,51 @@ async function callOpenAICompatible(
 
     // Normalize content so callers always receive a string
     let content: any = data?.choices?.[0]?.message?.content;
+    
+    // CRITICAL FIX: MegaLLM/Gemini returns null when hitting max_tokens limit
     if ((content === null || typeof content === 'undefined') && config.provider === 'megallm') {
-      // Debug unexpected MegaLLM response shape
-      console.error('[MegaLLM Debug] Unexpected chat completion shape:', JSON.stringify(data).slice(0, 1000));
+      const usage = data?.usage;
+      const finishReason = data?.choices?.[0]?.finish_reason;
+      
+      console.error('[MegaLLM Debug] Null content received:', {
+        finish_reason: finishReason,
+        prompt_tokens: usage?.prompt_tokens,
+        total_tokens: usage?.total_tokens,
+        max_tokens_requested: maxTokens,
+        response_preview: JSON.stringify(data).slice(0, 500)
+      });
+      
+      // If finish_reason is "length", we hit the token limit
+      if (finishReason === 'length') {
+        throw new Error(`MegaLLM hit max_tokens limit (${maxTokens}). Prompt: ${usage?.prompt_tokens} tokens, Total: ${usage?.total_tokens} tokens. Increase max_tokens or reduce prompt size.`);
+      }
+      
+      throw new Error('MegaLLM returned null content without hitting token limit. API may be unstable.');
     }
+    
     if (typeof content !== 'string') {
       content = JSON.stringify(content);
     }
     
-    // Strip markdown code blocks from MegaLLM responses (e.g., ```json...```)
+    // CRITICAL FIX: MegaLLM/Gemini doesn't properly support JSON mode
+    // It returns explanatory text with JSON embedded, sometimes with HTML tags
     if (config.provider === 'megallm' && typeof content === 'string') {
+      // Strip markdown code blocks (e.g., ```json...```)
       content = content.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+      
+      // Extract JSON from HTML tags (e.g., <span style='color:red'>{...}</span>)
+      const htmlJsonMatch = content.match(/<[^>]+>(\{.*\})<\/[^>]+>/s);
+      if (htmlJsonMatch) {
+        console.log('[MegaLLM Fix] Extracted JSON from HTML tags');
+        content = htmlJsonMatch[1];
+      }
+      
+      // Extract JSON from explanatory text (find first { to last })
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch && content.length > jsonMatch[0].length + 50) {
+        console.log('[MegaLLM Fix] Extracted JSON from explanatory text');
+        content = jsonMatch[0];
+      }
     }
     
     return {
@@ -188,7 +237,7 @@ async function callOpenAICompatible(
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      throw new Error(`${config.provider} API timeout after 15 seconds`);
+      throw new Error(`${config.provider} API timeout after ${timeoutDuration / 1000} seconds`);
     }
     throw error;
   }

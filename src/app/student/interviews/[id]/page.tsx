@@ -10,8 +10,6 @@ interface InterviewDetail {
   id: string
   status: string
   route: string | null
-  interviewMode: string
-  difficulty: string
   startTime: string
   endTime: string | null
   duration: number | null

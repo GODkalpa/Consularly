@@ -5,7 +5,7 @@ import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/fireb
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, userId, visaType, studentProfile, sessionId, answer, route, firestoreInterviewId, mode, difficulty, officerPersona, targetTopic } = body;
+    const { action, userId, visaType, studentProfile, sessionId, answer, route, firestoreInterviewId } = body;
 
     // Build absolute origin for server-side fetches
     const origin = request.nextUrl?.origin || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
@@ -20,9 +20,9 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Check quota for signup users (not org members)
+        // Check user type and validate access
         try {
-          console.log('[Session Start] Beginning quota check for signup users');
+          console.log('[Session Start] Validating user access');
           await ensureFirebaseAdmin();
           const authHeader = request.headers.get('authorization') || '';
           const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -35,24 +35,70 @@ export async function POST(request: NextRequest) {
             const callerUid = decoded.uid;
             console.log('[Session Start] Token validated for user:', callerUid);
             
-            // Load caller profile
-            const callerSnap = await adminDb().collection('users').doc(callerUid).get();
-            console.log('[Session Start] User profile exists:', callerSnap.exists);
+            // Check if user is a student FIRST (students should not have users collection entries)
+            console.log('[Session Start] Checking if user is a student');
+            const studentQuery = await adminDb()
+              .collection('orgStudents')
+              .where('firebaseUid', '==', callerUid)
+              .limit(1)
+              .get();
+            
+            let isStudent = false;
+            let studentId: string | undefined = undefined;
+            let callerSnap: any;
+            
+            if (!studentQuery.empty) {
+              // This is a student
+              isStudent = true;
+              studentId = studentQuery.docs[0].id;
+              callerSnap = studentQuery.docs[0];
+              console.log('[Session Start] Found student profile:', studentId);
+            } else {
+              // Not a student, check users collection
+              console.log('[Session Start] Not a student, checking users collection');
+              callerSnap = await adminDb().collection('users').doc(callerUid).get();
+            }
+            
+            console.log('[Session Start] User profile exists:', callerSnap.exists, 'isStudent:', isStudent);
             
             if (callerSnap.exists) {
-              const caller = callerSnap.data() as { role?: string; orgId?: string; quotaLimit?: number; quotaUsed?: number } | undefined;
+              const caller = callerSnap.data() as { role?: string; orgId?: string; quotaLimit?: number; quotaUsed?: number; creditsAllocated?: number; creditsUsed?: number } | undefined;
               console.log('[Session Start] User profile data:', {
                 role: caller?.role,
                 orgId: caller?.orgId,
                 quotaLimit: caller?.quotaLimit,
                 quotaUsed: caller?.quotaUsed,
-                hasOrgId: !!caller?.orgId
+                hasOrgId: !!caller?.orgId,
+                isStudent,
+                creditsAllocated: caller?.creditsAllocated,
+                creditsUsed: caller?.creditsUsed
               });
               
-              // Only check quota for signup users (those without orgId)
+              // For students, check their credit balance instead of quota
+              if (isStudent) {
+                const creditsAllocated = caller?.creditsAllocated || 0;
+                const creditsUsed = caller?.creditsUsed || 0;
+                const creditsRemaining = creditsAllocated - creditsUsed;
+                
+                console.log('[Session Start] Student credit check:', { creditsAllocated, creditsUsed, creditsRemaining });
+                
+                if (creditsRemaining <= 0) {
+                  return NextResponse.json({ 
+                    error: 'No credits remaining', 
+                    message: 'You have no interview credits remaining. Please contact your organization to request more credits.',
+                    creditsRemaining: 0
+                  }, { status: 403 });
+                }
+                
+                // For students, the interview is already created by /api/student/interviews
+                // We don't need to create it here or deduct credits
+                console.log('[Session Start] Student has credits, allowing interview to proceed');
+              }
+              
+              // Only check quota for signup users (those without orgId and not students)
               // Org members' quota is checked in /api/org/interviews before reaching here
               let createdInterviewId: string | undefined = undefined;
-              if (!caller?.orgId) {
+              if (!isStudent && !caller?.orgId) {
                 console.log('[Session Start] Processing signup user (no orgId)');
                 const quotaLimit = caller?.quotaLimit ?? 0;
                 const quotaUsed = caller?.quotaUsed ?? 0;
@@ -122,10 +168,34 @@ export async function POST(request: NextRequest) {
             console.warn('[Session Start] No auth token provided; using provided userId fallback:', userId);
             try {
               if (typeof userId === 'string' && userId) {
-                const callerSnap = await adminDb().collection('users').doc(userId).get();
+                // Check if it's a student ID in orgStudents first
+                let callerSnap = await adminDb().collection('orgStudents').doc(userId).get();
+                let isStudent = false;
+                
                 if (callerSnap.exists) {
-                  const caller = callerSnap.data() as { orgId?: string; quotaLimit?: number; quotaUsed?: number } | undefined;
-                  if (!caller?.orgId) {
+                  isStudent = true;
+                  console.log('[Session Start] Fallback found student profile');
+                } else {
+                  // Not a student, check users collection
+                  callerSnap = await adminDb().collection('users').doc(userId).get();
+                }
+                
+                if (callerSnap.exists) {
+                  const caller = callerSnap.data() as { orgId?: string; quotaLimit?: number; quotaUsed?: number; creditsAllocated?: number; creditsUsed?: number } | undefined;
+                  
+                  // For students, just check credits (interview already created)
+                  if (isStudent) {
+                    const creditsRemaining = (caller?.creditsAllocated || 0) - (caller?.creditsUsed || 0);
+                    if (creditsRemaining <= 0) {
+                      return NextResponse.json({ 
+                        error: 'No credits remaining',
+                        message: 'You have no interview credits remaining. Please contact your organization to request more credits.',
+                        creditsRemaining: 0
+                      }, { status: 403 });
+                    }
+                    console.log('[Session Start] Fallback student has credits, allowing interview');
+                  } else if (!caller?.orgId) {
+                    // For signup users, create interview and check quota
                     const quotaLimit = caller?.quotaLimit ?? 0;
                     const quotaUsed = caller?.quotaUsed ?? 0;
                     if (quotaLimit > 0 && quotaUsed < quotaLimit) {
@@ -189,13 +259,7 @@ export async function POST(request: NextRequest) {
           userId,
           visaType,
           studentProfile,
-          route,
-          {
-            mode: mode || 'standard',
-            difficulty: difficulty || undefined,
-            officerPersona: officerPersona || undefined,
-            targetTopic: targetTopic || undefined,
-          }
+          route
         );
 
         // If quota check created an interview for signup users, return its id for persistence

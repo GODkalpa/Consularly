@@ -17,6 +17,8 @@ import type { BodyLanguageScore } from '@/lib/body-language-scoring'
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'motion/react'
 import { auth } from '@/lib/firebase'
 import { FaceLivenessCheck } from '@/components/interview/FaceLivenessCheck'
+import { InterviewAnalyzingScreen } from '@/components/interview/InterviewAnalyzingScreen'
+import { DynamicFavicon } from '@/components/branding/DynamicFavicon'
 
 // Dynamically import the heavy InterviewStage (TensorFlow/MediaPipe) client-only to reduce initial bundle size
 const InterviewStage = dynamic<InterviewStageProps>(
@@ -33,7 +35,7 @@ interface UISession {
   currentQuestionIndex: number
   questions: UIQuestion[]
   responses: Array<{ question: string; transcription: string; timestamp: Date }>
-  status: 'preparing' | 'active' | 'completed'
+  status: 'preparing' | 'active' | 'analyzing' | 'completed' | 'error'
 }
 
 // Helper function to get interview display title
@@ -112,6 +114,9 @@ export default function InterviewRunner() {
   const [permError, setPermError] = useState<string | null>(null)
   const { running: micRunning, level: micLevel, error: micError, start: startMic, stop: stopMic } = useMicLevel()
   const [livenessVerified, setLivenessVerified] = useState<boolean>(false)
+  const [evaluationError, setEvaluationError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState<number>(0)
+  const [orgBranding, setOrgBranding] = useState<any>(null)
 
   // load initial payload from localStorage seeded by the starter page
   useEffect(() => {
@@ -191,6 +196,17 @@ export default function InterviewRunner() {
         } else {
           scopeRef.current = null
           console.warn('[InterviewRunner] Invalid or missing scope!', init.scope)
+        }
+        // Fetch organization branding if orgId is available
+        if (init.orgId) {
+          fetch(`/api/org/branding?orgId=${init.orgId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.branding) {
+                setOrgBranding(data.branding)
+              }
+            })
+            .catch(err => console.error('[InterviewRunner] Failed to fetch branding:', err))
         }
         console.log('[InterviewRunner] Session loaded successfully:', s.id)
         setLoading(false)
@@ -410,14 +426,14 @@ export default function InterviewRunner() {
       perAnswerScoresCount: perfList?.length,
     })
     
+    // Set timeout to 35 seconds (backend has 30s + 5s buffer)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      console.warn('⏱️ Final report API timeout (35s)')
+      controller.abort()
+    }, 35000)
+    
     try {
-      // CRITICAL FIX: Add 30-second timeout to prevent infinite loading
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => {
-        console.warn('⏱️ Final report API timeout (30s) - using fallback')
-        controller.abort()
-      }, 30000)
-      
       // CRITICAL FIX: Pass per-answer scores to final evaluation for consistency
       const res = await fetch('/api/interview/final', {
         method: 'POST',
@@ -433,52 +449,56 @@ export default function InterviewRunner() {
       
       clearTimeout(timeoutId)
       
-      if (res.ok) {
-        const data = await res.json()
-        console.log('✅ Final report generated successfully:', {
-          decision: data.decision,
-          overall: data.overall,
-          dimensionsCount: Object.keys(data.dimensions || {}).length,
-        })
-        setFinalReport(data)
-      } else {
-        console.warn('⚠️ Final report API returned error:', res.status, res.statusText)
+      if (!res.ok) {
         const errorText = await res.text().catch(() => 'Unknown error')
-        console.error('API Error details:', errorText)
-        const fallbackReport = {
-          decision: 'borderline' as const,
-          overall: combinedAggregate?.overall || 60,
-          dimensions: { communication: 60, credibility: 60 },
-          summary: 'Final AI evaluation unavailable (API error ' + res.status + '). Using heuristic scoring based on per-answer analysis. Your performance scored an average of ' + (combinedAggregate?.overall || 60) + '/100 across all questions.',
-          detailedInsights: [],
-          strengths: [],
-          weaknesses: ['Technical error prevented detailed AI analysis - API returned error ' + res.status],
-          recommendations: ['Add more concrete details (numbers, evidence).', 'Clarify financial maintenance and accommodation arrangements.']
-        }
-        console.log('🔄 Setting fallback report due to API error:', fallbackReport)
-        setFinalReport(fallbackReport)
+        console.error('⚠️ Final report API error:', res.status, errorText)
+        throw new Error(`Evaluation service returned error ${res.status}. Please try again.`)
       }
+      
+      const data = await res.json()
+      console.log('✅ Final report generated successfully:', {
+        decision: data.decision,
+        overall: data.overall,
+        dimensionsCount: Object.keys(data.dimensions || {}).length,
+      })
+      setFinalReport(data)
     } catch (e: any) {
+      clearTimeout(timeoutId)
       console.error('❌ Final report generation failed:', e?.name, e?.message)
       
-      // CRITICAL: Provide fallback report so interview data is still saved
-      const isTimeout = e?.name === 'AbortError'
-      const fallbackReport = {
-        decision: 'borderline' as const,
-        overall: combinedAggregate?.overall || 60,
-        dimensions: { communication: 60, credibility: 60 },
-        summary: isTimeout 
-          ? 'Final AI evaluation timed out after 30 seconds. Using heuristic scoring based on per-answer analysis. Your performance scored an average of ' + (combinedAggregate?.overall || 60) + '/100 across all questions.'
-          : 'Final AI evaluation failed due to a technical error. Using heuristic scoring based on per-answer analysis.',
-        detailedInsights: [],
-        strengths: [],
-        weaknesses: ['Technical error prevented detailed AI analysis - please contact support if this persists'],
-        recommendations: ['Add more concrete details (numbers, evidence).', 'Clarify financial maintenance and accommodation arrangements.']
+      // Throw error to be caught by caller for retry logic
+      if (e?.name === 'AbortError') {
+        throw new Error('Evaluation is taking longer than expected. Please retry.')
       }
-      console.log('🔄 Setting fallback report due to error:', fallbackReport)
-      setFinalReport(fallbackReport)
+      throw new Error(e?.message || 'Evaluation failed due to a technical error. Please retry.')
     }
   }, [session?.route, perfList])
+
+  // Retry evaluation function
+  const retryEvaluation = useCallback(async () => {
+    if (!apiSession) return
+    
+    const MAX_RETRIES = 3
+    if (retryCount >= MAX_RETRIES) {
+      setEvaluationError('Maximum retry attempts reached. Please contact support.')
+      return
+    }
+    
+    console.log(`🔄 Retrying evaluation (attempt ${retryCount + 1}/${MAX_RETRIES})`)
+    setRetryCount(prev => prev + 1)
+    setSession((prev) => prev ? { ...prev, status: 'analyzing' } : prev)
+    setEvaluationError(null)
+    
+    try {
+      await computeFinalReport(apiSession)
+      setSession((prev) => prev ? { ...prev, status: 'completed' } : prev)
+      setRetryCount(0) // Reset on success
+    } catch (error: any) {
+      console.error('❌ Retry failed:', error)
+      setEvaluationError(error?.message || 'Evaluation failed. Please try again.')
+      setSession((prev) => prev ? { ...prev, status: 'error' } : prev)
+    }
+  }, [apiSession, retryCount, computeFinalReport])
 
   // Define processAnswer before finalizeAnswer to avoid initialization error
   const processAnswer = useCallback(async (transcriptText: string) => {
@@ -652,6 +672,11 @@ export default function InterviewRunner() {
         })
       ]
       
+      // PERFORMANCE OPTIMIZATION: Show immediate UI feedback before API completes
+      // This makes the transition feel instant to the user
+      setCurrentTranscript('')
+      answerBufferRef.current = ''
+      
       // Wait only for next question (scoring runs in background)
       const res = await nextQuestionPromise
       if (!res.ok) throw new Error('Failed to process answer')
@@ -664,16 +689,24 @@ export default function InterviewRunner() {
         ...prev,
         responses: [...prev.responses, { question: prev.questions[prev.currentQuestionIndex].question, transcription: transcriptText, timestamp: new Date() }],
       } : prev)
-      setCurrentTranscript('')
-      answerBufferRef.current = ''
 
       if (data.isComplete) {
+        // Transition to analyzing state
+        setSession((prev) => prev ? { ...prev, status: 'analyzing' } : prev)
+        setEvaluationError(null)
+        
         // compute final report - this will trigger setFinalReport
-        await computeFinalReport(updated)
-        // Wait for scoring to complete
-        try { await scoringPromise } catch {}
-        // Set session to completed - the finalization useEffect will wait for finalReport
-        setSession((prev) => prev ? { ...prev, status: 'completed' } : prev)
+        try {
+          await computeFinalReport(updated)
+          // Wait for scoring to complete
+          try { await scoringPromise } catch {}
+          // Set session to completed - the finalization useEffect will wait for finalReport
+          setSession((prev) => prev ? { ...prev, status: 'completed' } : prev)
+        } catch (error: any) {
+          console.error('❌ Final evaluation failed:', error)
+          setEvaluationError(error?.message || 'Evaluation failed. Please try again.')
+          setSession((prev) => prev ? { ...prev, status: 'error' } : prev)
+        }
         return
       }
 
@@ -713,18 +746,20 @@ export default function InterviewRunner() {
     processingRef.current = true
     setIsProcessingTranscript(true)
     
-    console.log('🎙️ [STT] Finalizing answer - starting 2.5s grace period for final transcript segments...')
+    console.log('🎙️ [STT] Finalizing answer - starting optimized grace period for final transcript segments...')
     
     if (phaseTimerRef.current) window.clearTimeout(phaseTimerRef.current)
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
     if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
     
-    // CRITICAL FIX: Wait 2.5 seconds to allow AssemblyAI to finalize ALL transcript segments
-    // This ensures we capture every single word spoken by the user
+    // PERFORMANCE OPTIMIZATION: Reduced grace period from 2.5s to 1.5s for UK/France routes
+    // AssemblyAI typically finalizes segments within 1-1.5s, so 1.5s is sufficient
+    // This reduces perceived lag by 40% while still capturing complete transcripts
     const currentBufferBefore = answerBufferRef.current
     console.log(`🎙️ [STT] Buffer before grace period: "${currentBufferBefore}" (${currentBufferBefore.length} chars)`)
     
-    await new Promise(resolve => setTimeout(resolve, 2500))
+    const gracePeriod = (session?.route === 'uk_student' || session?.route === 'france_ema' || session?.route === 'france_icn') ? 1500 : 2500
+    await new Promise(resolve => setTimeout(resolve, gracePeriod))
     
     // After grace period, capture the complete accumulated transcript
     const finalText = answerBufferRef.current.trim()
@@ -733,7 +768,7 @@ export default function InterviewRunner() {
     
     setIsProcessingTranscript(false)
     await processAnswer(finalText.length >= 1 ? finalText : '[No response]')
-  }, [isProcessingTranscript, processAnswer])
+  }, [isProcessingTranscript, processAnswer, session?.route])
   
   // PERFORMANCE FIX: Keep finalizeAnswerRef in sync with finalizeAnswer
   useEffect(() => {
@@ -891,7 +926,10 @@ export default function InterviewRunner() {
           status: 'completed',
           endTime: new Date().toISOString(),
         }
-        if (typeof score === 'number') body.score = score
+        if (typeof score === 'number') {
+          body.score = score
+          body.finalScore = score // CRITICAL FIX: Set finalScore for dashboard queries
+        }
         if (scoreDetails) body.scoreDetails = scoreDetails
         if (finalReport) body.finalReport = finalReport
         if (perfList.length > 0) body.perAnswerScores = perfList
@@ -949,6 +987,18 @@ export default function InterviewRunner() {
           </Button>
         </div>
       </div>
+    )
+  }
+
+  // Show analyzing screen when evaluating final report
+  if (session.status === 'analyzing' || session.status === 'error') {
+    return (
+      <InterviewAnalyzingScreen
+        route={session.route}
+        questionCount={session.questions.length}
+        onRetry={session.status === 'error' ? retryEvaluation : undefined}
+        error={session.status === 'error' ? evaluationError : null}
+      />
     )
   }
 
@@ -1445,9 +1495,11 @@ export default function InterviewRunner() {
   }
 
   return (
-    <div className="w-full min-h-screen flex flex-col">
-      {/* Permission overlay - Modern centered modal */}
-      {!permissionsReady && (
+    <>
+      <DynamicFavicon faviconUrl={orgBranding?.favicon} />
+      <div className="w-full min-h-screen flex flex-col">
+        {/* Permission overlay - Modern centered modal */}
+        {!permissionsReady && (
         <motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -1669,12 +1721,19 @@ export default function InterviewRunner() {
             {(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'answer' && (
               <Button 
                 size="lg" 
-                className="px-8 h-12 text-base font-semibold" 
+                className="px-8 h-12 text-base font-semibold transition-all hover:scale-105" 
                 onClick={finalizeAnswer}
                 disabled={isProcessingTranscript}
               >
                 {isProcessingTranscript ? (
-                  <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing transcription...</>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center"
+                  >
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" /> 
+                    Finalizing answer...
+                  </motion.div>
                 ) : (
                   <><Square className="h-4 w-4 mr-2" /> Stop & Next <ChevronRight className="h-4 w-4 ml-1" /></>
                 )}
@@ -1748,6 +1807,7 @@ export default function InterviewRunner() {
           resetKey={resetKey}
         />
       </div>
-    </div>
+      </div>
+    </>
   )
 }

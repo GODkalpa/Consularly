@@ -61,34 +61,33 @@ export function StudentInterviewDetails({ studentId, studentName, isOpen, onClos
     fetchInterviews()
   }, [isOpen, studentId])
 
-  const exportStudentReport = () => {
-    // Create a comprehensive report as JSON
-    const report = {
-      student: studentName,
-      studentId,
-      generatedAt: new Date().toISOString(),
-      totalInterviews: interviews.length,
-      interviews: interviews.map(iv => ({
-        date: iv.startTime,
-        route: iv.route,
-        score: iv.score,
-        decision: iv.finalReport?.decision,
-        summary: iv.finalReport?.summary,
-        strengths: iv.finalReport?.strengths,
-        weaknesses: iv.finalReport?.weaknesses,
-        detailedInsights: iv.finalReport?.detailedInsights,
-      }))
+  const exportStudentReport = async () => {
+    // Export the most recent completed interview as PDF
+    const completedInterview = interviews.find(iv => iv.status === 'completed' && iv.finalReport)
+    if (!completedInterview) {
+      alert('No completed interviews available to export')
+      return
     }
 
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${studentName.replace(/\s+/g, '_')}_interview_report_${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) return
+      
+      // Fetch HTML and trigger download
+      const response = await fetch(`/api/report/${completedInterview.id}/pdf?token=${token}&download=true`)
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${studentName.replace(/\s+/g, '_')}_interview_report.html`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to export PDF:', err)
+      alert('Failed to export report')
+    }
   }
 
   const avgScore = interviews.length > 0

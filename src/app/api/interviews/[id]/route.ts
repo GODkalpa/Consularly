@@ -60,6 +60,8 @@ export async function PATCH(
 
     if (typeof body.score === 'number') {
       updateData.score = body.score
+      // CRITICAL FIX: Also update finalScore for dashboard queries
+      updateData.finalScore = body.score
     }
 
     if (body.scoreDetails && typeof body.scoreDetails === 'object') {

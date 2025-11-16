@@ -14,8 +14,6 @@ interface Interview {
   endTime: string | null
   duration: number | null
   creditSource: string
-  interviewMode: string
-  difficulty: string
   completedQuestions: number
   finalReport?: {
     decision: string

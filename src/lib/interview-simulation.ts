@@ -4,6 +4,7 @@ import { UK_QUESTION_POOL, ukFallbackQuestionByIndex } from './uk-questions-data
 import { F1_VISA_QUESTIONS, mapQuestionTypeToF1Category } from './f1-questions-data'
 import { F1SessionMemory, updateMemory } from './f1-mvp-session-memory'
 import { FranceUniversity, getFirstQuestionForUniversity, getRemainingQuestionsForUniversity, franceFallbackQuestionByIndex } from './france-questions-data'
+import { getSemanticCluster } from './smart-question-selector'
 
 export interface InterviewSession {
   id: string;
@@ -30,6 +31,7 @@ export interface InterviewSession {
     timestamp: string;
     questionType: string;
     difficulty: string;
+    questionId?: string; // CRITICAL FIX: Store question ID for reliable tracking
   }>;
   currentQuestionNumber: number;
   status: 'active' | 'completed' | 'paused';
@@ -45,13 +47,12 @@ export interface InterviewSession {
   sessionMemory?: F1SessionMemory;
   // Track if using adaptive LLM flow (USA F1)
   useMVPFlow?: boolean;
-  // Interview mode and configuration
-  interviewMode?: 'practice' | 'standard' | 'comprehensive' | 'stress_test';
-  difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
-  officerPersona?: 'professional' | 'skeptical' | 'friendly' | 'strict';
-  targetTopic?: 'financial' | 'academic' | 'intent' | 'weak_areas';
-  totalQuestions?: number; // Total questions for this mode
-  timePerQuestion?: number; // Seconds per question
+  totalQuestions?: number; // Total questions for this country
+  answerTime?: number; // Seconds to answer each question
+  prepTime?: number; // Seconds to prepare before answering (UK/France only)
+  // CRITICAL FIX: Track semantic clusters to prevent repetition
+  askedSemanticClusters?: string[]; // Clusters of questions already asked
+  askedQuestionIds?: string[]; // IDs of questions from bank already asked
 }
 
 export class InterviewSimulationService {
@@ -68,13 +69,7 @@ export class InterviewSimulationService {
     userId: string,
     visaType: 'F1' | 'B1/B2' | 'H1B' | 'other',
     studentProfile: InterviewSession['studentProfile'],
-    route?: InterviewRoute,
-    options?: {
-      mode?: 'practice' | 'standard' | 'comprehensive' | 'stress_test';
-      difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
-      officerPersona?: 'professional' | 'skeptical' | 'friendly' | 'strict';
-      targetTopic?: 'financial' | 'academic' | 'intent' | 'weak_areas';
-    }
+    route?: InterviewRoute
   ): Promise<{ session: InterviewSession; firstQuestion: QuestionGenerationResponse }> {
     const sessionId = `interview_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -87,33 +82,15 @@ export class InterviewSimulationService {
       route === 'france_icn' ? 'icn' : 
       undefined;
     
-    // Import interview mode configurations
-    const { getModeConfig, getDifficultyConfig, getEffectiveTimePerQuestion } = await import('./interview-modes');
+    // Import country configurations
+    const { getCountryConfig } = await import('./interview-modes');
     
-    // Determine interview configuration
-    const interviewMode = options?.mode || 'standard';
-    const difficulty = options?.difficulty;
-    const modeConfig = getModeConfig(interviewMode);
-    const totalQuestions = modeConfig.questionCount;
-    const timePerQuestion = getEffectiveTimePerQuestion(interviewMode, difficulty);
-    
-    // Determine officer persona (random if not specified for realistic variety)
-    let officerPersona = options?.officerPersona;
-    if (!officerPersona && difficulty) {
-      // Assign persona based on difficulty if not specified
-      const personaMap = {
-        easy: 'friendly' as const,
-        medium: 'professional' as const,
-        hard: 'skeptical' as const,
-        expert: 'strict' as const,
-      };
-      officerPersona = personaMap[difficulty];
-    } else if (!officerPersona) {
-      // Random selection weighted towards professional
-      const personaChoices: Array<'professional' | 'skeptical' | 'friendly' | 'strict'> = 
-        ['professional', 'professional', 'skeptical', 'friendly'];
-      officerPersona = personaChoices[Math.floor(Math.random() * personaChoices.length)];
-    }
+    // Determine interview configuration based on country/route
+    const selectedRoute = route || 'usa_f1';
+    const countryConfig = getCountryConfig(selectedRoute);
+    const totalQuestions = countryConfig.questionCount;
+    const answerTime = countryConfig.answerTime;
+    const prepTime = countryConfig.prepTime;
     
     const session: InterviewSession = {
       id: sessionId,
@@ -128,17 +105,25 @@ export class InterviewSimulationService {
       startTime: new Date().toISOString(),
       sessionMemory: useMVPFlow ? {} : undefined, // Track facts for consistency
       useMVPFlow, // Using adaptive LLM with question bank
-      // Interview mode configuration
-      interviewMode,
-      difficulty,
-      officerPersona,
-      targetTopic: options?.targetTopic,
       totalQuestions,
-      timePerQuestion,
+      answerTime,
+      prepTime,
+      // CRITICAL FIX: Initialize cluster and question tracking
+      askedSemanticClusters: [],
+      askedQuestionIds: [],
     };
 
     // Generate the first question (LLM with question bank for usa_f1)
     const firstQuestion = await this.generateNextQuestion(session);
+    
+    // CRITICAL FIX: ALWAYS track first question's cluster and ID
+    const cluster = firstQuestion.semanticCluster || null;
+    const questionId = firstQuestion.questionId || `UNKNOWN_${Date.now()}`;
+    
+    session.askedSemanticClusters = cluster ? [cluster] : [];
+    session.askedQuestionIds = [questionId];
+    
+    console.log(`[Session Init] First question - ID: ${questionId}, Cluster: ${cluster || 'none'}`);
 
     return { session, firstQuestion };
   }
@@ -187,9 +172,9 @@ export class InterviewSimulationService {
 
     // Check if interview should end based on mode configuration (or route-specific defaults)
     const targetQuestions = session.totalQuestions || (session.route === 'uk_student' ? 16 : 8);
-    const isComplete = updatedSession.currentQuestionNumber > targetQuestions;
+    const isComplete = updatedSession.currentQuestionNumber >= targetQuestions;
     
-    console.log(`[Interview Progress] Question ${updatedSession.currentQuestionNumber}/${targetQuestions} (Mode: ${session.interviewMode || 'standard'})`);
+    console.log(`[Interview Progress] Question ${updatedSession.currentQuestionNumber}/${targetQuestions}`);
 
     if (isComplete) {
       updatedSession.status = 'completed';
@@ -200,13 +185,33 @@ export class InterviewSimulationService {
     // Generate next question based on the answer
     const nextQuestion = await this.generateNextQuestion(updatedSession, currentQuestion, answer);
 
+    // CRITICAL FIX: ALWAYS track both cluster and ID - no conditional logic
+    // This ensures tracking arrays stay in sync
+    const cluster = nextQuestion.semanticCluster || null;
+    const questionId = nextQuestion.questionId || `UNKNOWN_${Date.now()}`;
+    
+    // Update clusters array
+    updatedSession.askedSemanticClusters = [
+      ...(updatedSession.askedSemanticClusters || []),
+      ...(cluster ? [cluster] : [])
+    ];
+    
+    // Update question IDs array
+    updatedSession.askedQuestionIds = [
+      ...(updatedSession.askedQuestionIds || []),
+      questionId
+    ];
+    
+    console.log(`[Question Tracking] Added ID: ${questionId}, Cluster: ${cluster || 'none'} | Total IDs: ${updatedSession.askedQuestionIds.length}, Total Clusters: ${updatedSession.askedSemanticClusters.length}`);
+
     // Add the new question to history
     updatedSession.conversationHistory.push({
       question: nextQuestion.question,
       answer: '', // Will be filled when student responds
       timestamp: new Date().toISOString(),
       questionType: nextQuestion.questionType,
-      difficulty: nextQuestion.difficulty
+      difficulty: nextQuestion.difficulty,
+      questionId: questionId, // CRITICAL FIX: Always store a valid ID
     });
 
     return { updatedSession, nextQuestion, isComplete: false };
@@ -242,11 +247,9 @@ export class InterviewSimulationService {
           answer: item.answer,
           timestamp: item.timestamp
         })),
-        // Pass interview mode configuration to influence question selection
-        interviewMode: session.interviewMode,
-        difficulty: session.difficulty,
-        officerPersona: session.officerPersona,
-        targetTopic: session.targetTopic,
+        // CRITICAL FIX: Pass tracked clusters and question IDs to prevent repetition
+        askedSemanticClusters: session.askedSemanticClusters,
+        askedQuestionIds: session.askedQuestionIds,
       }
     };
 
@@ -264,6 +267,17 @@ export class InterviewSimulationService {
       }
 
       const next: QuestionGenerationResponse = await response.json();
+      
+      // CRITICAL DEBUG: Log what the API returned
+      console.log(`[API Response] Received questionId: ${next.questionId || 'UNDEFINED'}, question: "${next.question.substring(0, 60)}..."`);
+      
+      // CRITICAL FIX: Stricter duplicate detection before any other validation
+      const isUnique = this.validateQuestionUniqueness(next.question, session.conversationHistory);
+      if (!isUnique) {
+        console.warn(`⚠️ [DUPLICATE BLOCKED] Question too similar to previous questions: "${next.question}"`);
+        console.warn(`⚠️ Using fallback question instead`);
+        return this.getFallbackQuestion(session.currentQuestionNumber, session.route, session.university);
+      }
       
       // VALIDATION: Check if the generated question is appropriate for the degree level
       if (session.route === 'usa_f1' && session.studentProfile.degreeLevel) {
@@ -319,14 +333,18 @@ export class InterviewSimulationService {
       const candNorm = normalize(next.question)
       const candToks = tokens(next.question)
 
-      // Enforce UK strict bank + no duplicates (lowered threshold for better semantic dedup)
+      // UK route: Trust the LLM selection (it's already using the question bank)
+      // CRITICAL FIX: Don't validate against UK_QUESTION_POOL here - it breaks questionId tracking
+      // The smart question selector already ensures questions are from the bank
       if (session.route === 'uk_student') {
-        const bank = new Set(UK_QUESTION_POOL.map(q => normalize(q.question)))
+        // Just check for duplicates, don't validate against the pool
         const isDuplicate = askedNorm.some(a => a.norm === candNorm || jaccard(a.toks, candToks) >= 0.70)
-        if (!bank.has(candNorm) || isDuplicate) {
+        if (isDuplicate) {
+          console.warn(`[UK Interview] Duplicate detected, using fallback`);
           const askedSet = new Set(askedNorm.map(a => a.norm))
           return this.getUniqueFallbackQuestion(session.currentQuestionNumber, askedSet, session.route)
         }
+        // Return the LLM's question with its questionId intact
         return next
       }
 
@@ -340,6 +358,7 @@ export class InterviewSimulationService {
             questionType: firstQ.questionType,
             difficulty: firstQ.difficulty || 'medium',
             expectedAnswerLength: firstQ.expectedAnswerLength || 'medium',
+            questionId: firstQ.id, // CRITICAL FIX: Include question ID for tracking
           }
         }
 
@@ -428,11 +447,16 @@ export class InterviewSimulationService {
         const preferred = allowed.find(t => t !== 'follow-up') || 'background'
         const qType: QuestionGenerationResponse['questionType'] = preferred as any
         console.log(`[InterviewSim] path=fallback route=${session.route || 'usa_f1'} step=${session.currentQuestionNumber} sel=session_seed idx=${idx}`)
+        
+        // CRITICAL FIX: Add semantic cluster tracking for fallback questions
+        const semanticCluster = getSemanticCluster(q);
+        
         return {
           question: q,
           questionType: qType,
           difficulty: 'medium',
           expectedAnswerLength: 'medium',
+          semanticCluster: semanticCluster || undefined,
         }
       }
 
@@ -458,6 +482,58 @@ export class InterviewSimulationService {
   }
 
   /**
+   * CRITICAL FIX: Validate question uniqueness with stricter thresholds
+   * Returns true if question is unique, false if it's too similar to previous questions
+   */
+  private validateQuestionUniqueness(
+    question: string,
+    conversationHistory: Array<{ question: string }>
+  ): boolean {
+    const normalize = (s: string) => s
+      .toLowerCase()
+      .replace(/["""'']/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    const STOP = new Set(['what','why','how','do','did','are','is','your','you','the','in','to','of','for','on','at','this','that','it','a','an','any','have','will','can','be','with']);
+    const tokens = (s: string) => normalize(s).split(' ').filter(t => t.length > 2 && !STOP.has(t));
+    
+    const jaccard = (a: string[], b: string[]) => {
+      const A = new Set(a), B = new Set(b);
+      let inter = 0;
+      A.forEach((t) => { if (B.has(t)) inter++ });
+      const union = A.size + B.size - inter;
+      return union === 0 ? 0 : inter / union;
+    };
+    
+    const candNorm = normalize(question);
+    const candToks = tokens(question);
+    
+    for (const h of conversationHistory) {
+      const histNorm = normalize(h.question);
+      const histToks = tokens(h.question);
+      
+      // Exact match check
+      if (candNorm === histNorm) {
+        console.warn(`⚠️ [EXACT DUPLICATE] "${question}" === "${h.question}"`);
+        return false;
+      }
+      
+      // Semantic similarity check (stricter threshold: 60%)
+      const similarity = jaccard(candToks, histToks);
+      if (similarity >= 0.60) {
+        console.warn(`⚠️ [SEMANTIC DUPLICATE] ${(similarity * 100).toFixed(0)}% similar:`);
+        console.warn(`   New: "${question}"`);
+        console.warn(`   Old: "${h.question}"`);
+        return false;
+      }
+    }
+    
+    return true;
+  }
+
+  /**
    * Get a fallback question if the API fails
    */
   private getFallbackQuestion(questionNumber: number, route?: InterviewRoute, university?: FranceUniversity): QuestionGenerationResponse {
@@ -468,6 +544,7 @@ export class InterviewSimulationService {
         questionType: uk.questionType,
         difficulty: uk.difficulty || 'medium',
         expectedAnswerLength: uk.expectedAnswerLength || 'medium',
+        questionId: uk.id, // CRITICAL FIX: Include question ID for tracking
       }
     }
     if ((route === 'france_ema' || route === 'france_icn') && university) {
@@ -477,6 +554,7 @@ export class InterviewSimulationService {
         questionType: fr.questionType,
         difficulty: fr.difficulty || 'medium',
         expectedAnswerLength: fr.expectedAnswerLength || 'medium',
+        questionId: fr.id, // CRITICAL FIX: Include question ID for tracking
       }
     }
     const fallbackQuestions = [
@@ -556,6 +634,7 @@ export class InterviewSimulationService {
         questionType: q.questionType as 'academic' | 'financial' | 'intent' | 'background' | 'follow-up',
         difficulty: (q.difficulty || 'medium') as 'easy' | 'medium' | 'hard',
         expectedAnswerLength: (q.expectedAnswerLength || 'medium') as 'short' | 'medium' | 'long',
+        questionId: q.id, // CRITICAL FIX: Include question ID for tracking
       }));
       
       const available = pool.filter(q => !askedNormalized.has(normalized(q.question)));
@@ -574,6 +653,7 @@ export class InterviewSimulationService {
         questionType: q.questionType as 'academic' | 'financial' | 'intent' | 'background' | 'follow-up',
         difficulty: (q.difficulty || 'medium') as 'easy' | 'medium' | 'hard',
         expectedAnswerLength: (q.expectedAnswerLength || 'medium') as 'short' | 'medium' | 'long',
+        questionId: q.id, // CRITICAL FIX: Include question ID for tracking
       }));
       
       // Filter out already asked questions with strict matching

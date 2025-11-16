@@ -1,7 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { doc, setDoc, onSnapshot } from 'firebase/firestore'
+import { doc, setDoc, onSnapshot, collection, query, where, limit, getDocs } from 'firebase/firestore'
 import { db, firebaseEnabled } from '@/lib/firebase'
 import { getUserProfile, isUserAdmin, UserProfile } from '@/lib/database'
 import { useUser } from './UserContext'
@@ -47,9 +47,28 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         // Initial fetch to populate quickly
         let profile = await getUserProfile(user.uid)
         
-        // If profile doesn't exist, create it
+        // If profile doesn't exist, check if this is a student before creating
         if (!profile) {
-          console.log('🆕 [ProfileContext] Profile missing, creating for existing user:', user.email)
+          console.log('🆕 [ProfileContext] Profile missing, checking if student:', user.email)
+          
+          // Check if this user is a student (in orgStudents collection)
+          const studentsQuery = query(
+            collection(db, 'orgStudents'),
+            where('firebaseUid', '==', user.uid),
+            limit(1)
+          )
+          const studentSnapshot = await getDocs(studentsQuery)
+          
+          if (!studentSnapshot.empty) {
+            console.log('✅ [ProfileContext] User is a student, skipping users collection creation')
+            // This is a student - don't create a users collection entry
+            // Students use StudentAuthContext instead
+            setProfileLoading(false)
+            return
+          }
+          
+          // Not a student, create regular user profile
+          console.log('🆕 [ProfileContext] Creating user profile for non-student:', user.email)
           await setDoc(doc(db, 'users', user.uid), {
             uid: user.uid,
             email: user.email,

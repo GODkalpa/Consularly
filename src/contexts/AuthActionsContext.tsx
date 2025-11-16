@@ -7,7 +7,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from 'firebase/auth'
-import { doc, setDoc, getDoc } from 'firebase/firestore'
+import { doc, setDoc, getDoc, collection, query, where, limit, getDocs } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { auth, db, firebaseEnabled } from '@/lib/firebase'
 import { useUser } from './UserContext'
@@ -64,30 +64,43 @@ export function AuthActionsProvider({ children }: { children: React.ReactNode })
       
       await syncSessionCookie(result.user)
       
-      const userDoc = await getDoc(doc(db, 'users', result.user.uid))
-      if (!userDoc.exists()) {
-        console.log('🆕 [signIn] Creating user profile for:', result.user.email)
-        await setDoc(doc(db, 'users', result.user.uid), {
-          uid: result.user.uid,
-          email: result.user.email,
-          displayName: result.user.displayName || result.user.email?.split('@')[0] || 'User',
-          photoURL: result.user.photoURL,
-          role: 'user',
-          createdAt: new Date().toISOString(),
-          lastLoginAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          isActive: true,
-          preferences: {
-            theme: 'light',
-            notifications: true,
-            language: 'en'
-          }
-        })
+      // Check if this is a student first
+      const studentsQuery = query(
+        collection(db, 'orgStudents'),
+        where('firebaseUid', '==', result.user.uid),
+        limit(1)
+      )
+      const studentSnapshot = await getDocs(studentsQuery)
+      
+      if (studentSnapshot.empty) {
+        // Not a student, handle as regular user
+        const userDoc = await getDoc(doc(db, 'users', result.user.uid))
+        if (!userDoc.exists()) {
+          console.log('🆕 [signIn] Creating user profile for:', result.user.email)
+          await setDoc(doc(db, 'users', result.user.uid), {
+            uid: result.user.uid,
+            email: result.user.email,
+            displayName: result.user.displayName || result.user.email?.split('@')[0] || 'User',
+            photoURL: result.user.photoURL,
+            role: 'user',
+            createdAt: new Date().toISOString(),
+            lastLoginAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            isActive: true,
+            preferences: {
+              theme: 'light',
+              notifications: true,
+              language: 'en'
+            }
+          })
+        } else {
+          await setDoc(doc(db, 'users', result.user.uid), {
+            lastLoginAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }, { merge: true })
+        }
       } else {
-        await setDoc(doc(db, 'users', result.user.uid), {
-          lastLoginAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }, { merge: true })
+        console.log('✅ [signIn] User is a student, skipping users collection')
       }
     } catch (error) {
       throw error
@@ -102,29 +115,42 @@ export function AuthActionsProvider({ children }: { children: React.ReactNode })
       
       await syncSessionCookie(user)
       
-      const userDoc = await getDoc(doc(db, 'users', user.uid))
-      if (!userDoc.exists()) {
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-          role: 'user',
-          createdAt: new Date().toISOString(),
-          lastLoginAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          isActive: true,
-          preferences: {
-            theme: 'light',
-            notifications: true,
-            language: 'en'
-          }
-        })
+      // Check if this is a student first
+      const studentsQuery = query(
+        collection(db, 'orgStudents'),
+        where('firebaseUid', '==', user.uid),
+        limit(1)
+      )
+      const studentSnapshot = await getDocs(studentsQuery)
+      
+      if (studentSnapshot.empty) {
+        // Not a student, handle as regular user
+        const userDoc = await getDoc(doc(db, 'users', user.uid))
+        if (!userDoc.exists()) {
+          await setDoc(doc(db, 'users', user.uid), {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+            role: 'user',
+            createdAt: new Date().toISOString(),
+            lastLoginAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            isActive: true,
+            preferences: {
+              theme: 'light',
+              notifications: true,
+              language: 'en'
+            }
+          })
+        } else {
+          await setDoc(doc(db, 'users', user.uid), {
+            lastLoginAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }, { merge: true })
+        }
       } else {
-        await setDoc(doc(db, 'users', user.uid), {
-          lastLoginAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }, { merge: true })
+        console.log('✅ [signInWithGoogle] User is a student, skipping users collection')
       }
     } catch (error) {
       throw error
