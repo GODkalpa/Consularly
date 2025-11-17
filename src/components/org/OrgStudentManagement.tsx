@@ -215,14 +215,38 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Failed to update student')
+      // Optimistically update the UI immediately
+      setStudents(prev => prev.map(s => 
+        s.id === selectedStudent.id 
+          ? { 
+              ...s, 
+              name: editName.trim(), 
+              email: editEmail.trim(), 
+              interviewCountry: editCountry,
+              studentProfile: editCountry === 'usa' && editProfile.degreeLevel ? {
+                degreeLevel: editProfile.degreeLevel as DegreeLevel,
+                programName: editProfile.programName.trim(),
+                universityName: editProfile.universityName.trim(),
+                programLength: editProfile.programLength.trim(),
+                programCost: editProfile.programCost.trim(),
+                fieldOfStudy: editProfile.fieldOfStudy.trim() || undefined,
+                intendedMajor: editProfile.intendedMajor.trim() || undefined,
+              } : undefined
+            }
+          : s
+      ))
+      
       toast.success('Student updated successfully')
       setEditOpen(false)
       setSelectedStudent(null)
-      // Invalidate cache to force fresh fetch
+      
+      // Invalidate cache and reload in background
       invalidate('students_')
-      await loadStudents()
+      loadStudents()
     } catch (e: any) {
       toast.error('Update failed', { description: e?.message })
+      // Reload on error to revert optimistic update
+      await loadStudents()
     } finally {
       setUpdating(false)
     }
@@ -244,12 +268,18 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Failed to delete student')
+      // Optimistically remove from UI immediately
+      setStudents(prev => prev.filter(s => s.id !== student.id))
+      
       toast.success('Student deleted successfully')
-      // Invalidate cache to force fresh fetch
+      
+      // Invalidate cache and reload in background
       invalidate('students_')
-      await loadStudents()
+      loadStudents()
     } catch (e: any) {
       toast.error('Delete failed', { description: e?.message })
+      // Reload on error to revert optimistic update
+      await loadStudents()
     } finally {
       setDeleting(false)
     }
@@ -524,8 +554,33 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                       })
                       const data = await res.json()
                       if (!res.ok) throw new Error(data?.error || 'Failed to add student')
+                      
+                      // Optimistically add to UI immediately
+                      const newStudent: OrgStudent = {
+                        id: data.studentId || data.id || `temp-${Date.now()}`,
+                        name: newName.trim(),
+                        email: newEmail.trim(),
+                        interviewCountry: newCountry,
+                        lastActive: new Date(),
+                        interviewsCompleted: 0,
+                        creditsAllocated: 5,
+                        creditsUsed: 0,
+                        creditsRemaining: 5,
+                        studentProfile: newCountry === 'usa' && newProfile.degreeLevel ? {
+                          degreeLevel: newProfile.degreeLevel as DegreeLevel,
+                          programName: newProfile.programName.trim(),
+                          universityName: newProfile.universityName.trim(),
+                          programLength: newProfile.programLength.trim(),
+                          programCost: newProfile.programCost.trim(),
+                          fieldOfStudy: newProfile.fieldOfStudy.trim() || undefined,
+                          intendedMajor: newProfile.intendedMajor.trim() || undefined,
+                        } : undefined
+                      }
+                      setStudents(prev => [newStudent, ...prev])
+                      
                       toast.success('Student added successfully')
-                      // Invalidate cache to force fresh fetch
+                      
+                      // Invalidate cache and reload in background
                       invalidate('students_')
                       setAddOpen(false)
                       setNewName('')
@@ -540,9 +595,11 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                         fieldOfStudy: '',
                         intendedMajor: ''
                       })
-                      await loadStudents()
+                      loadStudents()
                     } catch (e: any) {
                       toast.error('Add student failed', { description: e?.message })
+                      // Reload on error to ensure consistency
+                      await loadStudents()
                     } finally {
                       setCreating(false)
                     }

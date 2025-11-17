@@ -76,18 +76,30 @@ export function UserManagement() {
 
     let intervalId: NodeJS.Timeout | undefined
 
-    async function loadUsers() {
+    loadUsers()
+
+    // Cleanup function
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [userProfile])
+
+  async function loadUsers() {
       try {
         const token = await auth.currentUser?.getIdToken()
         if (!token) return
 
         // Fetch users and organizations in parallel for better performance
+        // Add cache-busting timestamp to bypass browser cache
+        const cacheBuster = `&_t=${Date.now()}`
         const [usersRes, orgsRes] = await Promise.all([
-          fetch('/api/admin/users/list?type=all', {
-            headers: { Authorization: `Bearer ${token}` }
+          fetch(`/api/admin/users/list?type=all${cacheBuster}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: 'no-store'
           }),
-          fetch('/api/admin/organizations/list', {
-            headers: { Authorization: `Bearer ${token}` }
+          fetch(`/api/admin/organizations/list${cacheBuster}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: 'no-store'
           }).catch(e => {
             console.warn('Failed to load organizations for dropdown', e)
             return null
@@ -179,16 +191,6 @@ export function UserManagement() {
       }
     }
 
-    // Initial load only - remove aggressive polling to improve performance
-    // Users can refresh the page manually if they need updated data
-    loadUsers()
-
-    // Cleanup function
-    return () => {
-      if (intervalId) clearInterval(intervalId)
-    }
-  }, [userProfile])
-
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -266,6 +268,21 @@ export function UserManagement() {
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Failed to create user')
 
+      // Optimistically add to UI immediately
+      const derivedRole: UserRow['role'] = newRole === 'admin' ? 'admin' : (newRole === 'organization' ? 'organization' : 'student')
+      const newUser: UserRow = {
+        id: data.userId || data.id || `temp-${Date.now()}`,
+        name: newName,
+        email: newEmail,
+        role: derivedRole,
+        status: 'active',
+        organization: newRole === 'organization' ? (orgNames[newOrgId] || newOrgId) : undefined,
+        joinDate: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+        testsCompleted: 0,
+      }
+      setUsers(prev => [newUser, ...prev])
+
       // Attempt to send password setup email via Firebase Auth (uses project email templates)
       let emailSent = false
       try {
@@ -295,8 +312,13 @@ export function UserManagement() {
       }
       setIsCreateDialogOpen(false)
       setNewEmail(''); setNewName(''); setNewRole(''); setNewOrgId('')
+      
+      // Reload in background to ensure consistency
+      loadUsers()
     } catch (e: any) {
       toast.error('Create user failed', { description: e?.message })
+      // Reload on error to ensure consistency
+      await loadUsers()
     } finally {
       setCreating(false)
     }
@@ -322,6 +344,24 @@ export function UserManagement() {
     }
     try {
       setEditing(true)
+      
+      // Optimistically update UI immediately
+      const derivedRole: UserRow['role'] = editRole === 'admin' ? 'admin' : (editRole === 'organization' ? 'organization' : 'student')
+      setUsers(prev => prev.map(u => 
+        u.id === editingUser.id 
+          ? {
+              ...u,
+              name: editName,
+              role: derivedRole,
+              status: editActive ? 'active' : 'inactive',
+              organization: editRole === 'organization' ? (orgNames[editOrgId] || editOrgId) : undefined,
+            }
+          : u
+      ))
+      
+      setIsEditDialogOpen(false)
+      setEditingUser(null)
+      
       const token = await auth.currentUser?.getIdToken()
       if (!token) throw new Error('Not authenticated')
 
@@ -342,10 +382,13 @@ export function UserManagement() {
       if (!res.ok) throw new Error(data?.error || 'Failed to update user')
 
       toast.success('User updated successfully')
-      setIsEditDialogOpen(false)
-      setEditingUser(null)
+      
+      // Reload in background to ensure consistency
+      loadUsers()
     } catch (e: any) {
       toast.error('Update user failed', { description: e?.message })
+      // Reload on error to revert optimistic update
+      await loadUsers()
     } finally {
       setEditing(false)
     }
@@ -358,12 +401,19 @@ export function UserManagement() {
 
   async function handleDeleteUser() {
     if (!deletingUser) return
+    const userToDelete = deletingUser
     try {
       setDeleting(true)
+      
+      // Optimistically remove from UI immediately
+      setUsers(prev => prev.filter(u => u.id !== userToDelete.id))
+      setIsDeleteDialogOpen(false)
+      setDeletingUser(null)
+      
       const token = await auth.currentUser?.getIdToken()
       if (!token) throw new Error('Not authenticated')
 
-      const res = await fetch(`/api/admin/users/${deletingUser.id}`, {
+      const res = await fetch(`/api/admin/users/${userToDelete.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -373,10 +423,13 @@ export function UserManagement() {
       if (!res.ok) throw new Error(data?.error || 'Failed to delete user')
 
       toast.success('User deleted successfully')
-      setIsDeleteDialogOpen(false)
-      setDeletingUser(null)
+      
+      // Reload in background to ensure consistency
+      loadUsers()
     } catch (e: any) {
       toast.error('Delete user failed', { description: e?.message })
+      // Reload on error to revert optimistic update
+      await loadUsers()
     } finally {
       setDeleting(false)
     }
