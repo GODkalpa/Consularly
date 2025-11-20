@@ -12,7 +12,8 @@ import {
   PieChart,
   Mic,
   Home,
-  Loader2
+  Loader2,
+  DollarSign
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -64,6 +65,10 @@ const GlobalSettings = lazy(() =>
 
 const SupportCenter = lazy(() => 
   import("./SupportCenter").then(m => ({ default: m.SupportCenter }))
+)
+
+const AccountingDashboard = lazy(() => 
+  import("../accounting/AccountingDashboard").then(m => ({ default: m.AccountingDashboard }))
 )
 
 // Lightweight overview without heavy dependencies
@@ -183,6 +188,7 @@ const menuItems = [
   { title: "Organizations", icon: Building2, id: "organizations" },
   { title: "Quota Management", icon: TestTube, id: "quotas" },
   { title: "Analytics", icon: PieChart, id: "analytics" },
+  { title: "Billing & Accounting", icon: DollarSign, id: "accounting" },
   { title: "Billing", icon: CreditCard, id: "billing" },
   { title: "Settings", icon: Settings, id: "settings" },
   { title: "Support", icon: MessageSquare, id: "support" },
@@ -192,7 +198,7 @@ const menuItems = [
 const groupedMenu: { label: string; ids: Array<(typeof menuItems)[number]["id"]> }[] = [
   { label: "Platform", ids: ["overview", "users", "organizations", "quotas"] },
   { label: "Insights", ids: ["analytics"] },
-  { label: "Operations", ids: ["billing", "settings", "support", "interview"] },
+  { label: "Operations", ids: ["accounting", "billing", "settings", "support", "interview"] },
 ]
 
 const SUPPORT_BADGE_COUNT = 3
@@ -231,6 +237,12 @@ export function OptimizedAdminDashboard() {
         return (
           <Suspense fallback={<ComponentLoader />}>
             <PlatformAnalytics />
+          </Suspense>
+        )
+      case "accounting":
+        return (
+          <Suspense fallback={<ComponentLoader />}>
+            <AccountingDashboard />
           </Suspense>
         )
       case "billing":

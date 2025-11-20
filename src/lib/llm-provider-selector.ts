@@ -44,7 +44,7 @@ export function selectLLMProvider(
     if (useCase === 'question_selection') {
       return {
         provider: 'megallm',
-        model: 'claude-haiku-4-5-20251001', // Fast + reliable structured outputs (MegaLLM model ID)
+        model: process.env.MEGALLM_MODEL_QUESTIONS || process.env.MEGALLM_MODEL || 'moonshotai/kimi-k2-instruct-0905', // Fast + reliable structured outputs (MegaLLM model ID)
         apiKey: process.env.MEGALLM_API_KEY,
         baseUrl: process.env.MEGALLM_BASE_URL || 'https://ai.megallm.io/v1',
       };

@@ -489,6 +489,21 @@ export class SmartQuestionSelector {
     );
     
     console.log(`[Question Selector] Initial pool: ${availableQuestions.length} questions (filtered by route and asked IDs: ${bankAskedIds.length})`);
+
+    // UK ROUTE: Fixed first question for every interview
+    // Ensure "Which visa Application Centre... (city + centre)" is always asked once at the start
+    if (context.route === 'uk_student' && context.history.length === 0) {
+      const fixedFirst = availableQuestions.find((q) => q.id === 'UK_001');
+      if (fixedFirst) {
+        console.log(`[Question Selector] UK fixed first question: ${fixedFirst.id}`);
+        return {
+          question: fixedFirst.question,
+          type: 'bank',
+          questionId: fixedFirst.id,
+          reasoning: 'UK fixed first question: visa application centre (city + centre)',
+        };
+      }
+    }
     
     // CRITICAL FIX: More lenient cluster filtering - only block if cluster was asked in last 3 questions
     // This prevents over-filtering while still avoiding immediate repetition

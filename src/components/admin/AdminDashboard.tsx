@@ -15,7 +15,8 @@ import {
   Search,
   Home,
   Loader2,
-  LogOut
+  LogOut,
+  DollarSign
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -49,9 +50,10 @@ const OrganizationManagement = lazy(() => import("./OrganizationManagement").the
 const QuotaManagement = lazy(() => import("./QuotaManagement").then(m => ({ default: m.QuotaManagement })))
 const PlatformAnalytics = lazy(() => import("./PlatformAnalytics").then(m => ({ default: m.PlatformAnalytics })))
 const BillingManagement = lazy(() => import("./BillingManagement").then(m => ({ default: m.BillingManagement })))
+const AccountingDashboard = lazy(() => import("../accounting/AccountingDashboard").then(m => ({ default: m.AccountingDashboard })))
 const GlobalSettings = lazy(() => import("./GlobalSettings").then(m => ({ default: m.GlobalSettings })))
 const SupportCenter = lazy(() => import("./SupportCenter").then(m => ({ default: m.SupportCenter })))
-const DashboardOverview = lazy(() => import("./DashboardOverview").then(m => ({ default: m.DashboardOverview })))
+const DashboardOverview = lazy(() => import("./EnhancedDashboardOverview").then(m => ({ default: m.EnhancedDashboardOverview })))
 const InterviewSimulation = lazy(() => import("./InterviewSimulation").then(m => ({ default: m.InterviewSimulation })))
 
 // Loading fallback component
@@ -93,6 +95,11 @@ const menuItems = [
     id: "analytics"
   },
   {
+    title: "Billing & Accounting",
+    icon: DollarSign,
+    id: "accounting"
+  },
+  {
     title: "Billing",
     icon: CreditCard,
     id: "billing"
@@ -115,12 +122,6 @@ const menuItems = [
 ]
 
 // Lightweight grouping to organize the sidebar without overdoing it
-const groupedMenu: { label: string; ids: Array<(typeof menuItems)[number]["id"]> }[] = [
-  { label: "Platform", ids: ["overview", "users", "organizations", "quotas"] },
-  { label: "Insights", ids: ["analytics"] },
-  { label: "Operations", ids: ["billing", "settings", "support", "interview"] },
-]
-
 const SUPPORT_BADGE_COUNT = 3
 
 export function AdminDashboard() {
@@ -160,6 +161,12 @@ export function AdminDashboard() {
             <PlatformAnalytics />
           </Suspense>
         )
+      case "accounting":
+        return (
+          <Suspense fallback={<ComponentLoader />}>
+            <AccountingDashboard />
+          </Suspense>
+        )
       case "billing":
         return (
           <Suspense fallback={<ComponentLoader />}>
@@ -191,63 +198,76 @@ export function AdminDashboard() {
 
   return (
     <SidebarProvider>
-      <Sidebar variant="inset" collapsible="icon">
-        <SidebarHeader>
-          <div className="flex items-center gap-3 rounded-md px-2 py-1.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground font-semibold">
-              MI
+      <Sidebar variant="inset" collapsible="icon" className="border-r bg-background">
+        <SidebarHeader className="border-b px-4 py-5">
+          <div className="flex items-center gap-3">
+            <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 shadow-sm border border-primary/20 shrink-0">
+              <span className="font-bold text-lg text-primary">
+                MI
+              </span>
             </div>
-            <div className="grid leading-tight group-data-[collapsible=icon]:hidden">
-              <span className="text-sm font-semibold">Admin Dashboard</span>
-              <span className="text-xs text-sidebar-foreground/60">Mock Interview Platform</span>
+            <div className="flex flex-col group-data-[collapsible=icon]:hidden">
+              <span className="text-base font-semibold leading-none mb-1">Admin Dashboard</span>
+              <span className="text-xs text-muted-foreground">Admin Control Panel</span>
             </div>
           </div>
         </SidebarHeader>
 
-        <SidebarContent>
-          {groupedMenu.map((group) => (
-            <SidebarGroup key={group.label} className="group-data-[collapsible=icon]:p-1.5">
-              <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">{group.label}</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {group.ids.map((id) => {
-                    const item = menuItems.find((m) => m.id === id)!
-                    return (
-                      <SidebarMenuItem key={item.id}>
-                        <SidebarMenuButton
-                          tooltip={item.title}
-                          onClick={() => setActiveSection(item.id)}
-                          isActive={activeSection === item.id}
-                        >
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.title}</span>
-                        </SidebarMenuButton>
-                        {item.id === "support" && (
-                          <SidebarMenuBadge className="bg-sidebar-primary/10 text-sidebar-foreground">
-                            {SUPPORT_BADGE_COUNT}
-                          </SidebarMenuBadge>
-                        )}
-                      </SidebarMenuItem>
-                    )
-                  })}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ))}
+        <SidebarContent className="px-3 py-4">
+          <SidebarGroup>
+            <SidebarGroupLabel className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Navigation
+            </SidebarGroupLabel>
+            <SidebarGroupContent className="mt-2">
+              <SidebarMenu className="space-y-1">
+                {menuItems.map((item) => (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      tooltip={item.title}
+                      onClick={() => setActiveSection(item.id)}
+                      isActive={activeSection === item.id}
+                      className={`
+                        h-11 px-3 rounded-lg transition-all duration-200
+                        ${activeSection === item.id 
+                          ? 'bg-primary text-primary-foreground shadow-md hover:bg-primary/90' 
+                          : 'hover:bg-muted/80 hover:shadow-sm'
+                        }
+                      `}
+                    >
+                      <item.icon className={`h-5 w-5 ${activeSection === item.id ? '' : 'text-muted-foreground'}`} />
+                      <span className="font-medium">{item.title}</span>
+                    </SidebarMenuButton>
+                    {item.id === "support" && (
+                      <SidebarMenuBadge className="bg-sidebar-primary/10 text-sidebar-foreground">
+                        {SUPPORT_BADGE_COUNT}
+                      </SidebarMenuBadge>
+                    )}
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter>
-          <div className="flex items-center gap-2 rounded-md px-2 py-2">
-            <Avatar className="h-8 w-8">
+        <SidebarFooter className="border-t px-4 py-4">
+          <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-muted/50 transition-colors">
+            <Avatar className="h-10 w-10 border-2 border-primary/20">
               <AvatarImage src="" alt="Admin" />
-              <AvatarFallback>AD</AvatarFallback>
+              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-secondary/20 text-sm font-semibold">
+                AD
+              </AvatarFallback>
             </Avatar>
-            <div className="grid flex-1 leading-tight group-data-[collapsible=icon]:hidden">
-              <span className="text-sm font-medium">Admin</span>
-              <span className="text-xs text-sidebar-foreground/60">Owner</span>
+            <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+              <p className="text-sm font-medium truncate">Admin</p>
+              <p className="text-xs text-muted-foreground truncate">Administrator</p>
             </div>
-            <Button size="icon" variant="ghost" className="group-data-[collapsible=icon]:hidden" onClick={() => setActiveSection("settings") }>
-              <Settings className="h-4 w-4" />
+            <Button 
+              onClick={logout}
+              size="icon" 
+              variant="ghost" 
+              className="h-9 w-9 rounded-md group-data-[collapsible=icon]:hidden hover:bg-primary/10"
+            >
+              <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </SidebarFooter>
@@ -307,7 +327,7 @@ export function AdminDashboard() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 md:p-6">
+        <main className="flex-1 overflow-auto p-6 md:p-8">
           {renderContent()}
         </main>
       </SidebarInset>

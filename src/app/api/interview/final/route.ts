@@ -142,25 +142,17 @@ JSON OUTPUT:
 }
 
 /**
- * Select the fastest available LLM provider for final evaluation
- * Priority: Claude Haiku 4.5 (best for structured JSON) > Groq Llama 3.3 70B
+ * Select the best available LLM provider for final evaluation.
+ * Uses the central selector so env-configured models (e.g. Kimi) are respected.
  */
 function selectFastestProvider(route: InterviewRoute): LLMProviderConfig | null {
-  // Priority 1: Claude Haiku 4.5 (20-30s for complex evaluations, excellent structured output)
-  // Note: While not the absolute fastest, it's the most reliable for JSON generation
-  if (process.env.MEGALLM_API_KEY) {
-    console.log('🚀 [Fast Provider] Selected Claude Haiku 4.5 (primary - best JSON reliability)')
-    return {
-      provider: 'megallm',
-      model: 'claude-haiku-4-5-20251001',
-      apiKey: process.env.MEGALLM_API_KEY,
-      baseUrl: process.env.MEGALLM_BASE_URL || 'https://ai.megallm.io/v1',
-    }
+  const config = selectLLMProvider(route, 'final_evaluation')
+  if (!config) {
+    console.warn('[Final Evaluation] No LLM provider available from selector')
+    return null
   }
-  
-  // Priority 2: Groq Llama 3.3 70B (1-3s typical, but less reliable JSON)
-  console.log('🚀 [Fast Provider] Selected Groq Llama 3.3 70B (fallback)')
-  return selectLLMProvider(route, 'final_evaluation')
+  console.log(`🚀 [Fast Provider] Selected ${config.provider} (${config.model}) for final evaluation`)
+  return config
 }
 
 async function evaluateWithLLM({ route, studentProfile, conversationHistory, perAnswerScores }: { 
