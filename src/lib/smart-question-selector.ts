@@ -11,6 +11,7 @@ import {
   callLLMProvider,
   logProviderSelection,
 } from './llm-provider-selector';
+import questionBankData from '@/data/question-bank.json';
 
 interface Question {
   id: string;
@@ -1050,14 +1051,10 @@ Generate a follow-up question.`;
  */
 export async function loadQuestionBank(): Promise<QuestionBank> {
   try {
-    // Try to load from JSON file
-    const fs = await import('fs').then(m => m.promises);
-    const path = await import('path');
-    const bankPath = path.join(process.cwd(), 'src', 'data', 'question-bank.json');
-    const data = await fs.readFile(bankPath, 'utf-8');
-    return JSON.parse(data);
+    // Import the JSON file directly (works on Vercel and locally)
+    return questionBankData as QuestionBank;
   } catch (error) {
-    console.warn('[Question Bank] Failed to load question-bank.json, using defaults');
+    console.warn('[Question Bank] Failed to load question-bank.json, using defaults:', error);
     return getDefaultQuestionBank();
   }
 }
