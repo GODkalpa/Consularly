@@ -185,9 +185,21 @@ export function StudentInterviewSimulation() {
         studentName: student.name,
         firestoreInterviewId: created.interview.id,
         scope: 'user',
+        orgId: student.orgId || '',
       })
       
       localStorage.setItem(key, payload)
+      
+      // CRITICAL FIX: Add small delay to ensure localStorage write completes before navigation
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Verify localStorage write succeeded
+      const verification = localStorage.getItem(key)
+      if (!verification) {
+        console.error('[Student Interview] localStorage write failed, retrying...')
+        localStorage.setItem(key, payload)
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
       
       // Navigate to interview
       const url = `${window.location.origin}/interview/${apiSess.id}`

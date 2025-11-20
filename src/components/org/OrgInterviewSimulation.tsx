@@ -493,10 +493,23 @@ export function OrgInterviewSimulation({ initialStudentId, initialStudentName }:
         studentName: studentName.trim(),
         firestoreInterviewId: created.id,
         scope: 'org',
+        orgId: created.orgId || '',
       })
       
       localStorage.setItem(key, payload)
       console.log('[Org Interview] Session data stored in localStorage:', key, 'firestoreInterviewId:', created.id)
+
+      // CRITICAL FIX: Add small delay to ensure localStorage write completes before navigation
+      // This prevents race conditions where the interview page loads before data is available
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Verify localStorage write succeeded
+      const verification = localStorage.getItem(key)
+      if (!verification) {
+        console.error('[Org Interview] localStorage write failed, retrying...')
+        localStorage.setItem(key, payload)
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
 
       // Build URL with session ID
       const url = `${window.location.origin}/interview/${apiSess.id}`

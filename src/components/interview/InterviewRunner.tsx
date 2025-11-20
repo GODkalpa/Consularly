@@ -118,41 +118,16 @@ export default function InterviewRunner() {
   const [retryCount, setRetryCount] = useState<number>(0)
   const [orgBranding, setOrgBranding] = useState<any>(null)
 
-  // load initial payload from localStorage seeded by the starter page
+  // Multi-layer data loading: localStorage → Server fetch → Error
   useEffect(() => {
-    let retryCount = 0
-    const maxRetries = 5
+    let localRetryCount = 0
+    const maxLocalRetries = 3
+    let serverRetryCount = 0
+    const maxServerRetries = 3
     
-    const loadSession = () => {
+    // Helper to initialize session from data payload
+    const initializeSession = (init: any) => {
       try {
-        if (!id) {
-          console.error('[InterviewRunner] No ID provided')
-          return
-        }
-        const key = `interview:init:${id}`
-        console.log(`[InterviewRunner] Attempt ${retryCount + 1}/${maxRetries} - Looking for key:`, key)
-        
-        // Try localStorage first (cross-tab storage)
-        const raw = localStorage.getItem(key)
-        
-        if (!raw) {
-          // Retry if data not found yet (storage might be writing)
-          retryCount++
-          console.warn(`[InterviewRunner] Data not found, retry ${retryCount}/${maxRetries}`)
-          if (retryCount < maxRetries) {
-            setTimeout(loadSession, 200 * retryCount) // exponential backoff
-            return
-          }
-          // Max retries reached, data not found
-          console.error('[InterviewRunner] Interview session data not found in localStorage after retries')
-          setLoading(false)
-          return
-        }
-        
-        console.log('[InterviewRunner] Session data found, parsing...')
-        
-        const init = JSON.parse(raw)
-        // expected: { apiSession, firstQuestion, route, studentName }
         const firstQ = init.firstQuestion
         const route: InterviewRoute = init.route
         const uiFirst: UIQuestion = { question: firstQ.question, category: mapQuestionTypeToCategory(route, firstQ.questionType) }
@@ -211,13 +186,141 @@ export default function InterviewRunner() {
         console.log('[InterviewRunner] Session loaded successfully:', s.id)
         setLoading(false)
       } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[InterviewRunner] Error loading interview session:', e)
-        setLoading(false)
+        console.error('[InterviewRunner] Error initializing session:', e)
+        throw e
       }
     }
     
-    loadSession()
+    // Layer 1: Try localStorage (fast path)
+    const tryLocalStorage = () => {
+      try {
+        if (!id) {
+          console.error('[InterviewRunner] No ID provided')
+          setLoading(false)
+          return false
+        }
+        
+        const key = `interview:init:${id}`
+        console.log(`[InterviewRunner] Layer 1: Checking localStorage (attempt ${localRetryCount + 1}/${maxLocalRetries})`)
+        
+        const raw = localStorage.getItem(key)
+        
+        if (!raw) {
+          localRetryCount++
+          console.warn(`[InterviewRunner] localStorage empty, retry ${localRetryCount}/${maxLocalRetries}`)
+          if (localRetryCount < maxLocalRetries) {
+            setTimeout(tryLocalStorage, 200 * localRetryCount) // exponential backoff
+            return false
+          }
+          // Max retries reached, try server
+          console.log('[InterviewRunner] localStorage failed, falling back to server fetch')
+          tryServerFetch()
+          return false
+        }
+        
+        console.log('[InterviewRunner] Layer 1: localStorage data found ✓')
+        const init = JSON.parse(raw)
+        initializeSession(init)
+        return true
+      } catch (e) {
+        console.error('[InterviewRunner] localStorage parse error:', e)
+        // Try server fetch on parse error
+        tryServerFetch()
+        return false
+      }
+    }
+    
+    // Layer 2: Fetch from server (reliable fallback)
+    const tryServerFetch = async () => {
+      try {
+        if (!id) {
+          setLoading(false)
+          return
+        }
+        
+        console.log(`[InterviewRunner] Layer 2: Fetching from server (attempt ${serverRetryCount + 1}/${maxServerRetries})`)
+        
+        // Get auth token
+        const user = auth.currentUser
+        if (!user) {
+          console.warn('[InterviewRunner] No authenticated user, waiting for auth...')
+          // Wait a bit for auth to initialize
+          setTimeout(() => {
+            if (auth.currentUser) {
+              tryServerFetch()
+            } else {
+              showError('authentication')
+            }
+          }, 1000)
+          return
+        }
+        
+        const token = await user.getIdToken()
+        const response = await fetch(`/api/interview/session/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.error('[InterviewRunner] Interview not found')
+            showError('not-found')
+            return
+          }
+          if (response.status === 403) {
+            console.error('[InterviewRunner] Access denied')
+            showError('forbidden')
+            return
+          }
+          throw new Error(`Server returned ${response.status}`)
+        }
+        
+        const init = await response.json()
+        console.log('[InterviewRunner] Layer 2: Server fetch successful ✓')
+        
+        // Cache in localStorage for future use
+        try {
+          const key = `interview:init:${id}`
+          localStorage.setItem(key, JSON.stringify(init))
+          console.log('[InterviewRunner] Cached server data in localStorage')
+        } catch (e) {
+          console.warn('[InterviewRunner] Failed to cache in localStorage:', e)
+        }
+        
+        initializeSession(init)
+      } catch (e: any) {
+        console.error('[InterviewRunner] Server fetch error:', e)
+        serverRetryCount++
+        if (serverRetryCount < maxServerRetries) {
+          console.log(`[InterviewRunner] Retrying server fetch (${serverRetryCount}/${maxServerRetries})`)
+          setTimeout(tryServerFetch, 1000 * serverRetryCount) // exponential backoff
+        } else {
+          console.error('[InterviewRunner] All retry attempts exhausted')
+          showError('network')
+        }
+      }
+    }
+    
+    // Layer 3: Show error state
+    const showError = (type: 'not-found' | 'forbidden' | 'network' | 'authentication') => {
+      setLoading(false)
+      setSession({
+        id: id || 'unknown',
+        studentName: 'Error',
+        route: 'usa_f1',
+        startTime: new Date(),
+        currentQuestionIndex: 0,
+        questions: [],
+        responses: [],
+        status: 'error'
+      })
+      // Store error type for rendering
+      ;(window as any).__interviewLoadError = type
+    }
+    
+    // Start with localStorage
+    tryLocalStorage()
   }, [id])
 
   // Helper to explicitly request permissions (can be called automatically and via button)
@@ -965,27 +1068,86 @@ export default function InterviewRunner() {
   }
 
   if (!session || !apiSession) {
+    const errorType = (window as any).__interviewLoadError || 'unknown'
+    
+    const errorMessages = {
+      'not-found': {
+        title: 'Interview Not Found',
+        description: 'This interview session does not exist or has been deleted.',
+        details: [
+          'The interview may have expired',
+          'The session link may be incorrect',
+          'The interview may have been removed by an administrator'
+        ]
+      },
+      'forbidden': {
+        title: 'Access Denied',
+        description: 'You do not have permission to access this interview.',
+        details: [
+          'This interview belongs to another user or organization',
+          'Your session may have expired',
+          'Please sign in with the correct account'
+        ]
+      },
+      'network': {
+        title: 'Connection Error',
+        description: 'Unable to load the interview session. Please check your internet connection.',
+        details: [
+          'Your internet connection may be unstable',
+          'The server may be temporarily unavailable',
+          'Try refreshing the page or checking your network'
+        ]
+      },
+      'authentication': {
+        title: 'Authentication Required',
+        description: 'Please sign in to access this interview.',
+        details: [
+          'Your session may have expired',
+          'You need to be signed in to start an interview',
+          'Please sign in and try again'
+        ]
+      },
+      'unknown': {
+        title: 'Interview Session Not Found',
+        description: 'The interview session data could not be loaded.',
+        details: [
+          'The session link may have expired',
+          'Browser storage may have been cleared',
+          'Try starting a new interview from the dashboard'
+        ]
+      }
+    }
+    
+    const error = errorMessages[errorType as keyof typeof errorMessages] || errorMessages.unknown
+    
     return (
-      <div className="max-w-xl mx-auto my-16 text-center space-y-4">
-        <AlertCircle className="h-16 w-16 mx-auto text-destructive" />
-        <h2 className="text-2xl font-semibold">Interview Session Not Found</h2>
-        <p className="text-muted-foreground">
-          The interview session data could not be loaded. This may happen if:
-        </p>
-        <ul className="text-sm text-muted-foreground list-disc text-left max-w-md mx-auto space-y-1">
-          <li>The session link expired or was already used</li>
-          <li>You opened the interview in a different browser</li>
-          <li>Browser storage was cleared during setup</li>
-          <li>The page was refreshed before the session loaded</li>
-        </ul>
-        <div className="flex gap-3 justify-center pt-4">
-          <Button onClick={() => router.push('/dashboard')}>
-            Return to Dashboard
-          </Button>
-          <Button variant="outline" onClick={() => router.push('/org')}>
-            Organization Dashboard
-          </Button>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-muted/40 p-6">
+        <Card className="max-w-xl w-full">
+          <CardContent className="pt-6 text-center space-y-4">
+            <AlertCircle className="h-16 w-16 mx-auto text-destructive" />
+            <h2 className="text-2xl font-semibold">{error.title}</h2>
+            <p className="text-muted-foreground">{error.description}</p>
+            <ul className="text-sm text-muted-foreground list-disc text-left max-w-md mx-auto space-y-1 pl-4">
+              {error.details.map((detail, i) => (
+                <li key={i}>{detail}</li>
+              ))}
+            </ul>
+            <div className="flex gap-3 justify-center pt-4">
+              {errorType === 'network' && (
+                <Button onClick={() => window.location.reload()} variant="default">
+                  <Loader2 className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
+              )}
+              <Button onClick={() => router.back()} variant="outline">
+                Go Back
+              </Button>
+              <Button onClick={() => router.push('/')}>
+                Home
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }

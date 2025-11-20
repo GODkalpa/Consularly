@@ -118,6 +118,9 @@ export async function POST(request: NextRequest) {
 
                 // Create interview record and increment quota for signup users
                 console.log('[Session Start] Creating interview record for signup user');
+                
+                // Generate first question (will be done by simulation service)
+                // For now, we'll update this after the session is created
                 const interviewData: any = {
                   userId: callerUid,
                   orgId: '',
@@ -134,6 +137,13 @@ export async function POST(request: NextRequest) {
                   interviewType: 'visa',
                   route,
                   duration: 30,
+                  studentName: studentProfile?.name || 'Student',
+                  // Initialize session state for reconstruction
+                  sessionState: {
+                    conversationHistory: [],
+                    currentQuestionIndex: 0,
+                    responses: []
+                  },
                   createdAt: FieldValue.serverTimestamp(),
                   updatedAt: FieldValue.serverTimestamp(),
                 }
@@ -210,6 +220,13 @@ export async function POST(request: NextRequest) {
                         interviewType: 'visa',
                         route,
                         duration: 30,
+                        studentName: studentProfile?.name || 'Student',
+                        // Initialize session state for reconstruction
+                        sessionState: {
+                          conversationHistory: [],
+                          currentQuestionIndex: 0,
+                          responses: []
+                        },
                         createdAt: FieldValue.serverTimestamp(),
                         updatedAt: FieldValue.serverTimestamp(),
                       }
@@ -267,6 +284,23 @@ export async function POST(request: NextRequest) {
         const createdInterviewId = (request as any).__createdInterviewId as string | undefined;
         const finalInterviewId = firestoreInterviewId || createdInterviewId;
         console.log('[Session Start] Returning response with interviewId:', finalInterviewId, '(org:', !!firestoreInterviewId, 'signup:', !!createdInterviewId, ')');
+        
+        // Update the interview document with the first question for session reconstruction
+        if (finalInterviewId) {
+          try {
+            await adminDb().collection('interviews').doc(finalInterviewId).update({
+              firstQuestion: {
+                question: firstQuestion.question,
+                questionType: firstQuestion.questionType,
+                difficulty: firstQuestion.difficulty
+              },
+              updatedAt: FieldValue.serverTimestamp()
+            });
+            console.log('[Session Start] Stored firstQuestion in Firestore');
+          } catch (updateError) {
+            console.warn('[Session Start] Failed to update firstQuestion:', updateError);
+          }
+        }
         
         return NextResponse.json({
           session,

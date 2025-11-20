@@ -139,10 +139,22 @@ export default function StudentDashboard() {
           currentQuestionIndex: 0,
           questions: [], // Will be loaded by InterviewRunner
           responses: [],
-          status: 'preparing' as const
+          status: 'preparing' as const,
+          orgId: student.orgId || ''
         }
         
         localStorage.setItem(`interview:init:${data.interview.id}`, JSON.stringify(initData))
+        
+        // CRITICAL FIX: Add small delay to ensure localStorage write completes before navigation
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Verify localStorage write succeeded
+        const verification = localStorage.getItem(`interview:init:${data.interview.id}`)
+        if (!verification) {
+          console.error('[Student Page] localStorage write failed, retrying...')
+          localStorage.setItem(`interview:init:${data.interview.id}`, JSON.stringify(initData))
+          await new Promise(resolve => setTimeout(resolve, 50))
+        }
         
         // Open interview in new tab
         window.open(`/interview/${data.interview.id}`, '_blank')
