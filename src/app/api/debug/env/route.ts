@@ -3,14 +3,15 @@ import { NextResponse } from 'next/server';
 // DEBUG ONLY - Remove in production
 export async function GET() {
   return NextResponse.json({
-    hasBrevoKey: !!process.env.BREVO_API_KEY,
-    brevoKeyLength: process.env.BREVO_API_KEY?.length || 0,
-    brevoKeyPrefix: process.env.BREVO_API_KEY?.substring(0, 10) || 'not found',
-    fromEmail: process.env.EMAIL_FROM_ADDRESS,
-    fromName: process.env.EMAIL_FROM_NAME,
-    replyTo: process.env.EMAIL_REPLY_TO,
+    hasSMTPHost: !!process.env.SMTP_HOST,
+    hasSMTPUser: !!process.env.SMTP_USER,
+    hasSMTPPassword: !!process.env.SMTP_PASSWORD,
+    smtpPort: process.env.SMTP_PORT,
+    defaultSenderEmail: process.env.DEFAULT_SENDER_EMAIL,
+    defaultSenderName: process.env.DEFAULT_SENDER_NAME,
+    orgSupportEmail: process.env.ORG_SUPPORT_EMAIL,
     allEnvKeys: Object.keys(process.env).filter(k => 
-      k.includes('BREVO') || k.includes('EMAIL')
+      k.includes('SMTP') || k.includes('EMAIL') || k.includes('SENDER')
     ),
   });
 }

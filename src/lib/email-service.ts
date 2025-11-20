@@ -1,18 +1,62 @@
 /**
  * White-labeled Email Service for Organization Scheduling
  * All emails sent with organization branding (logo, name, colors)
- * Uses Brevo (formerly SendinBlue) as email provider
+ * Uses Hostinger SMTP via Nodemailer
  */
 
-import { TransactionalEmailsApi, SendSmtpEmail } from '@getbrevo/brevo'
+import nodemailer from 'nodemailer'
+import type { Transporter } from 'nodemailer'
 import type { OrganizationBranding } from '@/types/firestore'
 
-// Initialize Brevo client
-const brevo = new TransactionalEmailsApi()
-const apiKey = process.env.BREVO_API_KEY
+// SMTP Transport Configuration
+let smtpTransport: Transporter | null = null
 
-if (apiKey) {
-  brevo.setApiKey(0, apiKey) // 0 is the key index for api-key auth
+/**
+ * Create and configure SMTP transport
+ */
+function createSMTPTransport(): Transporter | null {
+  const config = {
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '465'),
+    secure: true, // Use TLS
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASSWORD,
+    },
+  }
+
+  if (!config.host || !config.auth.user || !config.auth.pass) {
+    console.warn('[Email] SMTP credentials not configured')
+    return null
+  }
+
+  try {
+    return nodemailer.createTransport(config)
+  } catch (error) {
+    console.error('[Email] Failed to create SMTP transport:', error)
+    return null
+  }
+}
+
+/**
+ * Get or create SMTP transport (singleton pattern)
+ */
+function getSMTPTransport(): Transporter | null {
+  if (!smtpTransport) {
+    smtpTransport = createSMTPTransport()
+  }
+  return smtpTransport
+}
+
+/**
+ * Resolve sender email from organization branding
+ * Falls back to default if no alias configured
+ */
+function resolveSenderEmail(orgBranding?: OrganizationBranding): string {
+  if (orgBranding?.emailAlias) {
+    return orgBranding.emailAlias
+  }
+  return process.env.DEFAULT_SENDER_EMAIL || 'info@consularly.com'
 }
 
 interface EmailBaseParams {
@@ -224,8 +268,9 @@ function generateEmailTemplate(
  * Send interview confirmation email
  */
 export async function sendInterviewConfirmation(params: InterviewConfirmationParams): Promise<void> {
-  if (!apiKey) {
-    console.warn('[Email] Brevo API key not configured, skipping email')
+  const transport = getSMTPTransport()
+  if (!transport) {
+    console.warn('[Email] SMTP not configured, skipping email')
     return
   }
 
@@ -287,26 +332,29 @@ export async function sendInterviewConfirmation(params: InterviewConfirmationPar
   `
 
   const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+  const senderEmail = resolveSenderEmail(orgBranding)
+  const senderName = orgBranding?.companyName || orgName
 
-  const email = new SendSmtpEmail()
-  email.subject = `Interview Confirmed - ${routeDisplay} on ${interviewDate}`
-  email.htmlContent = htmlContent
-  email.sender = { 
-    name: orgBranding?.companyName || orgName,
-    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
-  }
-  email.to = [{ email: to, name: studentName }]
-  email.replyTo = {
-    email: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.app',
-    name: `${orgName} Support`
+  const mailOptions = {
+    from: `"${senderName}" <${senderEmail}>`,
+    to: `"${studentName}" <${to}>`,
+    subject: `Interview Confirmed - ${routeDisplay} on ${interviewDate}`,
+    html: htmlContent,
+    replyTo: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.com',
   }
 
   try {
-    await brevo.sendTransacEmail(email)
-    console.log(`[Email] Confirmation sent to ${to}`)
-  } catch (error) {
-    console.error('[Email] Failed to send confirmation:', error)
-    throw error
+    await transport.sendMail(mailOptions)
+    console.log(`[Email] Confirmation sent to ${to} via ${senderEmail}`)
+  } catch (error: any) {
+    if (error.code === 'EAUTH') {
+      console.error('[Email] SMTP authentication failed')
+    } else if (error.code === 'ECONNECTION') {
+      console.error('[Email] SMTP connection failed')
+    } else {
+      console.error('[Email] Failed to send confirmation:', error)
+    }
+    // Don't throw - log and continue
   }
 }
 
@@ -314,8 +362,9 @@ export async function sendInterviewConfirmation(params: InterviewConfirmationPar
  * Send 24-hour reminder email
  */
 export async function send24HourReminder(params: ReminderParams): Promise<void> {
-  if (!apiKey) {
-    console.warn('[Email] Brevo API key not configured, skipping email')
+  const transport = getSMTPTransport()
+  if (!transport) {
+    console.warn('[Email] SMTP not configured, skipping email')
     return
   }
 
@@ -373,22 +422,28 @@ export async function send24HourReminder(params: ReminderParams): Promise<void> 
   `
 
   const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+  const senderEmail = resolveSenderEmail(orgBranding)
+  const senderName = orgBranding?.companyName || orgName
 
-  const email = new SendSmtpEmail()
-  email.subject = `Reminder: Interview Tomorrow - ${routeDisplay}`
-  email.htmlContent = htmlContent
-  email.sender = { 
-    name: orgBranding?.companyName || orgName,
-    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
+  const mailOptions = {
+    from: `"${senderName}" <${senderEmail}>`,
+    to: `"${studentName}" <${to}>`,
+    subject: `Reminder: Interview Tomorrow - ${routeDisplay}`,
+    html: htmlContent,
+    replyTo: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.com',
   }
-  email.to = [{ email: to, name: studentName }]
 
   try {
-    await brevo.sendTransacEmail(email)
-    console.log(`[Email] 24h reminder sent to ${to}`)
-  } catch (error) {
-    console.error('[Email] Failed to send 24h reminder:', error)
-    throw error
+    await transport.sendMail(mailOptions)
+    console.log(`[Email] 24h reminder sent to ${to} via ${senderEmail}`)
+  } catch (error: any) {
+    if (error.code === 'EAUTH') {
+      console.error('[Email] SMTP authentication failed')
+    } else if (error.code === 'ECONNECTION') {
+      console.error('[Email] SMTP connection failed')
+    } else {
+      console.error('[Email] Failed to send 24h reminder:', error)
+    }
   }
 }
 
@@ -396,8 +451,9 @@ export async function send24HourReminder(params: ReminderParams): Promise<void> 
  * Send 1-hour reminder email
  */
 export async function send1HourReminder(params: ReminderParams): Promise<void> {
-  if (!apiKey) {
-    console.warn('[Email] Brevo API key not configured, skipping email')
+  const transport = getSMTPTransport()
+  if (!transport) {
+    console.warn('[Email] SMTP not configured, skipping email')
     return
   }
 
@@ -446,22 +502,28 @@ export async function send1HourReminder(params: ReminderParams): Promise<void> {
   `
 
   const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+  const senderEmail = resolveSenderEmail(orgBranding)
+  const senderName = orgBranding?.companyName || orgName
 
-  const email = new SendSmtpEmail()
-  email.subject = `Starting Soon: Interview in 1 Hour - ${routeDisplay}`
-  email.htmlContent = htmlContent
-  email.sender = { 
-    name: orgBranding?.companyName || orgName,
-    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
+  const mailOptions = {
+    from: `"${senderName}" <${senderEmail}>`,
+    to: `"${studentName}" <${to}>`,
+    subject: `Starting Soon: Interview in 1 Hour - ${routeDisplay}`,
+    html: htmlContent,
+    replyTo: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.com',
   }
-  email.to = [{ email: to, name: studentName }]
 
   try {
-    await brevo.sendTransacEmail(email)
-    console.log(`[Email] 1h reminder sent to ${to}`)
-  } catch (error) {
-    console.error('[Email] Failed to send 1h reminder:', error)
-    throw error
+    await transport.sendMail(mailOptions)
+    console.log(`[Email] 1h reminder sent to ${to} via ${senderEmail}`)
+  } catch (error: any) {
+    if (error.code === 'EAUTH') {
+      console.error('[Email] SMTP authentication failed')
+    } else if (error.code === 'ECONNECTION') {
+      console.error('[Email] SMTP connection failed')
+    } else {
+      console.error('[Email] Failed to send 1h reminder:', error)
+    }
   }
 }
 
@@ -469,8 +531,9 @@ export async function send1HourReminder(params: ReminderParams): Promise<void> {
  * Send cancellation email
  */
 export async function sendCancellationEmail(params: CancellationParams): Promise<void> {
-  if (!apiKey) {
-    console.warn('[Email] Brevo API key not configured, skipping email')
+  const transport = getSMTPTransport()
+  if (!transport) {
+    console.warn('[Email] SMTP not configured, skipping email')
     return
   }
 
@@ -520,22 +583,28 @@ export async function sendCancellationEmail(params: CancellationParams): Promise
   `
 
   const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+  const senderEmail = resolveSenderEmail(orgBranding)
+  const senderName = orgBranding?.companyName || orgName
 
-  const email = new SendSmtpEmail()
-  email.subject = `Interview Cancelled - ${interviewDate}`
-  email.htmlContent = htmlContent
-  email.sender = { 
-    name: orgBranding?.companyName || orgName,
-    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
+  const mailOptions = {
+    from: `"${senderName}" <${senderEmail}>`,
+    to: `"${studentName}" <${to}>`,
+    subject: `Interview Cancelled - ${interviewDate}`,
+    html: htmlContent,
+    replyTo: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.com',
   }
-  email.to = [{ email: to, name: studentName }]
 
   try {
-    await brevo.sendTransacEmail(email)
-    console.log(`[Email] Cancellation sent to ${to}`)
-  } catch (error) {
-    console.error('[Email] Failed to send cancellation:', error)
-    throw error
+    await transport.sendMail(mailOptions)
+    console.log(`[Email] Cancellation sent to ${to} via ${senderEmail}`)
+  } catch (error: any) {
+    if (error.code === 'EAUTH') {
+      console.error('[Email] SMTP authentication failed')
+    } else if (error.code === 'ECONNECTION') {
+      console.error('[Email] SMTP connection failed')
+    } else {
+      console.error('[Email] Failed to send cancellation:', error)
+    }
   }
 }
 
@@ -543,8 +612,9 @@ export async function sendCancellationEmail(params: CancellationParams): Promise
  * Send reschedule confirmation email
  */
 export async function sendRescheduleConfirmation(params: RescheduleConfirmationParams): Promise<void> {
-  if (!apiKey) {
-    console.warn('[Email] Brevo API key not configured, skipping email')
+  const transport = getSMTPTransport()
+  if (!transport) {
+    console.warn('[Email] SMTP not configured, skipping email')
     return
   }
 
@@ -592,22 +662,28 @@ export async function sendRescheduleConfirmation(params: RescheduleConfirmationP
   `
 
   const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+  const senderEmail = resolveSenderEmail(orgBranding)
+  const senderName = orgBranding?.companyName || orgName
 
-  const email = new SendSmtpEmail()
-  email.subject = `Interview Rescheduled - New Time: ${newDate}`
-  email.htmlContent = htmlContent
-  email.sender = { 
-    name: orgBranding?.companyName || orgName,
-    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
+  const mailOptions = {
+    from: `"${senderName}" <${senderEmail}>`,
+    to: `"${studentName}" <${to}>`,
+    subject: `Interview Rescheduled - New Time: ${newDate}`,
+    html: htmlContent,
+    replyTo: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.com',
   }
-  email.to = [{ email: to, name: studentName }]
 
   try {
-    await brevo.sendTransacEmail(email)
-    console.log(`[Email] Reschedule confirmation sent to ${to}`)
-  } catch (error) {
-    console.error('[Email] Failed to send reschedule confirmation:', error)
-    throw error
+    await transport.sendMail(mailOptions)
+    console.log(`[Email] Reschedule confirmation sent to ${to} via ${senderEmail}`)
+  } catch (error: any) {
+    if (error.code === 'EAUTH') {
+      console.error('[Email] SMTP authentication failed')
+    } else if (error.code === 'ECONNECTION') {
+      console.error('[Email] SMTP connection failed')
+    } else {
+      console.error('[Email] Failed to send reschedule confirmation:', error)
+    }
   }
 }
 
@@ -615,8 +691,9 @@ export async function sendRescheduleConfirmation(params: RescheduleConfirmationP
  * Send student invitation email for account setup
  */
 export async function sendStudentInvitation(params: StudentInvitationParams): Promise<void> {
-  if (!apiKey) {
-    console.warn('[Email] Brevo API key not configured, skipping email')
+  const transport = getSMTPTransport()
+  if (!transport) {
+    console.warn('[Email] SMTP not configured, skipping email')
     return
   }
 
@@ -712,25 +789,27 @@ export async function sendStudentInvitation(params: StudentInvitationParams): Pr
   `
 
   const htmlContent = generateEmailTemplate(content, orgName, orgBranding)
+  const senderEmail = resolveSenderEmail(orgBranding)
+  const senderName = orgBranding?.companyName || orgName
 
-  const email = new SendSmtpEmail()
-  email.subject = `Welcome to ${orgName} - Set Up Your Interview Practice Account`
-  email.htmlContent = htmlContent
-  email.sender = { 
-    name: orgBranding?.companyName || orgName,
-    email: process.env.BREVO_SENDER_EMAIL || 'noreply@consularly.app'
-  }
-  email.to = [{ email: to, name: studentName }]
-  email.replyTo = {
-    email: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.app',
-    name: `${orgName} Support`
+  const mailOptions = {
+    from: `"${senderName}" <${senderEmail}>`,
+    to: `"${studentName}" <${to}>`,
+    subject: `Welcome to ${orgName} - Set Up Your Interview Practice Account`,
+    html: htmlContent,
+    replyTo: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.com',
   }
 
   try {
-    await brevo.sendTransacEmail(email)
-    console.log(`[Email] Student invitation sent to ${to}`)
-  } catch (error) {
-    console.error('[Email] Failed to send student invitation:', error)
-    throw error
+    await transport.sendMail(mailOptions)
+    console.log(`[Email] Student invitation sent to ${to} via ${senderEmail}`)
+  } catch (error: any) {
+    if (error.code === 'EAUTH') {
+      console.error('[Email] SMTP authentication failed')
+    } else if (error.code === 'ECONNECTION') {
+      console.error('[Email] SMTP connection failed')
+    } else {
+      console.error('[Email] Failed to send student invitation:', error)
+    }
   }
 }

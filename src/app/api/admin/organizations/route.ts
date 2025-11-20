@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin'
 import { sendOrgWelcomeEmail, sendPasswordResetEmail } from '@/lib/email/send-helpers'
+import { generateEmailAlias } from '@/lib/email-alias-generator'
 
 // POST /api/admin/organizations
 // Creates a new organization document in Firestore. Admin-only.
@@ -58,6 +59,16 @@ export async function POST(req: NextRequest) {
     // but we track which orgs they manage via adminUsers array
     const adminUsers = callerRole === 'admin' ? [callerUid] : []
 
+    // Auto-generate email alias for the organization
+    let emailAlias = ''
+    try {
+      emailAlias = generateEmailAlias(name)
+      console.log(`[api/admin/organizations] Generated email alias: ${emailAlias}`)
+    } catch (error: any) {
+      console.warn(`[api/admin/organizations] Failed to generate email alias: ${error.message}`)
+      // Continue without email alias - it can be set manually later
+    }
+
     const organizationDoc: Record<string, any> = {
       name,
       domain: body.domain ? String(body.domain) : '',
@@ -75,6 +86,7 @@ export async function POST(req: NextRequest) {
           logoUrl: body?.settings?.customBranding?.logoUrl || '',
           primaryColor: body?.settings?.customBranding?.primaryColor || '#1d4ed8',
           companyName: body?.settings?.customBranding?.companyName || name,
+          emailAlias: emailAlias || undefined, // Auto-generated email alias
         },
       },
     }
@@ -175,6 +187,7 @@ export async function POST(req: NextRequest) {
       id: ref.id,
       userCreated,
       resetLink: userCreated ? resetLink : undefined,
+      emailAlias: emailAlias || undefined, // Return generated email alias
     }, { status: 201 })
   } catch (e: any) {
     console.error('[api/admin/organizations] POST error', e)

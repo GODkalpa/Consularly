@@ -270,6 +270,10 @@ export interface OrganizationBranding {
     facebook?: string;
   };
   
+  // Email configuration
+  emailAlias?: string;           // Organization-specific email alias
+                                 // Format: org-{slug}@consularly.com
+  
   // Advanced (enterprise)
   customCSS?: string;            // Custom CSS overrides
   whiteLabel?: boolean;          // Hide platform branding
@@ -410,7 +414,7 @@ export interface ReminderLog {
   status: 'sent' | 'failed';
   sentAt: Timestamp;
   error?: string;
-  emailProvider: 'brevo';       // Track which provider was used
+  emailProvider: 'brevo' | 'hostinger-smtp';       // Track which provider was used
 }
 
 // Legacy interfaces for backward compatibility

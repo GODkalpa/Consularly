@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
           type: 'reminder_24h',
           status: 'sent',
           sentAt: Timestamp.now(),
-          emailProvider: 'brevo'
+          emailProvider: 'hostinger-smtp'
         })
 
         sent24h++
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
           status: 'failed',
           sentAt: Timestamp.now(),
           error: error instanceof Error ? error.message : 'Unknown error',
-          emailProvider: 'brevo'
+          emailProvider: 'hostinger-smtp'
         })
       }
     }
@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
           type: 'reminder_1h',
           status: 'sent',
           sentAt: Timestamp.now(),
-          emailProvider: 'brevo'
+          emailProvider: 'hostinger-smtp'
         })
 
         sent1h++
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
           status: 'failed',
           sentAt: Timestamp.now(),
           error: error instanceof Error ? error.message : 'Unknown error',
-          emailProvider: 'brevo'
+          emailProvider: 'hostinger-smtp'
         })
       }
     }
