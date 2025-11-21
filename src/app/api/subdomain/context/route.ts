@@ -1,51 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { OrganizationWithId } from '@/types/firestore';
+import { extractSubdomain } from '@/lib/subdomain-utils';
 
 /**
  * GET /api/subdomain/context
  * 
- * Returns organization context based on subdomain headers set by middleware
+ * Returns organization context based on subdomain
  */
 export async function GET(req: NextRequest) {
   try {
-    // Get organization context from headers (set by middleware)
-    const orgId = req.headers.get('x-org-id');
-    const subdomain = req.headers.get('x-subdomain');
-    const orgName = req.headers.get('x-org-name');
+    // Extract subdomain from hostname
+    const hostname = req.headers.get('host') || '';
+    const subdomain = extractSubdomain(hostname);
 
-    // If no subdomain context, return main portal response
-    if (!orgId || !subdomain) {
+    console.log('[Subdomain Context API] Hostname:', hostname, 'Subdomain:', subdomain);
+
+    // If no subdomain, return main portal response
+    if (!subdomain) {
       return NextResponse.json({
         isMainPortal: true,
         subdomain: null,
-        orgId: null,
-        orgName: null,
-        branding: null,
+        organization: null,
       });
     }
 
-    // Fetch full organization details including branding
-    const orgDoc = await adminDb().collection('organizations').doc(orgId).get();
+    // Query Firestore for organization by subdomain
+    const orgsSnapshot = await adminDb()
+      .collection('organizations')
+      .where('subdomain', '==', subdomain)
+      .where('subdomainEnabled', '==', true)
+      .limit(1)
+      .get();
 
-    if (!orgDoc.exists) {
+    if (orgsSnapshot.empty) {
+      console.log('[Subdomain Context API] No organization found for subdomain:', subdomain);
       return NextResponse.json({
-        isMainPortal: true,
-        subdomain: null,
-        orgId: null,
-        orgName: null,
-        branding: null,
+        isMainPortal: false,
+        subdomain,
+        organization: null,
       });
     }
 
-    const org = { id: orgDoc.id, ...orgDoc.data() } as OrganizationWithId;
+    const orgDoc = orgsSnapshot.docs[0];
+    const orgData = orgDoc.data();
+
+    console.log('[Subdomain Context API] Found organization:', orgData.name);
 
     return NextResponse.json({
       isMainPortal: false,
       subdomain,
-      orgId: org.id,
-      orgName: org.name,
-      branding: org.settings?.customBranding || null,
+      organization: {
+        id: orgDoc.id,
+        name: orgData.name,
+        logo: orgData.logo || null,
+        branding: orgData.settings?.customBranding || null,
+      },
     });
   } catch (error) {
     console.error('[Subdomain Context API] Error:', error);
