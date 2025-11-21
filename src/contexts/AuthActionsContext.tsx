@@ -55,7 +55,11 @@ export function AuthActionsProvider({ children }: { children: React.ReactNode })
           console.error('[AuthActionsContext] Session creation failed:', result)
           
           // Sign out the user since session creation failed
+          console.log('[AuthActionsContext] Signing out user due to session failure')
           await signOut(auth)
+          
+          // Wait a moment to ensure sign-out completes
+          await new Promise(resolve => setTimeout(resolve, 100))
           
           // Throw error with specific message
           if (result.code === 'ORG_ACCESS_DENIED') {

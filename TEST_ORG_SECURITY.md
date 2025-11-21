@@ -12,12 +12,14 @@
 3. Click "Sign In"
 
 **Expected Result:** ❌
-- Login should fail with error message
-- Error: "You do not have access to this organization. Please use the correct subdomain for your organization."
-- User should be automatically signed out
-- No access to dashboard
+- Login should fail with error message displayed on the login page
+- Error: "You do not have access to this organization. Please use your organization's subdomain."
+- User should remain on the login page (no redirect)
+- User should be automatically signed out in the background
+- No access to dashboard at all (not even for 1ms)
+- No flashing or brief dashboard view
 
-**If this fails (user gets access):** The security fix is not working!
+**If this fails (user gets access or sees dashboard briefly):** The security fix is not working!
 
 ---
 

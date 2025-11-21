@@ -43,7 +43,15 @@ See `TEST_ORG_SECURITY.md` for detailed test cases.
 **Quick Test:**
 1. Visit `https://sumedha-education.consularly.com`
 2. Try logging in with Consulary credentials
-3. Should see error and be signed out ✅
+3. Should see error message immediately (no dashboard flash)
+4. User should remain on login page with error displayed ✅
+
+**Expected Behavior:**
+- ❌ No brief dashboard access
+- ❌ No redirect loop
+- ✅ Clear error message on login page
+- ✅ User automatically signed out
+- ✅ Can try again with correct credentials
 
 ## Security Features
 - ✅ Organization validation at login

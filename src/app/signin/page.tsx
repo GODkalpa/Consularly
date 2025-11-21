@@ -17,19 +17,21 @@ export default function SignInPage() {
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [isAuthenticating, setIsAuthenticating] = useState(false)
   
   const { user, profileLoading, signIn: adminSignIn, signInWithGoogle, redirectToDashboard } = useAuth()
   const router = useRouter()
 
   // If already signed in (or becomes signed in), send user to the correct dashboard
+  // BUT only if we're not in the middle of authenticating (to prevent premature redirect)
   useEffect(() => {
-    if (user && !profileLoading && !isLoading) {
+    if (user && !profileLoading && !isLoading && !isAuthenticating) {
       console.log('[SignIn useEffect] User detected, redirecting to dashboard')
       redirectToDashboard().catch(err => {
         console.error('[SignIn] Redirect failed:', err)
       })
     }
-  }, [user, profileLoading, isLoading, redirectToDashboard])
+  }, [user, profileLoading, isLoading, isAuthenticating, redirectToDashboard])
 
   // Check if email belongs to a student
   const checkIfStudent = async (email: string): Promise<boolean> => {
@@ -48,6 +50,7 @@ export default function SignInPage() {
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setIsAuthenticating(true)
     setError('')
 
     try {
@@ -77,9 +80,11 @@ export default function SignInPage() {
           
           // Show specific error message
           if (result.code === 'ORG_ACCESS_DENIED') {
-            throw new Error(result.error || 'You do not have access to this organization.')
+            setError(result.error || 'You do not have access to this organization. Please use your organization\'s subdomain.')
+          } else {
+            setError(result.error || 'Failed to create session')
           }
-          throw new Error(result.error || 'Failed to create session')
+          return
         }
         
         const result = await response.json()
@@ -95,7 +100,8 @@ export default function SignInPage() {
         // Use regular admin/org authentication
         console.log('[SignIn] Using admin/org auth')
         await adminSignIn(email, password)
-        redirectToDashboard()
+        // Don't call redirectToDashboard here - let the useEffect handle it
+        // after isAuthenticating is set to false
       }
     } catch (error: any) {
       console.error('[SignIn] Error:', error)
@@ -110,20 +116,23 @@ export default function SignInPage() {
       }
     } finally {
       setIsLoading(false)
+      setIsAuthenticating(false)
     }
   }
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
+    setIsAuthenticating(true)
     setError('')
 
     try {
       await signInWithGoogle()
-      redirectToDashboard()
+      // Don't call redirectToDashboard here - let the useEffect handle it
     } catch (error: any) {
       setError(error.message || 'Failed to sign in with Google')
     } finally {
       setIsLoading(false)
+      setIsAuthenticating(false)
     }
   }
 
