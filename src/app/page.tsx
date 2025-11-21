@@ -29,29 +29,64 @@ function HomeContent() {
   const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
   const isSubdomain = hostname.split('.').length > 2 && !hostname.startsWith('www.')
 
-  // Redirect authenticated users to their dashboard (unless they explicitly came from a dashboard)
+  // Validate session for subdomain access before redirecting
   useEffect(() => {
-    console.log('[Home useEffect] Checking redirect conditions:', {
-      hasUser: !!user,
-      profileLoading,
-      hasRedirected: hasRedirected.current,
-      fromDashboard: searchParams.get('from') === 'dashboard'
-    })
-
-    // Don't redirect if user came from a dashboard (back button)
-    const fromDashboard = searchParams.get('from') === 'dashboard'
-
-    // Only redirect if we're on the home page and user is authenticated
-    if (user && !profileLoading && !fromDashboard && !hasRedirected.current) {
-      console.log('[Home] ✓ All conditions met, redirecting to dashboard')
-      hasRedirected.current = true
-      redirectToDashboard().catch(err => {
-        console.error('[Home] Redirect failed:', err)
+    const validateAndRedirect = async () => {
+      console.log('[Home useEffect] Checking redirect conditions:', {
+        hasUser: !!user,
+        profileLoading,
+        hasRedirected: hasRedirected.current,
+        fromDashboard: searchParams.get('from') === 'dashboard',
+        isSubdomain
       })
-    } else {
-      console.log('[Home] ✗ Redirect conditions not met')
+
+      // Don't redirect if user came from a dashboard (back button)
+      const fromDashboard = searchParams.get('from') === 'dashboard'
+
+      // Only redirect if we're on the home page and user is authenticated
+      if (user && !profileLoading && !fromDashboard && !hasRedirected.current) {
+        // If on subdomain, validate session first
+        if (isSubdomain) {
+          console.log('[Home] Validating subdomain session before redirect...')
+          try {
+            const idToken = await user.getIdToken()
+            const response = await fetch('/api/auth/session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ idToken })
+            })
+
+            if (!response.ok) {
+              const result = await response.json()
+              console.error('[Home] Session validation failed:', result)
+              
+              // Sign out and redirect to signin
+              const { signOut } = await import('firebase/auth')
+              const { auth } = await import('@/lib/firebase')
+              await signOut(auth)
+              router.push('/signin')
+              return
+            }
+            
+            console.log('[Home] Session validated, proceeding with redirect')
+          } catch (error) {
+            console.error('[Home] Session validation error:', error)
+            return
+          }
+        }
+
+        console.log('[Home] ✓ All conditions met, redirecting to dashboard')
+        hasRedirected.current = true
+        redirectToDashboard().catch(err => {
+          console.error('[Home] Redirect failed:', err)
+        })
+      } else {
+        console.log('[Home] ✗ Redirect conditions not met')
+      }
     }
-  }, [user, profileLoading, redirectToDashboard, searchParams])
+
+    validateAndRedirect()
+  }, [user, profileLoading, redirectToDashboard, searchParams, isSubdomain, router])
 
   // If on subdomain, show custom landing page
   if (isSubdomain) {
