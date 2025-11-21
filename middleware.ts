@@ -84,11 +84,28 @@ export async function middleware(req: NextRequest) {
         console.log(`[Middleware] Access denied for user ${userId} to org ${org.id}`)
         logSubdomainAccess(subdomain, org.id, userId, 'access_denied', req)
         
-        // Clear session cookies to force re-login
-        const response = new NextResponse('Access denied', { status: 403 })
-        response.cookies.delete('s')
-        response.cookies.delete('uid')
-        response.cookies.delete('role')
+        // Redirect to access denied page with cleared cookies
+        const url = req.nextUrl.clone()
+        url.pathname = '/access-denied'
+        url.searchParams.set('reason', 'org_mismatch')
+        url.searchParams.set('subdomain', subdomain)
+        
+        const response = NextResponse.redirect(url)
+        
+        // Clear all session cookies
+        const cookieOptions = {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax' as const,
+          maxAge: 0,
+          path: '/',
+        }
+        
+        response.cookies.set('s', '0', cookieOptions)
+        response.cookies.set('uid', '', cookieOptions)
+        response.cookies.set('role', '', cookieOptions)
+        response.cookies.set('orgId', '', cookieOptions)
+        
         return response
       }
     }

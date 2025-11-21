@@ -44,16 +44,31 @@ export function AuthActionsProvider({ children }: { children: React.ReactNode })
     try {
       if (user) {
         const idToken = await user.getIdToken()
-        await fetch('/api/auth/session', {
+        const response = await fetch('/api/auth/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ idToken })
         })
+        
+        if (!response.ok) {
+          const result = await response.json()
+          console.error('[AuthActionsContext] Session creation failed:', result)
+          
+          // Sign out the user since session creation failed
+          await signOut(auth)
+          
+          // Throw error with specific message
+          if (result.code === 'ORG_ACCESS_DENIED') {
+            throw new Error(result.error || 'You do not have access to this organization.')
+          }
+          throw new Error(result.error || 'Failed to create session')
+        }
       } else {
         await fetch('/api/auth/session', { method: 'DELETE' })
       }
     } catch (error) {
-      console.warn('[AuthActionsContext] Failed to sync session cookie:', error)
+      console.error('[AuthActionsContext] Failed to sync session cookie:', error)
+      throw error
     }
   }, [])
 

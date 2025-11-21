@@ -67,6 +67,21 @@ export default function SignInPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ idToken })
         })
+        
+        if (!response.ok) {
+          const result = await response.json()
+          console.error('[SignIn] Session creation failed:', result)
+          
+          // Sign out the user since session creation failed
+          await auth.signOut()
+          
+          // Show specific error message
+          if (result.code === 'ORG_ACCESS_DENIED') {
+            throw new Error(result.error || 'You do not have access to this organization.')
+          }
+          throw new Error(result.error || 'Failed to create session')
+        }
+        
         const result = await response.json()
         console.log('[SignIn] Session cookie response:', result)
         
