@@ -1,12 +1,8 @@
 import { headers } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { extractSubdomain, isMainPortal } from '@/lib/subdomain-utils'
 import SubdomainLandingPage from '@/components/subdomain/SubdomainLandingPage'
-import dynamic from 'next/dynamic'
-
-// Dynamically import the main homepage to avoid loading it on subdomains
-const MainHomePage = dynamic(() => import('@/components/home/MainHomePage'), {
-  ssr: true
-})
+import MainHomePage from '@/components/home/MainHomePage'
 
 export default async function HomePage() {
   // Check if we're on a subdomain
