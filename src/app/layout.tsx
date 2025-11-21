@@ -47,13 +47,13 @@ export default async function RootLayout({
   // Server-side subdomain validation
   const headersList = await headers()
   const hostname = headersList.get('host') || ''
-  
+
   // Check if subdomain routing is enabled
   const subdomainRoutingEnabled = process.env.NEXT_PUBLIC_ENABLE_SUBDOMAIN_ROUTING === 'true'
-  
+
   if (subdomainRoutingEnabled) {
     const subdomain = extractSubdomain(hostname)
-    
+
     // If there's a subdomain and it's not the main portal
     if (subdomain && !isMainPortal(hostname)) {
       try {
@@ -64,17 +64,17 @@ export default async function RootLayout({
           .where('subdomainEnabled', '==', true)
           .limit(1)
           .get()
-        
+
         // If organization doesn't exist, show error
         if (orgsSnapshot.empty) {
           return (
             <html lang="en">
               <body className={inter.className}>
-                <div style={{ 
-                  display: 'flex', 
+                <div style={{
+                  display: 'flex',
                   flexDirection: 'column',
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   minHeight: '100vh',
                   padding: '20px',
                   textAlign: 'center'
@@ -84,9 +84,9 @@ export default async function RootLayout({
                   <p style={{ color: '#666', marginBottom: '24px' }}>
                     The subdomain &quot;{subdomain}&quot; is not registered.
                   </p>
-                  <a href="https://consularly.com" style={{ 
-                    color: '#4840A3', 
-                    textDecoration: 'underline' 
+                  <a href="https://consularly.com" style={{
+                    color: '#4840A3',
+                    textDecoration: 'underline'
                   }}>
                     Go to main site
                   </a>
@@ -100,15 +100,18 @@ export default async function RootLayout({
       }
     }
   }
-  
+
+  const subdomain = extractSubdomain(hostname)
+  const isSubdomainPage = subdomainRoutingEnabled && !!subdomain && !isMainPortal(hostname)
+
   return (
     <html lang="en">
       <body className={inter.className}>
         <ClientAuthProvider>
-          <ChromeSwitcher position="header" />
+          {!isSubdomainPage && <ChromeSwitcher position="header" />}
           {children}
         </ClientAuthProvider>
-        <ChromeSwitcher position="footer" />
+        {!isSubdomainPage && <ChromeSwitcher position="footer" />}
         <Toaster richColors />
         {/* Client-side animation orchestrator for data-animate elements */}
         <RevealOnScroll />
