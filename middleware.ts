@@ -49,8 +49,11 @@ export async function middleware(req: NextRequest) {
       console.log(`[Middleware] Organization not found for subdomain: ${subdomain}`)
       logSubdomainAccess(subdomain, null, null, 'not_found', req)
       
-      // Return 404 for non-existent subdomains
-      return new NextResponse('Organization not found', { status: 404 })
+      // Rewrite to a 404 page instead of returning response directly
+      const url = req.nextUrl.clone()
+      url.pathname = '/org-not-found'
+      url.searchParams.set('subdomain', subdomain)
+      return NextResponse.rewrite(url)
     }
 
     // Check if subdomain is enabled
