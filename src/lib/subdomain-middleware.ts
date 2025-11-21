@@ -29,27 +29,30 @@ export async function getOrganizationBySubdomain(
   }
 
   try {
-    // Fetch from API (server-side)
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const response = await fetch(`${baseUrl}/api/subdomain/lookup?subdomain=${subdomain}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
+    // Query Firestore directly (more reliable than HTTP call in middleware)
+    const { adminDb } = await import('@/lib/firebase-admin');
     
-    if (!data.organization) {
+    const orgsSnapshot = await adminDb()
+      .collection('organizations')
+      .where('subdomain', '==', subdomain)
+      .where('subdomainEnabled', '==', true)
+      .limit(1)
+      .get();
+
+    if (orgsSnapshot.empty) {
+      console.log(`[Subdomain Middleware] No organization found for subdomain: ${subdomain}`);
       return null;
     }
 
-    const org = data.organization as OrganizationWithId;
+    const orgDoc = orgsSnapshot.docs[0];
+    const orgData = orgDoc.data();
+    
+    const org: OrganizationWithId = {
+      id: orgDoc.id,
+      name: orgData.name,
+      subdomain: orgData.subdomain,
+      subdomainEnabled: orgData.subdomainEnabled,
+    } as OrganizationWithId;
 
     // Cache the result
     subdomainCache.set(subdomain, {
@@ -59,6 +62,7 @@ export async function getOrganizationBySubdomain(
       subdomainEnabled: org.subdomainEnabled || false,
     });
 
+    console.log(`[Subdomain Middleware] Found organization: ${org.name} (${org.id})`);
     return org;
   } catch (error) {
     console.error('[Subdomain Middleware] Error fetching organization:', error);
