@@ -30,6 +30,12 @@ export default function SubdomainManager({
     error?: string | null;
   } | null>(null);
 
+  // Sync local state with props when they change (e.g., from real-time updates)
+  useEffect(() => {
+    setSubdomain(currentSubdomain || '');
+    setEnabled(currentEnabled ?? false);
+  }, [currentSubdomain, currentEnabled]);
+
   // Auto-generate subdomain suggestion
   const handleGenerateSuggestion = () => {
     const suggested = generateSubdomainFromName(orgName);
