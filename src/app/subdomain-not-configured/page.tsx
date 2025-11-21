@@ -32,7 +32,7 @@ export default function SubdomainNotConfiguredPage() {
             Subdomain Not Configured
           </h1>
           <p className="text-gray-600 mb-4">
-            This organization's subdomain access is currently disabled.
+            This organization&apos;s subdomain access is currently disabled.
           </p>
         </div>
 

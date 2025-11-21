@@ -2,8 +2,9 @@
 
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { Suspense } from 'react';
 
-export default function OrgNotFoundPage() {
+function OrgNotFoundContent() {
   const searchParams = useSearchParams();
   const subdomain = searchParams.get('subdomain');
 
@@ -68,5 +69,17 @@ export default function OrgNotFoundPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function OrgNotFoundPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    }>
+      <OrgNotFoundContent />
+    </Suspense>
   );
 }

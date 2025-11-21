@@ -2,8 +2,9 @@
 
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { Suspense } from 'react';
 
-export default function AccessDeniedPage() {
+function AccessDeniedContent() {
   const searchParams = useSearchParams();
   const subdomain = searchParams.get('subdomain');
   const orgName = searchParams.get('orgName');
@@ -31,7 +32,7 @@ export default function AccessDeniedPage() {
             Access Denied
           </h1>
           <p className="text-gray-600 mb-4">
-            You don't have permission to access {orgName ? `${orgName}'s` : 'this'} portal.
+            You don&apos;t have permission to access {orgName ? `${orgName}'s` : 'this'} portal.
           </p>
         </div>
 
@@ -75,5 +76,17 @@ export default function AccessDeniedPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function AccessDeniedPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    }>
+      <AccessDeniedContent />
+    </Suspense>
   );
 }
