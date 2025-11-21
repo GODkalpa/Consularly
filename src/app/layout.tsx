@@ -82,7 +82,7 @@ export default async function RootLayout({
                   <h1 style={{ fontSize: '48px', marginBottom: '16px' }}>404</h1>
                   <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Organization Not Found</h2>
                   <p style={{ color: '#666', marginBottom: '24px' }}>
-                    The subdomain "{subdomain}" is not registered.
+                    The subdomain &quot;{subdomain}&quot; is not registered.
                   </p>
                   <a href="https://consularly.com" style={{ 
                     color: '#4840A3', 
