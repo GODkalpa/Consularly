@@ -5,7 +5,7 @@ import { validateSubdomainFormat } from '@/lib/subdomain-utils';
 /**
  * POST /api/admin/subdomain/validate
  * 
- * Validate subdomain availability and format
+ * Validate subdomain format and check availability
  */
 export async function POST(req: NextRequest) {
   try {
@@ -14,36 +14,33 @@ export async function POST(req: NextRequest) {
 
     if (!subdomain) {
       return NextResponse.json(
-        { error: 'Subdomain is required' },
+        { valid: false, available: false, error: 'Subdomain is required' },
         { status: 400 }
       );
     }
 
     // Validate format
-    const formatValidation = validateSubdomainFormat(subdomain);
-    if (!formatValidation.valid) {
+    const validation = validateSubdomainFormat(subdomain);
+    if (!validation.valid) {
       return NextResponse.json({
         valid: false,
         available: false,
-        error: formatValidation.error,
+        error: validation.error,
       });
     }
 
-    // Check availability (uniqueness)
+    // Check availability
     const existingOrg = await adminDb()
       .collection('organizations')
       .where('subdomain', '==', subdomain)
       .limit(1)
       .get();
 
-    let available = existingOrg.empty;
+    // If found, check if it's the excluded org (for updates)
+    const isAvailable = existingOrg.empty || 
+      (excludeOrgId && existingOrg.docs[0].id === excludeOrgId);
 
-    // If excludeOrgId is provided, allow the subdomain if it belongs to that org
-    if (!available && excludeOrgId && !existingOrg.empty) {
-      available = existingOrg.docs[0].id === excludeOrgId;
-    }
-
-    if (!available) {
+    if (!isAvailable) {
       return NextResponse.json({
         valid: true,
         available: false,
@@ -54,12 +51,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       valid: true,
       available: true,
-      error: null,
     });
   } catch (error) {
     console.error('[Subdomain Validation API] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to validate subdomain' },
+      { valid: false, available: false, error: 'Failed to validate subdomain' },
       { status: 500 }
     );
   }

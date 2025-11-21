@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Search, 
   Plus, 
@@ -19,13 +20,15 @@ import {
   TestTube,
   AlertTriangle,
   CheckCircle,
-  Pause
+  Pause,
+  Globe
 } from "lucide-react"
 import { collection, onSnapshot, orderBy, query, where, getCountFromServer, documentId, getDocs } from "firebase/firestore"
 import type { QuerySnapshot, DocumentData, QueryDocumentSnapshot } from "firebase/firestore"
 import { auth, db, firebaseEnabled } from "@/lib/firebase"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/AuthContext"
+import SubdomainManager from "./SubdomainManager"
 
 type OrgRow = {
   id: string
@@ -40,6 +43,8 @@ type OrgRow = {
   usedQuota: number
   joinDate?: string
   nextBilling?: string
+  subdomain?: string
+  subdomainEnabled?: boolean
 }
 
 export function OrganizationManagement() {
@@ -121,6 +126,8 @@ export function OrganizationManagement() {
           usedQuota: Number(data?.quotaUsed || 0),
           joinDate: createdAt ? createdAt.toISOString() : undefined,
           nextBilling: data?.nextBilling || undefined,
+          subdomain: data?.subdomain || undefined,
+          subdomainEnabled: data?.subdomainEnabled || false,
         }
       })
       setOrganizations(orgs)
@@ -282,6 +289,14 @@ export function OrganizationManagement() {
         }
       } else if (newEmail) {
         description = `✅ Existing user ${newEmail} assigned to organization`
+      }
+      
+      // Add subdomain info
+      if (data.subdomain) {
+        description += description ? `\n🌐 Subdomain: ${data.subdomain}.consularly.com` : `🌐 Subdomain: ${data.subdomain}.consularly.com`
+        if (data.subdomainEnabled) {
+          description += ' (Active)'
+        }
       }
       
       // Add email status
@@ -555,9 +570,9 @@ export function OrganizationManagement() {
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Plan</TableHead>
+                  <TableHead>Subdomain</TableHead>
                   <TableHead>Quota Usage</TableHead>
                   <TableHead>Users</TableHead>
-                  <TableHead>Next Billing</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -588,6 +603,23 @@ export function OrganizationManagement() {
                         {getSubscriptionBadge(org.subscriptionPlan)}
                       </TableCell>
                       <TableCell>
+                        {org.subdomain ? (
+                          <div className="flex items-center gap-2">
+                            <Globe className="h-4 w-4 text-muted-foreground" />
+                            <div className="flex flex-col">
+                              <span className="text-sm font-mono">{org.subdomain}</span>
+                              {org.subdomainEnabled ? (
+                                <Badge variant="default" className="w-fit text-xs">Active</Badge>
+                              ) : (
+                                <Badge variant="secondary" className="w-fit text-xs">Disabled</Badge>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Not set</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
                             <span className={getQuotaUsageColor(quotaPercentage)}>
@@ -605,9 +637,6 @@ export function OrganizationManagement() {
                           <Users className="h-4 w-4 text-muted-foreground" />
                           {userCounts[org.id] ?? 0}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {org.nextBilling ? new Date(org.nextBilling).toLocaleDateString() : "-"}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -645,11 +674,22 @@ export function OrganizationManagement() {
 
       {/* Edit Organization Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Organization</DialogTitle>
-            <DialogDescription>Update organization information and quota</DialogDescription>
+            <DialogDescription>Update organization information, quota, and subdomain</DialogDescription>
           </DialogHeader>
+          
+          <Tabs defaultValue="general" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="general">General Settings</TabsTrigger>
+              <TabsTrigger value="subdomain">
+                <Globe className="h-4 w-4 mr-2" />
+                Subdomain
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="general" className="space-y-4">
           <div className="grid grid-cols-2 gap-4 py-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Organization Name</label>
@@ -715,14 +755,31 @@ export function OrganizationManagement() {
               <Input type="number" placeholder="Enter monthly quota" value={editQuota} onChange={(e) => setEditQuota(e.target.value)} />
             </div>
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={editing}>
-              Cancel
-            </Button>
-            <Button onClick={handleEditOrganization} disabled={editing}>
-              {editing ? 'Updating…' : 'Update Organization'}
-            </Button>
-          </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={editing}>
+                  Cancel
+                </Button>
+                <Button onClick={handleEditOrganization} disabled={editing}>
+                  {editing ? 'Updating…' : 'Update Organization'}
+                </Button>
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="subdomain" className="space-y-4">
+              {editingOrg && (
+                <SubdomainManager
+                  orgId={editingOrg.id}
+                  orgName={editingOrg.name}
+                  currentSubdomain={editingOrg.subdomain}
+                  currentEnabled={editingOrg.subdomainEnabled}
+                  onUpdate={() => {
+                    // Refresh will happen automatically via real-time listener
+                    toast.success('Subdomain updated successfully')
+                  }}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 

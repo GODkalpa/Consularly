@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin'
 import { sendOrgWelcomeEmail, sendPasswordResetEmail } from '@/lib/email/send-helpers'
 import { generateEmailAlias } from '@/lib/email-alias-generator'
+import { generateSubdomainFromName, validateSubdomainFormat } from '@/lib/subdomain-utils'
 
 // POST /api/admin/organizations
 // Creates a new organization document in Firestore. Admin-only.
@@ -69,6 +70,57 @@ export async function POST(req: NextRequest) {
       // Continue without email alias - it can be set manually later
     }
 
+    // Auto-generate subdomain for the organization
+    let subdomain = ''
+    let subdomainEnabled = false
+    try {
+      const generatedSubdomain = generateSubdomainFromName(name)
+      const validation = validateSubdomainFormat(generatedSubdomain)
+      
+      if (validation.valid) {
+        // Check if subdomain is already taken
+        const existingOrg = await adminDb()
+          .collection('organizations')
+          .where('subdomain', '==', generatedSubdomain)
+          .limit(1)
+          .get()
+        
+        if (existingOrg.empty) {
+          subdomain = generatedSubdomain
+          subdomainEnabled = true
+          console.log(`[api/admin/organizations] Generated subdomain: ${subdomain}`)
+        } else {
+          // Try with a number suffix
+          for (let i = 2; i <= 10; i++) {
+            const altSubdomain = `${generatedSubdomain}${i}`
+            const altValidation = validateSubdomainFormat(altSubdomain)
+            
+            if (altValidation.valid) {
+              const altExisting = await adminDb()
+                .collection('organizations')
+                .where('subdomain', '==', altSubdomain)
+                .limit(1)
+                .get()
+              
+              if (altExisting.empty) {
+                subdomain = altSubdomain
+                subdomainEnabled = true
+                console.log(`[api/admin/organizations] Generated subdomain with suffix: ${subdomain}`)
+                break
+              }
+            }
+          }
+        }
+      }
+      
+      if (!subdomain) {
+        console.warn(`[api/admin/organizations] Could not generate unique subdomain for: ${name}`)
+      }
+    } catch (error: any) {
+      console.warn(`[api/admin/organizations] Failed to generate subdomain: ${error.message}`)
+      // Continue without subdomain - it can be set manually later
+    }
+
     const organizationDoc: Record<string, any> = {
       name,
       domain: body.domain ? String(body.domain) : '',
@@ -89,6 +141,14 @@ export async function POST(req: NextRequest) {
           emailAlias: emailAlias || undefined, // Auto-generated email alias
         },
       },
+    }
+
+    // Add subdomain fields if generated
+    if (subdomain) {
+      organizationDoc.subdomain = subdomain
+      organizationDoc.subdomainEnabled = subdomainEnabled
+      organizationDoc.subdomainCreatedAt = FieldValue.serverTimestamp()
+      organizationDoc.subdomainUpdatedAt = FieldValue.serverTimestamp()
     }
 
     // Optional UI-specific fields (not strictly in typed Organization interface)
@@ -188,6 +248,8 @@ export async function POST(req: NextRequest) {
       userCreated,
       resetLink: userCreated ? resetLink : undefined,
       emailAlias: emailAlias || undefined, // Return generated email alias
+      subdomain: subdomain || undefined, // Return generated subdomain
+      subdomainEnabled: subdomainEnabled,
     }, { status: 201 })
   } catch (e: any) {
     console.error('[api/admin/organizations] POST error', e)
