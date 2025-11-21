@@ -1,55 +1,46 @@
-'use client';
+"use client"
 
-/**
- * Dynamic Favicon Component
- * 
- * Injects organization favicon into page metadata.
- * Falls back to default favicon if not provided.
- */
-
-import { useEffect } from 'react';
+import { useEffect } from 'react'
 
 interface DynamicFaviconProps {
-  faviconUrl?: string;
+  faviconUrl?: string
 }
 
+/**
+ * Client component that dynamically updates the favicon
+ * based on organization branding
+ */
 export function DynamicFavicon({ faviconUrl }: DynamicFaviconProps) {
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return;
-    }
+    if (!faviconUrl) return
 
-    const favicon = faviconUrl || '/favicon.ico';
+    // Find existing favicon links
+    const existingLinks = document.querySelectorAll('link[rel*="icon"]')
+    
+    // Remove existing favicon links
+    existingLinks.forEach(link => link.remove())
 
-    // Update or create favicon link
-    let faviconLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    // Create new favicon link
+    const link = document.createElement('link')
+    link.rel = 'icon'
+    link.type = 'image/x-icon'
+    link.href = faviconUrl
     
-    if (!faviconLink) {
-      faviconLink = document.createElement('link');
-      faviconLink.rel = 'icon';
-      document.head.appendChild(faviconLink);
-    }
-    
-    faviconLink.href = favicon;
+    // Append to head
+    document.head.appendChild(link)
 
-    // Update or create apple-touch-icon
-    let appleTouchIcon = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
-    
-    if (!appleTouchIcon) {
-      appleTouchIcon = document.createElement('link');
-      appleTouchIcon.rel = 'apple-touch-icon';
-      document.head.appendChild(appleTouchIcon);
-    }
-    
-    appleTouchIcon.href = favicon;
+    // Also create apple-touch-icon for better mobile support
+    const appleLink = document.createElement('link')
+    appleLink.rel = 'apple-touch-icon'
+    appleLink.href = faviconUrl
+    document.head.appendChild(appleLink)
 
     // Cleanup function
     return () => {
-      // Don't remove the links on unmount, just leave them
-      // This prevents flickering when navigating between pages
-    };
-  }, [faviconUrl]);
+      link.remove()
+      appleLink.remove()
+    }
+  }, [faviconUrl])
 
-  // This component doesn't render anything
-  return null;
+  return null
 }

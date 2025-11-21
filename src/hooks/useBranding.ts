@@ -12,6 +12,34 @@ import { OrganizationBranding } from '@/types/firestore';
 import { brandingCache } from '@/lib/branding/branding-cache';
 import { loadFont, getFontFamilyCSS } from '@/lib/branding/font-loader';
 
+/**
+ * Updates the page favicon dynamically
+ */
+function updateFavicon(faviconUrl: string) {
+  if (typeof window === 'undefined') return;
+  
+  // Find existing favicon links
+  const existingLinks = document.querySelectorAll('link[rel*="icon"]');
+  
+  // Remove existing favicon links
+  existingLinks.forEach(link => link.remove());
+
+  // Create new favicon link
+  const link = document.createElement('link');
+  link.rel = 'icon';
+  link.type = 'image/x-icon';
+  link.href = faviconUrl;
+  
+  // Append to head
+  document.head.appendChild(link);
+
+  // Also create apple-touch-icon for better mobile support
+  const appleLink = document.createElement('link');
+  appleLink.rel = 'apple-touch-icon';
+  appleLink.href = faviconUrl;
+  document.head.appendChild(appleLink);
+}
+
 export interface BrandingHookResult {
   branding: OrganizationBranding | null;
   loading: boolean;
@@ -81,6 +109,11 @@ export function useBranding(orgId?: string): BrandingHookResult {
           loadFont(cached.fontFamily);
         }
         
+        // Update favicon if specified
+        if (cached.favicon) {
+          updateFavicon(cached.favicon);
+        }
+        
         return;
       }
 
@@ -102,6 +135,11 @@ export function useBranding(orgId?: string): BrandingHookResult {
       // Load font if specified
       if (fetchedBranding.fontFamily) {
         loadFont(fetchedBranding.fontFamily);
+      }
+      
+      // Update favicon if specified
+      if (fetchedBranding.favicon) {
+        updateFavicon(fetchedBranding.favicon);
       }
     } catch (err) {
       console.error('Failed to load branding:', err);

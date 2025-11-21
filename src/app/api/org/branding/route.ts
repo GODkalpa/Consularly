@@ -95,41 +95,59 @@ export async function PATCH(req: NextRequest) {
 /**
  * GET /api/org/branding
  * Retrieves organization branding settings
+ * Supports both authenticated requests and orgId query parameter
  */
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
     await ensureFirebaseAdmin();
     
-    // Verify token
-    const decodedToken = await adminAuth().verifyIdToken(token);
-    const uid = decodedToken.uid;
+    // Check if orgId is provided as query parameter (for public access)
+    const { searchParams } = new URL(req.url);
+    const queryOrgId = searchParams.get('orgId');
+    
+    let orgId: string;
+    
+    if (queryOrgId) {
+      // Public access via orgId parameter
+      orgId = queryOrgId;
+    } else {
+      // Authenticated access
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
 
-    // Get user profile
-    const userDoc = await adminDb().collection('users').doc(uid).get();
-    const userData = userDoc.data();
+      const token = authHeader.substring(7);
+      
+      // Verify token
+      const decodedToken = await adminAuth().verifyIdToken(token);
+      const uid = decodedToken.uid;
 
-    if (!userData) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
+      // Get user profile
+      const userDoc = await adminDb().collection('users').doc(uid).get();
+      const userData = userDoc.data();
 
-    const orgId = userData.orgId;
-    if (!orgId) {
-      return NextResponse.json(
-        { error: 'User not associated with an organization' },
-        { status: 403 }
-      );
+      if (!userData) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+
+      orgId = userData.orgId;
+      if (!orgId) {
+        return NextResponse.json(
+          { error: 'User not associated with an organization' },
+          { status: 403 }
+        );
+      }
     }
 
     // Get organization branding
     const orgDoc = await adminDb().collection('organizations').doc(orgId).get();
+    
+    if (!orgDoc.exists) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
+    }
+    
     const orgData = orgDoc.data();
-
     const branding: OrganizationBranding = orgData?.settings?.customBranding || {};
 
     return NextResponse.json({

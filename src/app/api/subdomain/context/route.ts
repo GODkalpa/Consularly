@@ -47,14 +47,19 @@ export async function GET(req: NextRequest) {
 
     console.log('[Subdomain Context API] Found organization:', orgData.name);
 
+    // Extract branding information
+    const branding = orgData.settings?.customBranding || {};
+    const logo = branding.logoUrl || branding.logoLight || null;
+    const companyName = branding.companyName || orgData.name;
+
     return NextResponse.json({
       isMainPortal: false,
       subdomain,
       organization: {
         id: orgDoc.id,
-        name: orgData.name,
-        logo: orgData.logo || null,
-        branding: orgData.settings?.customBranding || null,
+        name: companyName,
+        logo: logo,
+        branding: branding,
       },
     });
   } catch (error) {

@@ -15,6 +15,36 @@ import { auth } from "@/lib/firebase"
 import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary"
 import { toast } from "sonner"
 import type { OrganizationBranding } from "@/types/firestore"
+import { brandingCache } from "@/lib/branding/branding-cache"
+import { useOrgContext } from "@/hooks/useOrgContext"
+
+/**
+ * Updates the page favicon dynamically
+ */
+function updateFavicon(faviconUrl: string) {
+  if (typeof window === 'undefined') return;
+  
+  // Find existing favicon links
+  const existingLinks = document.querySelectorAll('link[rel*="icon"]');
+  
+  // Remove existing favicon links
+  existingLinks.forEach(link => link.remove());
+
+  // Create new favicon link
+  const link = document.createElement('link');
+  link.rel = 'icon';
+  link.type = 'image/x-icon';
+  link.href = faviconUrl;
+  
+  // Append to head
+  document.head.appendChild(link);
+
+  // Also create apple-touch-icon for better mobile support
+  const appleLink = document.createElement('link');
+  appleLink.rel = 'apple-touch-icon';
+  appleLink.href = faviconUrl;
+  document.head.appendChild(appleLink);
+}
 
 interface OrgBrandingSettingsProps {
   organizationPlan?: 'basic' | 'premium' | 'enterprise';
@@ -22,6 +52,7 @@ interface OrgBrandingSettingsProps {
 }
 
 export function OrgBrandingSettings({ organizationPlan = 'basic', initialBranding }: OrgBrandingSettingsProps) {
+  const { context } = useOrgContext()
   const [branding, setBranding] = useState<OrganizationBranding>(initialBranding || {})
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState<string | null>(null)
@@ -34,6 +65,10 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
   useEffect(() => {
     if (initialBranding) {
       setBranding(initialBranding)
+      // Apply favicon if present
+      if (initialBranding.favicon) {
+        updateFavicon(initialBranding.favicon)
+      }
     }
   }, [initialBranding])
 
@@ -112,8 +147,25 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
         throw new Error(error?.error || 'Failed to save branding')
       }
 
+      await response.json()
+      
+      // Invalidate branding cache to force refresh
+      if (context?.orgId) {
+        brandingCache.invalidate(context.orgId)
+      }
+      
       toast.success('Branding settings saved successfully')
       setHasChanges(false)
+      
+      // Update favicon immediately if changed
+      if (branding.favicon) {
+        updateFavicon(branding.favicon)
+      }
+      
+      // Trigger a custom event to notify other components about branding update
+      window.dispatchEvent(new CustomEvent('brandingUpdated', { 
+        detail: { branding } 
+      }))
     } catch (error: any) {
       toast.error('Failed to save branding', { description: error.message })
     } finally {

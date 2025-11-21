@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { auth } from '@/lib/firebase'
 import { signInWithEmailAndPassword } from 'firebase/auth'
+import { DynamicFavicon } from '@/components/branding/DynamicFavicon'
 
 interface SubdomainLandingPageProps {
   subdomain: string
@@ -149,7 +150,11 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
   const primaryColor = org.branding?.primaryColor || '#4840A3'
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#f8fafc] p-4 sm:p-8 font-sans">
+    <>
+      {/* Dynamic Favicon */}
+      <DynamicFavicon faviconUrl={org.branding?.favicon} />
+      
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#f8fafc] p-4 sm:p-8 font-sans">
       <div className="w-full max-w-[1200px] h-[800px] max-h-[90vh] bg-white rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row">
 
         {/* Left Side - Branding */}
@@ -310,5 +315,6 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
         </div>
       </div>
     </div>
+    </>
   )
 }
