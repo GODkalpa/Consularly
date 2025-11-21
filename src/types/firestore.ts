@@ -324,6 +324,12 @@ export interface Organization {
   studentCreditsAllocated: number;   // Total credits allocated to students
   studentCreditsUsed: number;        // Credits actually used by students
   
+  // Subdomain white-labeling
+  subdomain?: string;                // Unique subdomain identifier (e.g., "acmecorp")
+  subdomainEnabled?: boolean;        // Feature flag to enable/disable subdomain access
+  subdomainCreatedAt?: Timestamp;    // When subdomain was first assigned
+  subdomainUpdatedAt?: Timestamp;    // When subdomain was last updated
+  
   // Timestamps
   createdAt: Timestamp;
   updatedAt: Timestamp;

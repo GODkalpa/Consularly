@@ -32,14 +32,35 @@ const DEFAULT_BRANDING: OrganizationBranding = {
 
 /**
  * Hook to fetch and manage organization branding
+ * Auto-detects organization from subdomain if orgId not provided
  */
 export function useBranding(orgId?: string): BrandingHookResult {
   const [branding, setBranding] = useState<OrganizationBranding | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [detectedOrgId, setDetectedOrgId] = useState<string | undefined>(orgId);
+
+  // Auto-detect orgId from subdomain context if not provided
+  useEffect(() => {
+    if (!orgId) {
+      // Fetch subdomain context to get orgId
+      fetch('/api/subdomain/context')
+        .then(res => res.json())
+        .then(data => {
+          if (data.orgId) {
+            setDetectedOrgId(data.orgId);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to detect orgId from subdomain:', err);
+        });
+    } else {
+      setDetectedOrgId(orgId);
+    }
+  }, [orgId]);
 
   const fetchBranding = useCallback(async () => {
-    if (!orgId) {
+    if (!detectedOrgId) {
       setBranding(DEFAULT_BRANDING);
       setLoading(false);
       return;
@@ -50,7 +71,7 @@ export function useBranding(orgId?: string): BrandingHookResult {
       setError(null);
 
       // Try cache first
-      const cached = brandingCache.get(orgId);
+      const cached = brandingCache.get(detectedOrgId);
       if (cached) {
         setBranding(cached);
         setLoading(false);
@@ -64,7 +85,7 @@ export function useBranding(orgId?: string): BrandingHookResult {
       }
 
       // Fetch from API
-      const response = await fetch(`/api/org/branding?orgId=${orgId}`);
+      const response = await fetch(`/api/org/branding?orgId=${detectedOrgId}`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch branding: ${response.statusText}`);
@@ -74,7 +95,7 @@ export function useBranding(orgId?: string): BrandingHookResult {
       const fetchedBranding = data.branding || DEFAULT_BRANDING;
 
       // Cache the result
-      brandingCache.set(orgId, fetchedBranding);
+      brandingCache.set(detectedOrgId, fetchedBranding);
       
       setBranding(fetchedBranding);
       
@@ -92,14 +113,14 @@ export function useBranding(orgId?: string): BrandingHookResult {
     } finally {
       setLoading(false);
     }
-  }, [orgId]);
+  }, [detectedOrgId]);
 
   const refresh = useCallback(async () => {
-    if (orgId) {
-      brandingCache.invalidate(orgId);
+    if (detectedOrgId) {
+      brandingCache.invalidate(detectedOrgId);
     }
     await fetchBranding();
-  }, [orgId, fetchBranding]);
+  }, [detectedOrgId, fetchBranding]);
 
   const applyBranding = useCallback((element: HTMLElement) => {
     if (!branding) return;
