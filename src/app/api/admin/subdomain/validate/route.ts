@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { validateSubdomainFormat } from '@/lib/subdomain-utils';
 
 /**
@@ -9,6 +9,28 @@ import { validateSubdomainFormat } from '@/lib/subdomain-utils';
  */
 export async function POST(req: NextRequest) {
   try {
+    // Verify authentication (optional for validation, but recommended)
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      try {
+        const decodedToken = await adminAuth().verifyIdToken(token);
+        const userDoc = await adminDb().collection('users').doc(decodedToken.uid).get();
+        if (!userDoc.exists || userDoc.data()?.role !== 'admin') {
+          return NextResponse.json(
+            { valid: false, available: false, error: 'Admin access required' },
+            { status: 403 }
+          );
+        }
+      } catch (authError) {
+        console.error('[Subdomain Validation API] Auth error:', authError);
+        return NextResponse.json(
+          { valid: false, available: false, error: 'Invalid authentication' },
+          { status: 401 }
+        );
+      }
+    }
+
     const body = await req.json();
     const { subdomain, excludeOrgId } = body;
 

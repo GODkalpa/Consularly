@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { validateSubdomainFormat, isReservedSubdomain } from '@/lib/subdomain-utils';
 import { subdomainCache } from '@/lib/subdomain-cache';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -14,8 +14,42 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    // Verify authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.error('[Subdomain API] Missing or invalid Authorization header');
+      return NextResponse.json(
+        { error: 'Unauthorized - Missing token' },
+        { status: 401 }
+      );
+    }
+
+    const token = authHeader.substring(7);
+    let decodedToken;
+    try {
+      decodedToken = await adminAuth().verifyIdToken(token);
+    } catch (authError) {
+      console.error('[Subdomain API] Token verification failed:', authError);
+      return NextResponse.json(
+        { error: 'Unauthorized - Invalid token' },
+        { status: 401 }
+      );
+    }
+
+    // Verify user is admin
+    const userDoc = await adminDb().collection('users').doc(decodedToken.uid).get();
+    if (!userDoc.exists || userDoc.data()?.role !== 'admin') {
+      console.error('[Subdomain API] User is not an admin:', decodedToken.uid);
+      return NextResponse.json(
+        { error: 'Forbidden - Admin access required' },
+        { status: 403 }
+      );
+    }
+
     const orgId = params.id;
     const body = await req.json();
+    
+    console.log('[Subdomain API] Processing request:', { orgId, subdomain: body.subdomain, enabled: body.enabled, userId: decodedToken.uid });
     const { subdomain, enabled } = body;
 
     // Validate subdomain format if provided
@@ -76,7 +110,9 @@ export async function PATCH(
     }
 
     // Update organization
+    console.log('[Subdomain API] Updating organization with data:', updateData);
     await adminDb().collection('organizations').doc(orgId).update(updateData);
+    console.log('[Subdomain API] Organization updated successfully');
 
     // Invalidate cache for old and new subdomains
     if (oldSubdomain) {
@@ -89,16 +125,27 @@ export async function PATCH(
 
     // Fetch updated organization
     const updatedOrgDoc = await adminDb().collection('organizations').doc(orgId).get();
-    const updatedOrg = { id: updatedOrgDoc.id, ...updatedOrgDoc.data() };
+    const updatedOrgData = updatedOrgDoc.data();
+    const updatedOrg = { id: updatedOrgDoc.id, ...updatedOrgData };
+
+    console.log('[Subdomain API] Returning success response with org:', { 
+      id: updatedOrg.id, 
+      subdomain: updatedOrgData?.subdomain, 
+      subdomainEnabled: updatedOrgData?.subdomainEnabled 
+    });
 
     return NextResponse.json({
       success: true,
       organization: updatedOrg,
     });
-  } catch (error) {
-    console.error('[Subdomain Management API] Error:', error);
+  } catch (error: any) {
+    console.error('[Subdomain Management API] Error:', {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack,
+    });
     return NextResponse.json(
-      { error: 'Failed to update subdomain' },
+      { error: error?.message || 'Failed to update subdomain' },
       { status: 500 }
     );
   }
@@ -114,6 +161,34 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    // Verify authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Unauthorized - Missing token' },
+        { status: 401 }
+      );
+    }
+
+    const token = authHeader.substring(7);
+    try {
+      const decodedToken = await adminAuth().verifyIdToken(token);
+      
+      // Verify user is admin
+      const userDoc = await adminDb().collection('users').doc(decodedToken.uid).get();
+      if (!userDoc.exists || userDoc.data()?.role !== 'admin') {
+        return NextResponse.json(
+          { error: 'Forbidden - Admin access required' },
+          { status: 403 }
+        );
+      }
+    } catch (authError) {
+      return NextResponse.json(
+        { error: 'Unauthorized - Invalid token' },
+        { status: 401 }
+      );
+    }
+
     const orgId = params.id;
 
     const orgDoc = await adminDb().collection('organizations').doc(orgId).get();

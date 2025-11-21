@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { generateSubdomainFromName, buildSubdomainUrl } from '@/lib/subdomain-utils';
+import { auth } from '@/lib/firebase';
 
 interface SubdomainManagerProps {
   orgId: string;
@@ -52,9 +53,13 @@ export default function SubdomainManager({
 
     setValidating(true);
     try {
+      const token = await auth.currentUser?.getIdToken();
       const response = await fetch('/api/admin/subdomain/validate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
         body: JSON.stringify({ subdomain: value, excludeOrgId: orgId }),
       });
 
@@ -106,9 +111,17 @@ export default function SubdomainManager({
     setSuccess(null);
 
     try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+
       const response = await fetch(`/api/admin/organizations/${orgId}/subdomain`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ subdomain, enabled }),
       });
 
