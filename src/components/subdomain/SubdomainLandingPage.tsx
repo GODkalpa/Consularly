@@ -177,7 +177,7 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
           <div className="max-w-md mx-auto w-full">
             <div className="text-right mb-8">
               <p className="text-sm text-gray-500">
-                Don't have an account? <a href="#" className="text-blue-600 font-semibold hover:underline">Sign Up</a>
+                Don&apos;t have an account? <a href="#" className="text-blue-600 font-semibold hover:underline">Sign Up</a>
               </p>
             </div>
 
