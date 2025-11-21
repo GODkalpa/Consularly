@@ -29,11 +29,13 @@ export async function middleware(req: NextRequest) {
 
   // Extract subdomain from hostname
   const subdomain = extractSubdomain(hostname)
+  const isMain = isMainPortal(hostname)
   
-  console.log(`[Middleware] Hostname: ${hostname}, Subdomain: ${subdomain}, Path: ${pathname}`)
+  console.log(`[Middleware] Hostname: ${hostname}, Subdomain: ${subdomain}, IsMainPortal: ${isMain}, SubdomainRouting: ${subdomainRoutingEnabled}, Path: ${pathname}`)
 
   // Handle subdomain routing if enabled
-  if (subdomainRoutingEnabled && subdomain && !isMainPortal(hostname)) {
+  if (subdomainRoutingEnabled && subdomain && !isMain) {
+    console.log(`[Middleware] Processing subdomain: ${subdomain}`)
     // Check if subdomain is reserved
     if (isReservedSubdomain(subdomain)) {
       console.log(`[Middleware] Reserved subdomain: ${subdomain}`)
