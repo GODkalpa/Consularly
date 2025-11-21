@@ -32,6 +32,8 @@ export async function getOrganizationBySubdomain(
     // Query Firestore directly (more reliable than HTTP call in middleware)
     const { adminDb } = await import('@/lib/firebase-admin');
     
+    console.log(`[Subdomain Middleware] Querying Firestore for subdomain: ${subdomain}`);
+    
     const orgsSnapshot = await adminDb()
       .collection('organizations')
       .where('subdomain', '==', subdomain)
@@ -39,13 +41,40 @@ export async function getOrganizationBySubdomain(
       .limit(1)
       .get();
 
+    console.log(`[Subdomain Middleware] Query completed. Empty: ${orgsSnapshot.empty}, Size: ${orgsSnapshot.size}`);
+
     if (orgsSnapshot.empty) {
       console.log(`[Subdomain Middleware] No organization found for subdomain: ${subdomain}`);
+      
+      // Debug: List all organizations with subdomains
+      try {
+        const allOrgs = await adminDb()
+          .collection('organizations')
+          .where('subdomain', '!=', null)
+          .limit(10)
+          .get();
+        
+        console.log(`[Subdomain Middleware] Total orgs with subdomains: ${allOrgs.size}`);
+        allOrgs.docs.forEach(doc => {
+          const data = doc.data();
+          console.log(`[Subdomain Middleware]   - ${data.name}: ${data.subdomain} (enabled: ${data.subdomainEnabled})`);
+        });
+      } catch (debugError) {
+        console.error('[Subdomain Middleware] Debug query failed:', debugError);
+      }
+      
       return null;
     }
 
     const orgDoc = orgsSnapshot.docs[0];
     const orgData = orgDoc.data();
+    
+    console.log(`[Subdomain Middleware] Found org data:`, {
+      id: orgDoc.id,
+      name: orgData.name,
+      subdomain: orgData.subdomain,
+      enabled: orgData.subdomainEnabled,
+    });
     
     const org: OrganizationWithId = {
       id: orgDoc.id,
@@ -66,6 +95,10 @@ export async function getOrganizationBySubdomain(
     return org;
   } catch (error) {
     console.error('[Subdomain Middleware] Error fetching organization:', error);
+    console.error('[Subdomain Middleware] Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return null;
   }
 }
