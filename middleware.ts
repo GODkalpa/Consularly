@@ -15,11 +15,11 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   const hostname = req.headers.get('host') || ''
 
-  // Skip middleware for static files and API routes (except subdomain APIs)
+  // Skip middleware for static files and ALL API routes
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon.ico') ||
-    pathname.startsWith('/api/subdomain')
+    pathname.startsWith('/api/')
   ) {
     return NextResponse.next()
   }
