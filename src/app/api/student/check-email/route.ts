@@ -11,8 +11,8 @@ export async function GET(req: NextRequest) {
     const email = url.searchParams.get('email')
 
     if (!email) {
-      return NextResponse.json({ 
-        error: 'Email parameter required' 
+      return NextResponse.json({
+        error: 'Email parameter required'
       }, { status: 400 })
     }
 
@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       isStudent,
       ...(isStudent && {
+        orgId: studentQuery.docs[0].data()?.orgId,
         accountStatus: studentQuery.docs[0].data()?.accountStatus,
         dashboardEnabled: studentQuery.docs[0].data()?.dashboardEnabled
       })
@@ -35,9 +36,9 @@ export async function GET(req: NextRequest) {
 
   } catch (e: any) {
     console.error('[api/student/check-email] GET error', e)
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: e?.message || 'Internal error',
-      isStudent: false 
+      isStudent: false
     }, { status: 500 })
   }
 }

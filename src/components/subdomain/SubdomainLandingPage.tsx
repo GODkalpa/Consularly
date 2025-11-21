@@ -64,6 +64,19 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
       const isStudent = await checkIfStudent(email)
 
       if (isStudent) {
+        // Validate that student belongs to this organization
+        const response = await fetch(`/api/student/check-email?email=${encodeURIComponent(email)}`)
+        if (response.ok) {
+          const data = await response.json()
+
+          // Check if student's orgId matches the subdomain's organization
+          if (data.orgId !== org.id) {
+            setError('Access Denied: You do not belong to this organization. Please use your organization\'s subdomain to sign in.')
+            setAuthLoading(false)
+            return
+          }
+        }
+
         // Use Firebase auth directly for students
         const userCredential = await signInWithEmailAndPassword(auth, email, password)
 
@@ -81,6 +94,29 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
       } else {
         // Use regular admin/org authentication
         await adminSignIn(email, password)
+
+        // Validate organization membership for non-platform admins
+        const token = await auth.currentUser?.getIdToken()
+        if (token) {
+          const profileResponse = await fetch('/api/auth/user-type', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+
+          if (profileResponse.ok) {
+            const profileData = await profileResponse.json()
+
+            // Platform admins (no orgId) can access any subdomain
+            // Org users must match the subdomain's organization
+            if (profileData.orgId && profileData.orgId !== org.id) {
+              setError('Access Denied: You do not belong to this organization. Please use your organization\'s subdomain to sign in.')
+              // Sign out the user immediately
+              await auth.signOut()
+              setAuthLoading(false)
+              return
+            }
+          }
+        }
+
         redirectToDashboard()
       }
     } catch (error: any) {
