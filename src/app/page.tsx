@@ -60,11 +60,13 @@ function HomeContent() {
               const result = await response.json()
               console.error('[Home] Session validation failed:', result)
               
-              // Sign out and redirect to signin
+              // Sign out the user - they'll stay on the subdomain landing page
               const { signOut } = await import('firebase/auth')
               const { auth } = await import('@/lib/firebase')
               await signOut(auth)
-              router.push('/signin')
+              
+              // Don't redirect - the subdomain landing page will show the login form
+              // Just return and let the user see the landing page
               return
             }
             

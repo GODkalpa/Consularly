@@ -60,88 +60,65 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
     setError('')
 
     try {
-      // First, check if this is a student email
-      const isStudent = await checkIfStudent(email)
-
-      if (isStudent) {
-        // Validate that student belongs to this organization
-        const response = await fetch(`/api/student/check-email?email=${encodeURIComponent(email)}`)
-        if (response.ok) {
-          const data = await response.json()
-
-          // Check if student's orgId matches the subdomain's organization
-          if (data.orgId !== org.id) {
-            setError('Access Denied: You do not belong to this organization. Please use your organization\'s subdomain to sign in.')
-            setAuthLoading(false)
-            return
-          }
+      // Step 1: Validate credentials with Firebase (but don't persist session yet)
+      // We'll use a temporary sign-in to get the user ID, then validate org, then sign out
+      let userCredential
+      try {
+        userCredential = await signInWithEmailAndPassword(auth, email, password)
+      } catch (authError: any) {
+        // Handle Firebase auth errors
+        if (authError.code === 'auth/user-not-found' || authError.code === 'auth/wrong-password') {
+          setError('Invalid email or password.')
+        } else if (authError.code === 'auth/too-many-requests') {
+          setError('Too many login attempts. Please try again later.')
+        } else {
+          setError(authError.message || 'Failed to sign in.')
         }
+        setAuthLoading(false)
+        return
+      }
 
-        // Use Firebase auth directly for students
-        const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      // Step 2: Validate organization membership BEFORE setting session
+      const idToken = await userCredential.user.getIdToken()
+      const sessionResponse = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken })
+      })
 
-        // Set session cookie
-        const idToken = await userCredential.user.getIdToken()
-        await fetch('/api/auth/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken })
-        })
+      // Step 3: If validation fails, sign out immediately and show error
+      if (!sessionResponse.ok) {
+        const result = await sessionResponse.json()
+        console.error('[SubdomainLanding] Session validation failed:', result)
+        
+        // Sign out the user immediately (before any state updates)
+        await auth.signOut()
+        
+        // Show generic error message - don't reveal that credentials were valid
+        // This prevents information disclosure about which orgs exist
+        if (result.code === 'ORG_ACCESS_DENIED') {
+          setError('Invalid credentials for this organization. Please check your email and password.')
+        } else {
+          setError('Authentication failed. Please check your credentials.')
+        }
+        setAuthLoading(false)
+        return
+      }
 
+      // Step 4: Validation passed! Determine user type and redirect
+      const isStudent = await checkIfStudent(email)
+      
+      if (isStudent) {
         // Wait a bit to ensure cookie is set
         await new Promise(resolve => setTimeout(resolve, 100))
         router.push('/student')
       } else {
-        // Use regular admin/org authentication
-        await adminSignIn(email, password)
-
-        // Validate organization membership for non-platform admins
-        const token = await auth.currentUser?.getIdToken()
-        if (!token) {
-          setError('Authentication failed. Please try again.')
-          await auth.signOut()
-          setAuthLoading(false)
-          return
-        }
-
-        const profileResponse = await fetch('/api/auth/user-type', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-
-        if (!profileResponse.ok) {
-          setError('Failed to verify your permissions. Please try again.')
-          // Clear session and sign out
-          await fetch('/api/auth/session', { method: 'DELETE' })
-          await auth.signOut()
-          setAuthLoading(false)
-          return
-        }
-
-        const profileData = await profileResponse.json()
-
-        // Platform admins (no orgId) can access any subdomain
-        // Org users must match the subdomain's organization
-        if (profileData.orgId && profileData.orgId !== org.id) {
-          setError('Access Denied: You do not belong to this organization. Please use your organization\'s subdomain to sign in.')
-          // Clear session and sign out immediately
-          await fetch('/api/auth/session', { method: 'DELETE' })
-          await auth.signOut()
-          setAuthLoading(false)
-          return
-        }
-
-        // Validation passed, redirect to dashboard
+        // Redirect to org dashboard
         redirectToDashboard()
       }
     } catch (error: any) {
       console.error('Sign in error:', error)
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        setError('Invalid email or password.')
-      } else if (error.code === 'auth/too-many-requests') {
-        setError('Too many login attempts. Please try again later.')
-      } else {
-        setError(error.message || 'Failed to sign in.')
-      }
+      setError(error.message || 'An unexpected error occurred. Please try again.')
     } finally {
       setAuthLoading(false)
     }
