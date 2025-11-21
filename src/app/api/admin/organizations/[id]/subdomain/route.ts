@@ -11,9 +11,11 @@ import { FieldValue } from 'firebase-admin/firestore';
  */
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: orgId } = await params;
+    
     // Verify authentication
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -46,7 +48,6 @@ export async function PATCH(
       );
     }
 
-    const orgId = params.id;
     const body = await req.json();
     
     console.log('[Subdomain API] Processing request:', { orgId, subdomain: body.subdomain, enabled: body.enabled, userId: decodedToken.uid });
@@ -158,9 +159,11 @@ export async function PATCH(
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: orgId } = await params;
+    
     // Verify authentication
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -188,8 +191,6 @@ export async function GET(
         { status: 401 }
       );
     }
-
-    const orgId = params.id;
 
     const orgDoc = await adminDb().collection('organizations').doc(orgId).get();
     
