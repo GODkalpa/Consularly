@@ -2,11 +2,15 @@ import type { Metadata } from 'next'
 import type { Viewport } from 'next'
 import dynamic from 'next/dynamic'
 import { Inter } from 'next/font/google'
+import { headers } from 'next/headers'
+import { redirect } from 'next/navigation'
 import './globals.css'
 import { ClientAuthProvider } from '@/components/ClientAuthProvider'
 import { Toaster } from '@/components/ui/sonner'
 import ChromeSwitcher from '@/components/ChromeSwitcher'
 import RevealOnScroll from '@/components/animations/RevealOnScroll'
+import { extractSubdomain, isMainPortal } from '@/lib/subdomain-utils'
+import { adminDb } from '@/lib/firebase-admin'
 
 // ClientAuthProvider is a client component; importing it statically avoids first-load spinners
 
@@ -35,11 +39,68 @@ export const viewport: Viewport = {
   themeColor: '#4840A3',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // Server-side subdomain validation
+  const headersList = await headers()
+  const hostname = headersList.get('host') || ''
+  
+  // Check if subdomain routing is enabled
+  const subdomainRoutingEnabled = process.env.NEXT_PUBLIC_ENABLE_SUBDOMAIN_ROUTING === 'true'
+  
+  if (subdomainRoutingEnabled) {
+    const subdomain = extractSubdomain(hostname)
+    
+    // If there's a subdomain and it's not the main portal
+    if (subdomain && !isMainPortal(hostname)) {
+      try {
+        // Query Firestore for organization
+        const orgsSnapshot = await adminDb()
+          .collection('organizations')
+          .where('subdomain', '==', subdomain)
+          .where('subdomainEnabled', '==', true)
+          .limit(1)
+          .get()
+        
+        // If organization doesn't exist, show error
+        if (orgsSnapshot.empty) {
+          return (
+            <html lang="en">
+              <body className={inter.className}>
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  minHeight: '100vh',
+                  padding: '20px',
+                  textAlign: 'center'
+                }}>
+                  <h1 style={{ fontSize: '48px', marginBottom: '16px' }}>404</h1>
+                  <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Organization Not Found</h2>
+                  <p style={{ color: '#666', marginBottom: '24px' }}>
+                    The subdomain "{subdomain}" is not registered.
+                  </p>
+                  <a href="https://consularly.com" style={{ 
+                    color: '#4840A3', 
+                    textDecoration: 'underline' 
+                  }}>
+                    Go to main site
+                  </a>
+                </div>
+              </body>
+            </html>
+          )
+        }
+      } catch (error) {
+        console.error('[Root Layout] Error validating subdomain:', error)
+      }
+    }
+  }
+  
   return (
     <html lang="en">
       <body className={inter.className}>
