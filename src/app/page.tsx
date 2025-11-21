@@ -8,7 +8,16 @@ import { Pricing } from '@/components/ui/pricing-cards'
 import FeaturesSection from '@/components/ui/demo'
 import ScrollAdventure from '@/components/ui/animated-scroll'
 import { useAuth } from '@/contexts/AuthContext'
-import SubdomainLandingPage from '@/components/subdomain/SubdomainLandingPage'
+import dynamic from 'next/dynamic'
+
+const SubdomainLandingPage = dynamic(() => import('@/components/subdomain/SubdomainLandingPage'), {
+  loading: () => (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+    </div>
+  ),
+  ssr: false
+})
 
 function HomeContent() {
   const { user, profileLoading, isAdmin, userProfile, redirectToDashboard } = useAuth()
