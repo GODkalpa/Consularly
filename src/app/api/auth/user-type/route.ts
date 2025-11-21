@@ -13,21 +13,22 @@ export async function GET(req: NextRequest) {
     const uid = decodedToken.uid
 
     // Check in order: admin -> org -> student
-    
+
     // 1. Check users collection (admin/org users)
     const userDoc = await adminDb().collection('users').doc(uid).get()
     if (userDoc.exists) {
       const userData = userDoc.data()
       if (userData?.role === 'admin') {
-        return NextResponse.json({ 
+        return NextResponse.json({
           userType: 'admin',
           dashboard: '/admin',
           profile: userData
         })
       }
       if (userData?.orgId) {
-        return NextResponse.json({ 
+        return NextResponse.json({
           userType: 'org',
+          orgId: userData.orgId,  // Include orgId at top level for validation
           dashboard: '/org',
           profile: userData
         })
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
 
     if (!studentQuery.empty) {
       const studentData = studentQuery.docs[0].data()
-      return NextResponse.json({ 
+      return NextResponse.json({
         userType: 'student',
         dashboard: '/student',
         profile: studentData
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 3. No profile found
-    return NextResponse.json({ 
+    return NextResponse.json({
       userType: 'unknown',
       dashboard: '/',
       profile: null

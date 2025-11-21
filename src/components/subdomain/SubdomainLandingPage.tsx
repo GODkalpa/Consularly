@@ -97,26 +97,40 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
 
         // Validate organization membership for non-platform admins
         const token = await auth.currentUser?.getIdToken()
-        if (token) {
-          const profileResponse = await fetch('/api/auth/user-type', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-
-          if (profileResponse.ok) {
-            const profileData = await profileResponse.json()
-
-            // Platform admins (no orgId) can access any subdomain
-            // Org users must match the subdomain's organization
-            if (profileData.orgId && profileData.orgId !== org.id) {
-              setError('Access Denied: You do not belong to this organization. Please use your organization\'s subdomain to sign in.')
-              // Sign out the user immediately
-              await auth.signOut()
-              setAuthLoading(false)
-              return
-            }
-          }
+        if (!token) {
+          setError('Authentication failed. Please try again.')
+          await auth.signOut()
+          setAuthLoading(false)
+          return
         }
 
+        const profileResponse = await fetch('/api/auth/user-type', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+
+        if (!profileResponse.ok) {
+          setError('Failed to verify your permissions. Please try again.')
+          // Clear session and sign out
+          await fetch('/api/auth/session', { method: 'DELETE' })
+          await auth.signOut()
+          setAuthLoading(false)
+          return
+        }
+
+        const profileData = await profileResponse.json()
+
+        // Platform admins (no orgId) can access any subdomain
+        // Org users must match the subdomain's organization
+        if (profileData.orgId && profileData.orgId !== org.id) {
+          setError('Access Denied: You do not belong to this organization. Please use your organization\'s subdomain to sign in.')
+          // Clear session and sign out immediately
+          await fetch('/api/auth/session', { method: 'DELETE' })
+          await auth.signOut()
+          setAuthLoading(false)
+          return
+        }
+
+        // Validation passed, redirect to dashboard
         redirectToDashboard()
       }
     } catch (error: any) {
