@@ -27,13 +27,19 @@ export async function POST(req: NextRequest) {
       
       // Platform admins can access any organization
       if (userData?.role === 'admin') {
+        console.log(`[Validate Access] Admin ${userId} granted access to org ${orgId}`);
         return NextResponse.json({ hasAccess: true });
       }
 
       // Check if user's orgId matches the requested orgId
       if (userData?.orgId === orgId) {
+        console.log(`[Validate Access] User ${userId} belongs to org ${orgId}`);
         return NextResponse.json({ hasAccess: true });
       }
+      
+      // User belongs to different org - deny access
+      console.log(`[Validate Access] User ${userId} belongs to org ${userData?.orgId}, not ${orgId}`);
+      return NextResponse.json({ hasAccess: false });
     }
 
     // Check if user is a student in this organization
@@ -45,10 +51,12 @@ export async function POST(req: NextRequest) {
       .get();
 
     if (!studentSnapshot.empty) {
+      console.log(`[Validate Access] Student ${userId} belongs to org ${orgId}`);
       return NextResponse.json({ hasAccess: true });
     }
 
     // No access found
+    console.log(`[Validate Access] No access found for user ${userId} to org ${orgId}`);
     return NextResponse.json({ hasAccess: false });
   } catch (error) {
     console.error('[Validate Access API] Error:', error);

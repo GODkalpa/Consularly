@@ -47,11 +47,8 @@ export async function middleware(req: NextRequest) {
       console.log(`[Middleware] Organization not found for subdomain: ${subdomain}`)
       logSubdomainAccess(subdomain, null, null, 'not_found', req)
       
-      // Redirect to org-not-found page
-      const url = req.nextUrl.clone()
-      url.pathname = '/org-not-found'
-      url.searchParams.set('subdomain', subdomain)
-      return NextResponse.redirect(url)
+      // Return 404 for non-existent subdomains
+      return new NextResponse('Organization not found', { status: 404 })
     }
 
     // Check if subdomain is enabled
@@ -70,25 +67,35 @@ export async function middleware(req: NextRequest) {
     response.headers.set('x-subdomain', subdomain)
     response.headers.set('x-org-name', org.name)
 
-    // For authenticated routes, validate user access
-    if (isAuthenticatedRoute(pathname)) {
-      const userId = getUserIdFromSession(req)
-      const userRole = getUserRoleFromSession(req)
+    // Validate user access for ALL routes (not just authenticated ones)
+    const userId = getUserIdFromSession(req)
+    const userRole = getUserRoleFromSession(req)
 
-      if (userId) {
-        const hasAccess = await validateUserAccessToOrg(userId, org.id, userRole || undefined)
+    // If user is logged in, validate they belong to this org
+    if (userId) {
+      const hasAccess = await validateUserAccessToOrg(userId, org.id, userRole || undefined)
+      
+      if (!hasAccess) {
+        console.log(`[Middleware] Access denied for user ${userId} to org ${org.id}`)
+        logSubdomainAccess(subdomain, org.id, userId, 'access_denied', req)
         
-        if (!hasAccess) {
-          console.log(`[Middleware] Access denied for user ${userId} to org ${org.id}`)
-          logSubdomainAccess(subdomain, org.id, userId, 'access_denied', req)
-          
-          const url = req.nextUrl.clone()
-          url.pathname = '/access-denied'
-          url.searchParams.set('subdomain', subdomain)
-          url.searchParams.set('orgName', org.name)
-          return NextResponse.redirect(url)
-        }
+        // Clear session cookies to force re-login
+        const response = new NextResponse('Access denied', { status: 403 })
+        response.cookies.delete('s')
+        response.cookies.delete('uid')
+        response.cookies.delete('role')
+        return response
       }
+    }
+    
+    // For authenticated routes, require login
+    if (isAuthenticatedRoute(pathname) && !userId) {
+      console.log(`[Middleware] Authentication required for ${pathname}`)
+      const url = req.nextUrl.clone()
+      url.pathname = '/signin'
+      url.searchParams.set('next', pathname)
+      url.searchParams.set('subdomain', subdomain)
+      return NextResponse.redirect(url)
     }
 
     logSubdomainAccess(subdomain, org.id, getUserIdFromSession(req), 'success', req)
