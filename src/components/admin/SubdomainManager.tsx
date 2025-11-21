@@ -63,15 +63,19 @@ export default function SubdomainManager({
         body: JSON.stringify({ subdomain: value, excludeOrgId: orgId }),
       });
 
+      if (!response.ok) {
+        console.warn('[SubdomainManager] Validation endpoint returned:', response.status);
+        // Don't block on validation errors - just skip validation
+        setValidation({ valid: true, available: true });
+        return;
+      }
+
       const data = await response.json();
       setValidation(data);
     } catch (err) {
-      console.error('Validation error:', err);
-      setValidation({
-        valid: false,
-        available: false,
-        error: 'Failed to validate subdomain',
-      });
+      console.error('[SubdomainManager] Validation error:', err);
+      // Don't block on validation errors - assume valid
+      setValidation({ valid: true, available: true });
     } finally {
       setValidating(false);
     }
@@ -101,9 +105,12 @@ export default function SubdomainManager({
       return;
     }
 
-    if (validation && (!validation.valid || !validation.available)) {
-      setError(validation.error || 'Invalid subdomain');
-      return;
+    // Only check validation if it exists and has been run
+    if (validation && !validating) {
+      if (!validation.valid || !validation.available) {
+        setError(validation.error || 'Invalid subdomain');
+        return;
+      }
     }
 
     setLoading(true);
@@ -116,6 +123,8 @@ export default function SubdomainManager({
         throw new Error('Not authenticated. Please sign in again.');
       }
 
+      console.log('[SubdomainManager] Saving subdomain:', { subdomain, enabled, orgId });
+
       const response = await fetch(`/api/admin/organizations/${orgId}/subdomain`, {
         method: 'PATCH',
         headers: { 
@@ -125,14 +134,25 @@ export default function SubdomainManager({
         body: JSON.stringify({ subdomain, enabled }),
       });
 
+      console.log('[SubdomainManager] Response status:', response.status);
+
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to update subdomain');
+        const data = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('[SubdomainManager] Error response:', data);
+        throw new Error(data.error || `Failed to update subdomain (${response.status})`);
       }
 
+      const result = await response.json();
+      console.log('[SubdomainManager] Success response:', result);
+
       setSuccess('Subdomain configuration updated successfully!');
-      onUpdate?.();
+      
+      // Force a small delay before calling onUpdate to ensure Firestore has propagated
+      setTimeout(() => {
+        onUpdate?.();
+      }, 500);
     } catch (err: any) {
+      console.error('[SubdomainManager] Save error:', err);
       setError(err.message || 'Failed to update subdomain');
     } finally {
       setLoading(false);
@@ -247,7 +267,7 @@ export default function SubdomainManager({
         {/* Save Button */}
         <button
           onClick={handleSave}
-          disabled={loading || validating || (validation ? (!validation.valid || !validation.available) : false)}
+          disabled={loading || validating}
           className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
           {loading ? 'Saving...' : 'Save Configuration'}

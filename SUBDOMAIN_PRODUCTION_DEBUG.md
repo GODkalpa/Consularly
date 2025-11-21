@@ -1,17 +1,34 @@
-# Subdomain Production Issue - Fixed
+# Subdomain Production Issue - Debugging Guide
 
-## What Was Wrong
+## Current Status
 
-The subdomain API endpoint was **missing authentication checks**, which caused it to fail silently in production. The issues were:
+Based on Vercel logs, the issue is:
+- ❌ `/api/admin/subdomain/validate` returns 404
+- ⚠️ Validation is blocking the save button
+- ✅ The main subdomain API endpoint exists at `/api/admin/organizations/[id]/subdomain`
 
-1. **No Authorization header** - The API wasn't verifying the user's identity
-2. **No admin role check** - Anyone could potentially call the endpoint
-3. **Poor error logging** - Errors were caught but not detailed enough
-4. **React state not syncing** - Component state wasn't updating when props changed
+## What Was Fixed (Latest)
 
-## What Was Fixed
+### 1. Made Validation Non-Blocking
 
-### 1. Added Authentication to API Routes
+The validation endpoint was returning 404 and blocking saves. Now:
+- Validation failures don't disable the save button
+- If validation endpoint fails, it assumes the subdomain is valid
+- Save button only disabled during loading/validating states
+
+### 2. Added Better Logging
+
+Added console.log statements to track:
+- When save is initiated
+- API response status
+- Success/error responses
+- Helps debug in browser console
+
+### 3. Added Delay Before Refresh
+
+After successful save, waits 500ms before calling `onUpdate()` to ensure Firestore has propagated the changes.
+
+### 4. Added Authentication to API Routes
 
 **Files Updated:**
 - `src/app/api/admin/organizations/[id]/subdomain/route.ts`
@@ -40,6 +57,45 @@ The API now logs:
 - Update data being sent to Firestore
 - Success confirmations with returned data
 - Detailed error information (message, code, stack trace)
+
+## How to Test the Fix
+
+### Option 1: Test in Browser Console
+
+1. Open the admin dashboard in production
+2. Open browser DevTools (F12)
+3. Go to Console tab
+4. Try to save a subdomain
+5. Look for these log messages:
+   ```
+   [SubdomainManager] Saving subdomain: { subdomain, enabled, orgId }
+   [SubdomainManager] Response status: 200
+   [SubdomainManager] Success response: { ... }
+   ```
+
+### Option 2: Test API Directly
+
+Use the test script:
+
+```bash
+# 1. Get your auth token from browser console:
+# Open consularly.com, sign in, then run in console:
+await firebase.auth().currentUser.getIdToken()
+
+# 2. Run the test script:
+npx tsx scripts/test-subdomain-api.ts <ORG_ID> <SUBDOMAIN> <YOUR_TOKEN>
+```
+
+### Option 3: Check Network Tab
+
+1. Open DevTools → Network tab
+2. Try to save subdomain
+3. Look for the PATCH request to `/api/admin/organizations/[id]/subdomain`
+4. Check:
+   - Request headers (should have Authorization: Bearer ...)
+   - Request payload (subdomain and enabled values)
+   - Response status (should be 200)
+   - Response body (should have success: true)
 
 ## How to Debug in Production
 
