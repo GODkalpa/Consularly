@@ -154,12 +154,12 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
       {/* Dynamic Favicon */}
       <DynamicFavicon faviconUrl={org.branding?.favicon} />
       
-      <div className="min-h-screen w-full flex items-center justify-center bg-[#f8fafc] p-4 sm:p-8 font-sans">
-      <div className="w-full max-w-[1200px] h-[800px] max-h-[90vh] bg-white rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row">
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#f8fafc] p-2 sm:p-4 md:p-8 font-sans">
+      <div className="w-full max-w-[1200px] md:h-[800px] md:max-h-[90vh] bg-white rounded-2xl sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row">
 
         {/* Left Side - Branding */}
         <div
-          className="w-full md:w-1/2 relative flex flex-col items-center justify-center p-12 text-white overflow-hidden"
+          className="w-full md:w-1/2 relative flex flex-col items-center justify-center p-8 sm:p-10 md:p-12 text-white overflow-hidden min-h-[280px] md:min-h-0"
           style={{
             background: `linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}dd 100%)`
           }}
@@ -172,7 +172,7 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
 
           <div className="relative z-10 flex flex-col items-center text-center">
             {org.logo ? (
-              <div className="w-32 h-32 bg-white/10 backdrop-blur-sm rounded-3xl p-6 mb-8 shadow-lg border border-white/20 flex items-center justify-center">
+              <div className="w-20 h-20 sm:w-28 sm:h-28 md:w-32 md:h-32 bg-white/10 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 mb-4 sm:mb-6 md:mb-8 shadow-lg border border-white/20 flex items-center justify-center">
                 <img
                   src={org.logo}
                   alt={org.name}
@@ -180,21 +180,21 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
                 />
               </div>
             ) : (
-              <div className="w-32 h-32 bg-white/10 backdrop-blur-sm rounded-3xl flex items-center justify-center text-6xl font-bold mb-8 shadow-lg border border-white/20">
+              <div className="w-20 h-20 sm:w-28 sm:h-28 md:w-32 md:h-32 bg-white/10 backdrop-blur-sm rounded-2xl sm:rounded-3xl flex items-center justify-center text-4xl sm:text-5xl md:text-6xl font-bold mb-4 sm:mb-6 md:mb-8 shadow-lg border border-white/20">
                 {org.name.charAt(0)}
               </div>
             )}
 
-            <h1 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 md:mb-6 tracking-tight px-4">
               {org.name}
             </h1>
-            <p className="text-lg md:text-xl text-white/80 max-w-md font-light leading-relaxed">
+            <p className="text-base sm:text-lg md:text-xl text-white/80 max-w-md font-light leading-relaxed px-4">
               Empowering Future Leaders Through Knowledge.
             </p>
 
-            {/* Decorative Icons/Illustration at bottom */}
-            <div className="mt-16 opacity-60">
-              <svg width="300" height="100" viewBox="0 0 300 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Decorative Icons/Illustration at bottom - hidden on mobile */}
+            <div className="mt-8 md:mt-16 opacity-60 hidden sm:block">
+              <svg className="w-full max-w-[300px]" height="100" viewBox="0 0 300 100" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M10 50 Q 75 10, 150 50 T 290 50" stroke="white" strokeWidth="2" fill="none" />
                 <circle cx="10" cy="50" r="4" fill="white" />
                 <circle cx="150" cy="50" r="6" fill="white" />
@@ -205,25 +205,25 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
         </div>
 
         {/* Right Side - Login Form */}
-        <div className="w-full md:w-1/2 bg-white p-8 md:p-16 flex flex-col justify-center">
+        <div className="w-full md:w-1/2 bg-white p-6 sm:p-8 md:p-12 lg:p-16 flex flex-col justify-center">
           <div className="max-w-md mx-auto w-full">
-            <div className="text-right mb-8">
-              <p className="text-sm text-gray-500">
+            <div className="text-right mb-6 sm:mb-8">
+              <p className="text-xs sm:text-sm text-gray-500">
                 Don&apos;t have an account? <a href="#" className="text-blue-600 font-semibold hover:underline">Sign Up</a>
               </p>
             </div>
 
-            <div className="mb-10">
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
-              <p className="text-gray-500">Sign in to your {org.name} dashboard.</p>
+            <div className="mb-6 sm:mb-8 md:mb-10">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
+              <p className="text-sm sm:text-base text-gray-500">Sign in to your {org.name} dashboard.</p>
             </div>
 
-            <form onSubmit={handleSignIn} className="space-y-6">
+            <form onSubmit={handleSignIn} className="space-y-4 sm:space-y-5 md:space-y-6">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 ml-1">Email Address</label>
+                <label className="text-xs sm:text-sm font-medium text-gray-700 ml-1">Email Address</label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
+                    <svg className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                   </div>
@@ -232,17 +232,17 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50/50"
+                    className="block w-full pl-10 sm:pl-11 pr-3 sm:pr-4 py-2.5 sm:py-3 md:py-3.5 border border-gray-200 rounded-lg sm:rounded-xl text-sm sm:text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50/50"
                     placeholder="name@example.com"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 ml-1">Password</label>
+                <label className="text-xs sm:text-sm font-medium text-gray-700 ml-1">Password</label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
+                    <svg className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                   </div>
@@ -251,13 +251,13 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50/50"
+                    className="block w-full pl-10 sm:pl-11 pr-3 sm:pr-4 py-2.5 sm:py-3 md:py-3.5 border border-gray-200 rounded-lg sm:rounded-xl text-sm sm:text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50/50"
                     placeholder="Enter your password"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between text-xs sm:text-sm">
                 <div className="flex items-center">
                   <input
                     id="remember-me"
@@ -265,14 +265,14 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                   />
-                  <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-500">
+                  <label htmlFor="remember-me" className="ml-2 block text-gray-500">
                     Remember me
                   </label>
                 </div>
 
-                <div className="text-sm">
+                <div>
                   <a href="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500 hover:underline">
                     Forgot Password?
                   </a>
@@ -280,24 +280,24 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
               </div>
 
               {error && (
-                <div className="p-4 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600 flex items-center gap-2">
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="p-3 sm:p-4 rounded-lg sm:rounded-xl bg-red-50 border border-red-100 text-xs sm:text-sm text-red-600 flex items-start gap-2">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  {error}
+                  <span>{error}</span>
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-[0.98]"
+                className="w-full flex justify-center py-2.5 sm:py-3 md:py-3.5 px-4 border border-transparent rounded-lg sm:rounded-xl shadow-sm text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-[0.98]"
                 style={{
                   boxShadow: '0 4px 14px 0 rgba(37, 99, 235, 0.39)'
                 }}
               >
                 {authLoading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                 ) : (
                   <span className="flex items-center gap-2">
                     Sign In <span aria-hidden="true">&rarr;</span>
@@ -306,8 +306,8 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
               </button>
             </form>
 
-            <div className="mt-10 text-center">
-              <p className="text-sm text-gray-400">
+            <div className="mt-6 sm:mt-8 md:mt-10 text-center">
+              <p className="text-xs sm:text-sm text-gray-400">
                 Powered by <span className="font-semibold text-gray-500">Consularly</span>
               </p>
             </div>
