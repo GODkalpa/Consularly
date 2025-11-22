@@ -1,10 +1,9 @@
 "use client"
 
-import { Suspense, useEffect, useRef } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import HeroSection from '@/components/hero-section'
 import { TestimonialsSection } from '@/components/testimonials-section'
-import { Pricing } from '@/components/ui/pricing-cards'
 import FeaturesSection from '@/components/ui/demo'
 import { useAuth } from '@/contexts/AuthContext'
 import dynamic from 'next/dynamic'
@@ -36,8 +35,21 @@ function HomeContent() {
   const searchParams = useSearchParams()
   const hasRedirected = useRef(false)
 
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
-  const isSubdomain = hostname.split('.').length > 2 && !hostname.startsWith('www.')
+  // Detect subdomain immediately on mount, before any render
+  const [isSubdomain, setIsSubdomain] = useState<boolean | null>(null)
+  const [subdomain, setSubdomain] = useState<string>('')
+
+  // Run subdomain detection synchronously on mount
+  useEffect(() => {
+    const hostname = window.location.hostname
+    const parts = hostname.split('.')
+    const isSubdomainDetected = parts.length > 2 && !hostname.startsWith('www.')
+    
+    setIsSubdomain(isSubdomainDetected)
+    if (isSubdomainDetected) {
+      setSubdomain(parts[0])
+    }
+  }, [])
 
   useEffect(() => {
     const validateAndRedirect = async () => {
@@ -75,8 +87,17 @@ function HomeContent() {
     validateAndRedirect()
   }, [user, profileLoading, redirectToDashboard, searchParams, isSubdomain, router])
 
+  // Show loading state until subdomain detection completes
+  if (isSubdomain === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
+    )
+  }
+
+  // Render subdomain landing page if detected
   if (isSubdomain) {
-    const subdomain = hostname.split('.')[0]
     return <SubdomainLandingPage subdomain={subdomain} />
   }
 
