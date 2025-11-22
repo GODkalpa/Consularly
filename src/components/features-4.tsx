@@ -5,8 +5,8 @@ export default function Features() {
         <section className="py-12 md:py-20">
             <div className="mx-auto max-w-5xl space-y-8 px-6 md:space-y-16">
                 <div className="relative z-10 mx-auto max-w-xl space-y-6 text-center md:space-y-12">
-                    <h2 className="text-balance text-4xl font-medium lg:text-5xl">The foundation for creative teams management</h2>
-                    <p>Lyra is evolving to be more than just the models. It supports an entire to the APIs and platforms helping developers and businesses innovate.</p>
+                    <h2 className="text-balance text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight">The foundation for creative teams management</h2>
+                    <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground">Lyra is evolving to be more than just the models. It supports an entire to the APIs and platforms helping developers and businesses innovate.</p>
                 </div>
 
                 <div className="relative mx-auto grid max-w-4xl divide-x divide-y border *:p-12 sm:grid-cols-2 lg:grid-cols-3">

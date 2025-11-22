@@ -73,7 +73,7 @@ export default function HeroSection() {
     //         const rect = containerRef.current.getBoundingClientRect()
     //         const centerX = rect.left + rect.width / 2
     //         const centerY = rect.top + rect.height / 2
-            
+
     //         const deltaX = (e.clientX - centerX) 
     //         const deltaY = (e.clientY - centerY)
 
@@ -97,11 +97,11 @@ export default function HeroSection() {
             try {
                 const avif = await fetch('/hero.avif', { method: 'HEAD' })
                 if (!cancelled && avif.ok) { setHeroSrc('/hero.avif'); return }
-            } catch {}
+            } catch { }
             try {
                 const webp = await fetch('/hero.webp', { method: 'HEAD' })
                 if (!cancelled && webp.ok) { setHeroSrc('/hero.webp'); return }
-            } catch {}
+            } catch { }
         }
         probe()
         return () => { cancelled = true }
@@ -124,17 +124,17 @@ export default function HeroSection() {
 
                                 {/* Headline with decorative badges */}
                                 <div ref={containerRef} className="relative mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-300 pointer-events-none select-none flex flex-col items-center">
-                                    <h1 className="relative text-[2.25rem] leading-[1.25] sm:text-4xl md:text-5xl lg:text-6xl xl:text-display-3 font-bold text-foreground text-center px-4 sm:leading-tight max-w-[95vw]">
+                                    <h1 className="relative text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-display-3 font-bold text-foreground text-center px-4 tracking-tight leading-tight max-w-[95vw]">
                                         <span className="block sm:inline-block">Practice.</span>{' '}
                                         <span className="block sm:inline-block">Get Feedback.</span>
                                         <br className="hidden sm:inline" />
                                         <span className="block sm:inline-block">Pass Your Visa Interview</span>
                                     </h1>
-                                    
+
                                     {/* Arrow-shaped badges beside first/last letters of each row */}
                                     {/* Row 1 Left - beside "Ace" */}
-                                    <div 
-                                        ref={badge1Ref} 
+                                    <div
+                                        ref={badge1Ref}
                                         className="hidden sm:block absolute top-[14%] sm:top-[16%] left-[-10%] sm:left-[-8%] md:left-[-6%] lg:left-[-4%] will-change-transform pointer-events-auto"
                                     >
                                         <div className="relative bg-secondary-100 text-secondary-700 dark:bg-secondary-900/90 dark:text-secondary-300 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-xl border border-white/80 dark:border-white/10 shadow-xl ring-1 ring-black/5 dark:ring-white/5 backdrop-blur-sm rotate-[-6deg] hover:scale-[1.03] transition-transform">
@@ -145,10 +145,10 @@ export default function HeroSection() {
                                             <div aria-hidden className="absolute -top-3 -left-4 w-0 h-0 border-b-[14px] border-b-secondary-300/60 dark:border-b-secondary-700/60 border-r-[18px] border-r-transparent -rotate-6"></div>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Row 1 Right - beside "Visa" */}
-                                    <div 
-                                        ref={badge3Ref} 
+                                    <div
+                                        ref={badge3Ref}
                                         className="hidden sm:block absolute top-[13%] sm:top-[15%] right-[-10%] sm:right-[-8%] md:right-[-6%] lg:right-[-4%] will-change-transform pointer-events-auto"
                                     >
                                         <div className="relative bg-accent-100 text-accent-700 dark:bg-accent-900/90 dark:text-accent-300 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-xl border border-white/80 dark:border-white/10 shadow-xl ring-1 ring-black/5 dark:ring-white/5 backdrop-blur-sm rotate-[6deg] hover:scale-[1.03] transition-transform">
@@ -159,10 +159,10 @@ export default function HeroSection() {
                                             <div aria-hidden className="absolute -top-3 -right-4 w-0 h-0 border-b-[14px] border-b-accent-300/60 dark:border-b-accent-700/60 border-l-[18px] border-l-transparent rotate-6"></div>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Row 2 Left - beside "Interview" */}
-                                    <div 
-                                        ref={badge2Ref} 
+                                    <div
+                                        ref={badge2Ref}
                                         className="hidden sm:block absolute bottom-[12%] sm:bottom-[14%] left-[-11%] sm:left-[-9%] md:left-[-7%] lg:left-[-5%] will-change-transform pointer-events-auto"
                                     >
                                         <div className="relative bg-primary-100 text-primary-700 dark:bg-primary-900/90 dark:text-primary-300 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-xl border border-white/80 dark:border-white/10 shadow-xl ring-1 ring-black/5 dark:ring-white/5 backdrop-blur-sm rotate-[7deg] hover:scale-[1.03] transition-transform">
@@ -173,10 +173,10 @@ export default function HeroSection() {
                                             <div aria-hidden className="absolute -bottom-3 -left-3 w-0 h-0 border-t-[14px] border-t-primary-300/60 dark:border-t-primary-700/60 border-r-[18px] border-r-transparent -rotate-3"></div>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Row 2 Right - beside "Anywhere" */}
-                                    <div 
-                                        ref={badge4Ref} 
+                                    <div
+                                        ref={badge4Ref}
                                         className="hidden sm:block absolute bottom-[11%] sm:bottom-[13%] right-[-11%] sm:right-[-9%] md:right-[-7%] lg:right-[-5%] will-change-transform pointer-events-auto"
                                     >
                                         <div className="relative bg-tertiary-100 text-tertiary-700 dark:bg-tertiary-900/90 dark:text-tertiary-300 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-xl border border-white/80 dark:border-white/10 shadow-xl ring-1 ring-black/5 dark:ring-white/5 backdrop-blur-sm rotate-[-7deg] hover:scale-[1.03] transition-transform">
@@ -189,7 +189,7 @@ export default function HeroSection() {
                                     </div>
                                 </div>
 
-                                <p className="mx-auto mt-6 sm:mt-8 max-w-2xl text-pretty text-base sm:text-lg md:text-lead text-muted-foreground animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500 px-4 leading-relaxed">
+                                <p className="mx-auto mt-6 sm:mt-8 max-w-2xl text-pretty text-lg sm:text-xl md:text-2xl text-muted-foreground animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500 px-4 leading-relaxed">
                                     Meet <span className="font-semibold text-foreground">Consularly</span> — an AI toolkit that helps <span className="font-semibold text-foreground">visa applicants</span> get clarity, feedback, and interview confidence
                                 </p>
 
@@ -218,7 +218,7 @@ export default function HeroSection() {
 
                                     {/* Trust Indicator */}
                                     <p className="text-sm text-muted-foreground">
-                                        Trusted by 3,800+ visa applicants worldwide
+                                        Trusted by 30+ consultancies around Nepal
                                     </p>
 
                                     {/* Social Proof */}

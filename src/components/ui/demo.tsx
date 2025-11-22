@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ArrowUp, BarChart3, CalendarCheck, Globe, Mic, Play, Plus, Video, Sparkles, Target, TrendingUp, MessageSquare, Volume2, User } from 'lucide-react'
 import Image from 'next/image'
-import ScrollAdventure from '@/components/ui/animated-scroll'
+
 
 const MESCHAC_AVATAR = 'https://avatars.githubusercontent.com/u/47919550?v=4'
 const BERNARD_AVATAR = 'https://avatars.githubusercontent.com/u/31113941?v=4'
@@ -17,11 +17,11 @@ export default function FeaturesSection() {
             <div className="pt-8 sm:pt-12 md:pt-16 pb-12 sm:pb-16 md:pb-20">
                 <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
                     {/* Section Header */}
-                    <div className="mb-6 sm:mb-8 text-center">
-                        <h2 className="text-2xl sm:text-3xl md:text-h2 font-bold text-foreground mb-3 sm:mb-4 text-balance px-4">
+                    <div className="mb-12 sm:mb-16 text-center">
+                        <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold text-foreground mb-6 text-balance px-4 tracking-tight">
                             Everything You Need to Ace Your Visa Interview
                         </h2>
-                        <p className="text-muted-foreground text-base sm:text-lg md:text-lead text-pretty max-w-2xl mx-auto px-4">
+                        <p className="text-muted-foreground text-lg sm:text-xl md:text-2xl text-pretty max-w-3xl mx-auto px-4">
                             Prepare with confidence using our comprehensive AI-powered interview simulation platform
                         </p>
                     </div>
@@ -131,7 +131,7 @@ const AnalyticsIllustration = () => {
                 <div className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Performance Score</div>
                 <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-primary to-primary-600 bg-clip-text text-transparent">87%</div>
             </div>
-            
+
             <div className="space-y-2 sm:space-y-3">
                 <div className="group">
                     <div className="mb-1 sm:mb-1.5 flex items-center gap-1.5 sm:gap-2">
@@ -145,7 +145,7 @@ const AnalyticsIllustration = () => {
                         <div className="h-full w-[90%] rounded-full bg-gradient-to-r from-primary to-primary-600 shadow-sm shadow-primary/20 transition-all duration-500 group-hover:shadow-md group-hover:shadow-primary/30"></div>
                     </div>
                 </div>
-                
+
                 <div className="group">
                     <div className="mb-1.5 flex items-center gap-2">
                         <div className="flex size-4 sm:size-5 shrink-0 items-center justify-center rounded bg-secondary/20">
@@ -158,7 +158,7 @@ const AnalyticsIllustration = () => {
                         <div className="h-full w-[85%] rounded-full bg-gradient-to-r from-secondary-600 to-secondary-800 shadow-sm shadow-secondary/20 transition-all duration-500 group-hover:shadow-md group-hover:shadow-secondary/30"></div>
                     </div>
                 </div>
-                
+
                 <div className="group">
                     <div className="mb-1.5 flex items-center gap-2">
                         <div className="flex size-4 sm:size-5 shrink-0 items-center justify-center rounded bg-accent/20">
@@ -172,7 +172,7 @@ const AnalyticsIllustration = () => {
                     </div>
                 </div>
             </div>
-            
+
             <div className="mt-3 sm:mt-4 flex items-center gap-1 sm:gap-1.5 rounded-lg bg-green-50 dark:bg-green-950/20 px-2 sm:px-2.5 py-1 sm:py-1.5 w-fit">
                 <TrendingUp className="size-3 sm:size-3.5 text-green-600 dark:text-green-400" />
                 <span className="text-[10px] sm:text-xs font-semibold text-green-700 dark:text-green-400">+12% from last practice</span>
@@ -217,7 +217,7 @@ const AIAssistantIllustration = () => {
                         className="size-6 sm:size-7 rounded-full hover:bg-muted/50 flex-shrink-0">
                         <Globe className="size-3.5 sm:size-4" />
                     </Button>
-                    
+
                     <div className="flex-1 min-w-0 px-1 sm:px-2">
                         <div className="h-5 sm:h-6 flex items-center">
                             <span className="text-[10px] sm:text-xs text-muted-foreground/60 truncate">Type your question...</span>
@@ -235,11 +235,4 @@ const AIAssistantIllustration = () => {
     )
 }
 
-// ScrollAdventure Demo Component
-export const DemoOne = () => {
-    return (
-        <div className="w-full h-screen">
-            <ScrollAdventure />
-        </div>
-    );
-};
+

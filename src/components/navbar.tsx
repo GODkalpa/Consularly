@@ -5,9 +5,9 @@ import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/AuthContext"
-import { 
-  Menu, 
-  X, 
+import {
+  Menu,
+  X,
   ChevronDown,
   Play,
   BookOpen,
@@ -32,7 +32,7 @@ const navigationItems = [
   },
   {
     name: "Pricing",
-    href: "#pricing",
+    href: "/pricing",
     description: "Affordable packages"
   }
 ]
@@ -84,7 +84,7 @@ export function Navbar() {
         setUserMenuOpen(false)
       }
     }
-    
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
@@ -130,7 +130,7 @@ export function Navbar() {
                 {item.name}
               </Link>
             ))}
-            
+
             {/* Resources Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <button
@@ -140,7 +140,7 @@ export function Navbar() {
                 Resources
                 <ChevronDown className={`w-4 h-4 transition-transform ${resourcesOpen ? 'rotate-180' : ''}`} />
               </button>
-              
+
               {resourcesOpen && (
                 <div className="absolute top-full right-0 mt-2 w-72 bg-popover rounded-lg shadow-xl border border-border py-2">
                   {resourceItems.map((item) => (
@@ -183,7 +183,7 @@ export function Navbar() {
                   <span className="text-foreground font-medium">{user.displayName || user.email}</span>
                   <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
-                
+
                 {userMenuOpen && (
                   <div className="absolute top-full right-0 mt-2 w-48 bg-popover rounded-lg shadow-xl border border-border py-2">
                     <div className="px-4 py-2 border-b border-border/60">
@@ -202,7 +202,7 @@ export function Navbar() {
               </div>
             ) : (
               <Link href="/signin">
-                <Button 
+                <Button
                   variant="ghost"
                 >
                   Sign In
@@ -233,8 +233,8 @@ export function Navbar() {
             <div className="space-y-3">
               {/* Neutral dashboard button - AuthContext handles routing */}
               {user && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start gap-2"
                   onClick={() => {
                     setIsOpen(false)
@@ -293,8 +293,8 @@ export function Navbar() {
                       <p className="text-sm text-foreground/70">{user.email}</p>
                     </div>
                   </div>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full"
                     onClick={handleSignOut}
                   >
@@ -304,8 +304,8 @@ export function Navbar() {
                 </div>
               ) : (
                 <Link href="/signin">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full"
                     onClick={() => setIsOpen(false)}
                   >

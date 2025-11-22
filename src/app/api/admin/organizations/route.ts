@@ -4,12 +4,23 @@ import { sendOrgWelcomeEmail, sendPasswordResetEmail } from '@/lib/email/send-he
 import { generateEmailAlias } from '@/lib/email-alias-generator'
 import { generateSubdomainFromName, validateSubdomainFormat } from '@/lib/subdomain-utils'
 
+// Map plan names to default interview quotas
+function getDefaultQuotaForPlan(plan: string): number {
+  const quotaMap: Record<string, number> = {
+    'basic': 10,
+    'plus': 25,
+    'premium': 50,
+    'enterprise': 0, // Enterprise requires explicit quota
+  }
+  return quotaMap[plan] || 10 // Default to Basic if unknown
+}
+
 // POST /api/admin/organizations
 // Creates a new organization document in Firestore. Admin-only.
 // Body: {
 //   name: string,
 //   domain?: string,
-//   plan: 'basic' | 'premium' | 'enterprise',
+//   plan: 'basic' | 'plus' | 'premium' | 'enterprise',
 //   quotaLimit: number,
 //   type?: 'visa_consultancy' | 'educational' | 'corporate',
 //   status?: 'active' | 'suspended' | 'pending',
@@ -48,11 +59,23 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
 
     const name = String(body.name || '').trim()
-    const plan = String(body.plan || '').trim() as 'basic' | 'premium' | 'enterprise'
-    const quotaLimit = Number(body.quotaLimit)
+    const plan = String(body.plan || '').trim() as 'basic' | 'plus' | 'premium' | 'enterprise'
 
-    if (!name || !plan || !Number.isFinite(quotaLimit) || quotaLimit <= 0) {
-      return NextResponse.json({ error: 'name, plan and positive quotaLimit are required' }, { status: 400 })
+    // Get quota from body or use default based on plan
+    let quotaLimit = body.quotaLimit !== undefined ? Number(body.quotaLimit) : getDefaultQuotaForPlan(plan)
+
+    if (!name || !plan) {
+      return NextResponse.json({ error: 'name and plan are required' }, { status: 400 })
+    }
+
+    // For enterprise, quota must be explicitly set
+    if (plan === 'enterprise' && (!Number.isFinite(quotaLimit) || quotaLimit <= 0)) {
+      return NextResponse.json({ error: 'Enterprise plan requires explicit quotaLimit' }, { status: 400 })
+    }
+
+    // For other plans, ensure quota is valid
+    if (!Number.isFinite(quotaLimit) || quotaLimit < 0) {
+      return NextResponse.json({ error: 'Invalid quotaLimit' }, { status: 400 })
     }
 
     // Add the creator to adminUsers array so they can see the organization
@@ -76,7 +99,7 @@ export async function POST(req: NextRequest) {
     try {
       const generatedSubdomain = generateSubdomainFromName(name)
       const validation = validateSubdomainFormat(generatedSubdomain)
-      
+
       if (validation.valid) {
         // Check if subdomain is already taken
         const existingOrg = await adminDb()
@@ -84,7 +107,7 @@ export async function POST(req: NextRequest) {
           .where('subdomain', '==', generatedSubdomain)
           .limit(1)
           .get()
-        
+
         if (existingOrg.empty) {
           subdomain = generatedSubdomain
           subdomainEnabled = true
@@ -94,14 +117,14 @@ export async function POST(req: NextRequest) {
           for (let i = 2; i <= 10; i++) {
             const altSubdomain = `${generatedSubdomain}${i}`
             const altValidation = validateSubdomainFormat(altSubdomain)
-            
+
             if (altValidation.valid) {
               const altExisting = await adminDb()
                 .collection('organizations')
                 .where('subdomain', '==', altSubdomain)
                 .limit(1)
                 .get()
-              
+
               if (altExisting.empty) {
                 subdomain = altSubdomain
                 subdomainEnabled = true
@@ -112,7 +135,7 @@ export async function POST(req: NextRequest) {
           }
         }
       }
-      
+
       if (!subdomain) {
         console.warn(`[api/admin/organizations] Could not generate unique subdomain for: ${name}`)
       }
@@ -166,28 +189,28 @@ export async function POST(req: NextRequest) {
     if (body.email) {
       const orgEmail = String(body.email).trim()
       const orgContactPerson = body.contactPerson ? String(body.contactPerson).trim() : 'Organization Admin'
-      
+
       try {
         // Check if user with this email already exists
         const usersRef = adminDb().collection('users')
         const existingUserSnap = await usersRef.where('email', '==', orgEmail).limit(1).get()
-        
+
         if (!existingUserSnap.empty) {
           // User exists - assign them to this organization
           const existingUserDoc = existingUserSnap.docs[0]
           const existingData = existingUserDoc.data()
-          
+
           // Only update role if they're not already a system admin
           const updates: any = {
             orgId: ref.id,
             updatedAt: FieldValue.serverTimestamp(),
           }
-          
+
           // Don't demote system admins to regular users
           if (existingData?.role !== 'admin') {
             updates.role = 'user'
           }
-          
+
           await usersRef.doc(existingUserDoc.id).update(updates)
           console.log('[api/admin/organizations] Assigned existing user to org:', orgEmail)
         } else {
@@ -197,7 +220,7 @@ export async function POST(req: NextRequest) {
             displayName: orgContactPerson,
             emailVerified: false,
           })
-          
+
           // Create user document in Firestore
           await usersRef.doc(authUser.uid).set({
             email: orgEmail,
@@ -209,12 +232,12 @@ export async function POST(req: NextRequest) {
             passwordSet: false, // Track if user has set password
             welcomeEmailSent: false, // Track if welcome email has been sent
           })
-          
+
           // Generate password reset link
           resetLink = await adminAuth().generatePasswordResetLink(orgEmail)
           userCreated = true
           console.log('[api/admin/organizations] Created new user for org:', orgEmail)
-          
+
           // Send password reset email (NOT account creation email)
           try {
             await sendPasswordResetEmail({
@@ -243,7 +266,7 @@ export async function POST(req: NextRequest) {
     // It will be sent automatically when the user sets their password and logs in for the first time
     // This provides a better user experience: password setup → welcome email
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       id: ref.id,
       userCreated,
       resetLink: userCreated ? resetLink : undefined,

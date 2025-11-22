@@ -9,15 +9,15 @@ import { useAuth } from '@/contexts/AuthContext'
 import { usePathname } from 'next/navigation'
 
 const menuItems = [
-    { name: 'Features', href: '#features' },
-    { name: 'Testimonials', href: '#testimonials' },
-    { name: 'Pricing', href: '#pricing' },
+    { name: 'Pricing', href: '/pricing' },
+    { name: 'Changelog', href: '/changelog' },
+
 ]
 
 export const HeroHeader = () => {
     const [menuState, setMenuState] = React.useState(false)
     const [isScrolled, setIsScrolled] = React.useState(false)
-    const [hideForScrollAdventure, setHideForScrollAdventure] = React.useState(false)
+
     const { user, logout, isAdmin, userProfile } = useAuth()
 
     const pathname = usePathname()
@@ -32,18 +32,9 @@ export const HeroHeader = () => {
         return () => window.removeEventListener('scroll', handleScroll)
     }, [isDashboard])
 
-    // Listen for scroll adventure active event
-    React.useEffect(() => {
-        const handleScrollAdventureActive = (e: CustomEvent) => {
-            setHideForScrollAdventure(e.detail.active)
-        }
-        window.addEventListener('scrollAdventureActive', handleScrollAdventureActive as EventListener)
-        return () => {
-            window.removeEventListener('scrollAdventureActive', handleScrollAdventureActive as EventListener)
-        }
-    }, [])
 
-    if (isDashboard || hideForScrollAdventure) return null
+
+    if (isDashboard) return null
 
     return (
         <header>
@@ -57,12 +48,12 @@ export const HeroHeader = () => {
                                 href="/"
                                 aria-label="home"
                                 className="flex items-center space-x-2">
-                                <div className="relative w-20 h-10">
+                                <div className="relative w-32 h-12">
                                     <Image
                                         src="/Consularly.png"
                                         alt="Consularly Logo"
                                         fill
-                                        sizes="150px"
+                                        sizes="200px"
                                         className="object-contain"
                                         priority
                                     />

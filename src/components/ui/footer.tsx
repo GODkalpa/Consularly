@@ -39,7 +39,7 @@ const links = [
 
 export default function FooterSection() {
     return (
-        <footer className="py-16 md:py-32 border-t" data-animate="up" data-duration="0.7">
+        <footer className="pt-8 pb-16 md:pt-12 md:pb-32 border-t" data-animate="up" data-duration="0.7">
             <div className="mx-auto max-w-5xl px-6">
                 <Link
                     href="/"

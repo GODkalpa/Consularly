@@ -10,11 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Search, 
-  Plus, 
-  Edit, 
-  Trash2, 
+import {
+  Search,
+  Plus,
+  Edit,
+  Trash2,
   Building2,
   Users,
   TestTube,
@@ -38,7 +38,7 @@ type OrgRow = {
   phone?: string
   type: 'visa_consultancy' | 'educational' | 'corporate'
   status: 'active' | 'suspended' | 'pending'
-  subscriptionPlan: 'basic' | 'premium' | 'enterprise'
+  subscriptionPlan: 'basic' | 'plus' | 'premium' | 'enterprise'
   monthlyQuota: number
   usedQuota: number
   joinDate?: string
@@ -65,7 +65,7 @@ export function OrganizationManagement() {
   const [newType, setNewType] = useState<string>("")
   const [newPlan, setNewPlan] = useState<string>("")
   const [newQuota, setNewQuota] = useState<string>("")
-  
+
   // Edit dialog state
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingOrg, setEditingOrg] = useState<OrgRow | null>(null)
@@ -78,7 +78,7 @@ export function OrganizationManagement() {
   const [editPlan, setEditPlan] = useState<string>("")
   const [editQuota, setEditQuota] = useState<string>("")
   const [editing, setEditing] = useState(false)
-  
+
   // Delete dialog state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [deletingOrg, setDeletingOrg] = useState<OrgRow | null>(null)
@@ -108,86 +108,86 @@ export function OrganizationManagement() {
     const q = query(baseCol, orderBy('createdAt', 'desc'))
 
     const unsub = onSnapshot(
-      q, 
+      q,
       async (snap: QuerySnapshot<DocumentData>) => {
-      const orgs: OrgRow[] = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => {
-        const data = d.data() as any
-        const createdAt = (data?.createdAt?.toDate?.() as Date | undefined)
-        return {
-          id: d.id,
-          name: data?.name || d.id,
-          email: data?.email || '',
-          contactPerson: data?.contactPerson || '',
-          phone: data?.phone || '',
-          type: (data?.type || 'visa_consultancy') as OrgRow['type'],
-          status: (data?.status || 'active') as OrgRow['status'],
-          subscriptionPlan: (data?.plan || 'basic') as OrgRow['subscriptionPlan'],
-          monthlyQuota: Number(data?.quotaLimit || data?.monthlyQuota || 0),
-          usedQuota: Number(data?.quotaUsed || 0),
-          joinDate: createdAt ? createdAt.toISOString() : undefined,
-          nextBilling: data?.nextBilling || undefined,
-          subdomain: data?.subdomain || undefined,
-          subdomainEnabled: data?.subdomainEnabled || false,
-        }
-      })
-      setOrganizations(orgs)
-
-      // Fetch per-org user counts efficiently using getCountFromServer (doesn't download documents)
-      try {
-        const entries = await Promise.all(
-          orgs.map(async (o) => {
-            try {
-              // Use count aggregation instead of fetching all documents
-              const totalCount = await getCountFromServer(
-                query(collection(db, 'users'), where('orgId', '==', o.id))
-              )
-              
-              // Get admin count for this org
-              const adminCount = await getCountFromServer(
-                query(
-                  collection(db, 'users'), 
-                  where('orgId', '==', o.id),
-                  where('role', '==', 'admin')
-                )
-              )
-              
-              // Non-admin count = total - admins
-              const nonAdminCount = totalCount.data().count - adminCount.data().count
-              return [o.id, nonAdminCount] as const
-            } catch (err) {
-              console.warn(`[OrganizationManagement] Failed to count users for org ${o.id}:`, err)
-              return [o.id, 0] as const
-            }
-          })
-        )
-        setUserCounts(Object.fromEntries(entries))
-      } catch (err) {
-        console.error('[OrganizationManagement] Failed to fetch user counts:', err)
-        // ignore count errors
-      }
-    },
-    (error) => {
-      // Handle snapshot errors
-      console.error('[OrganizationManagement] Snapshot error:', error)
-      if (error.code === 'permission-denied') {
-        toast.error('Permission denied', { 
-          description: 'Unable to load organizations. Please check your permissions.' 
+        const orgs: OrgRow[] = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => {
+          const data = d.data() as any
+          const createdAt = (data?.createdAt?.toDate?.() as Date | undefined)
+          return {
+            id: d.id,
+            name: data?.name || d.id,
+            email: data?.email || '',
+            contactPerson: data?.contactPerson || '',
+            phone: data?.phone || '',
+            type: (data?.type || 'visa_consultancy') as OrgRow['type'],
+            status: (data?.status || 'active') as OrgRow['status'],
+            subscriptionPlan: (data?.plan || 'basic') as OrgRow['subscriptionPlan'],
+            monthlyQuota: Number(data?.quotaLimit || data?.monthlyQuota || 0),
+            usedQuota: Number(data?.quotaUsed || 0),
+            joinDate: createdAt ? createdAt.toISOString() : undefined,
+            nextBilling: data?.nextBilling || undefined,
+            subdomain: data?.subdomain || undefined,
+            subdomainEnabled: data?.subdomainEnabled || false,
+          }
         })
-      }
-      setOrganizations([])
-      setUserCounts({})
-    })
+        setOrganizations(orgs)
+
+        // Fetch per-org user counts efficiently using getCountFromServer (doesn't download documents)
+        try {
+          const entries = await Promise.all(
+            orgs.map(async (o) => {
+              try {
+                // Use count aggregation instead of fetching all documents
+                const totalCount = await getCountFromServer(
+                  query(collection(db, 'users'), where('orgId', '==', o.id))
+                )
+
+                // Get admin count for this org
+                const adminCount = await getCountFromServer(
+                  query(
+                    collection(db, 'users'),
+                    where('orgId', '==', o.id),
+                    where('role', '==', 'admin')
+                  )
+                )
+
+                // Non-admin count = total - admins
+                const nonAdminCount = totalCount.data().count - adminCount.data().count
+                return [o.id, nonAdminCount] as const
+              } catch (err) {
+                console.warn(`[OrganizationManagement] Failed to count users for org ${o.id}:`, err)
+                return [o.id, 0] as const
+              }
+            })
+          )
+          setUserCounts(Object.fromEntries(entries))
+        } catch (err) {
+          console.error('[OrganizationManagement] Failed to fetch user counts:', err)
+          // ignore count errors
+        }
+      },
+      (error) => {
+        // Handle snapshot errors
+        console.error('[OrganizationManagement] Snapshot error:', error)
+        if (error.code === 'permission-denied') {
+          toast.error('Permission denied', {
+            description: 'Unable to load organizations. Please check your permissions.'
+          })
+        }
+        setOrganizations([])
+        setUserCounts({})
+      })
 
     return () => unsub()
   }, [userProfile, user])
 
   const filteredOrganizations = organizations.filter(org => {
     const matchesSearch = org.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (org.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (org.contactPerson || '').toLowerCase().includes(searchTerm.toLowerCase())
+      (org.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (org.contactPerson || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesType = typeFilter === "all" || org.type === typeFilter
     const matchesStatus = statusFilter === "all" || org.status === statusFilter
-    
+
     return matchesSearch && matchesType && matchesStatus
   })
 
@@ -197,10 +197,10 @@ export function OrganizationManagement() {
       suspended: { variant: "destructive" as const, icon: Pause },
       pending: { variant: "secondary" as const, icon: AlertTriangle }
     }
-    
+
     const config = variants[status as keyof typeof variants]
     const Icon = config?.icon || CheckCircle
-    
+
     return (
       <Badge variant={config?.variant || "secondary"} className="flex items-center gap-1">
         <Icon className="h-3 w-3" />
@@ -212,10 +212,11 @@ export function OrganizationManagement() {
   const getSubscriptionBadge = (plan: string) => {
     const colors = {
       basic: "bg-blue-100 text-blue-800",
+      plus: "bg-green-100 text-green-800",
       premium: "bg-purple-100 text-purple-800",
       enterprise: "bg-gold-100 text-gold-800"
     }
-    
+
     return (
       <Badge className={colors[plan as keyof typeof colors] || colors.basic}>
         {plan.toUpperCase()}
@@ -252,7 +253,7 @@ export function OrganizationManagement() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token} `,
         },
         body: JSON.stringify({
           name: newName,
@@ -290,7 +291,7 @@ export function OrganizationManagement() {
       } else if (newEmail) {
         description = `✅ Existing user ${newEmail} assigned to organization`
       }
-      
+
       // Add subdomain info
       if (data.subdomain) {
         description += description ? `\n🌐 Subdomain: ${data.subdomain}.consularly.com` : `🌐 Subdomain: ${data.subdomain}.consularly.com`
@@ -298,19 +299,19 @@ export function OrganizationManagement() {
           description += ' (Active)'
         }
       }
-      
+
       // Add email status
       if (data.emailSent) {
         description += description ? '\n📧 Welcome email sent' : '📧 Welcome email sent'
       } else if (data.emailError) {
-        description += description ? `\n⚠️ Email failed: ${data.emailError}` : `⚠️ Email failed: ${data.emailError}`
+        description += description ? `\n⚠️ Email failed: ${data.emailError} ` : `⚠️ Email failed: ${data.emailError} `
       }
 
-      toast.success('Organization created successfully', { 
+      toast.success('Organization created successfully', {
         description: description || 'Organization is ready to use',
         duration: 8000, // Longer duration so user can read the reset link message
       })
-      
+
       setIsCreateDialogOpen(false)
       setNewName(''); setNewEmail(''); setNewContactPerson(''); setNewPhone(''); setNewType(''); setNewPlan(''); setNewQuota('')
     } catch (e: any) {
@@ -343,11 +344,11 @@ export function OrganizationManagement() {
       const token = await auth.currentUser?.getIdToken()
       if (!token) throw new Error('Not authenticated')
 
-      const res = await fetch(`/api/admin/organizations/${editingOrg.id}`, {
+      const res = await fetch(`/ api / admin / organizations / ${editingOrg.id} `, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token} `,
         },
         body: JSON.stringify({
           quotaLimit: Number(editQuota),
@@ -384,10 +385,10 @@ export function OrganizationManagement() {
       const token = await auth.currentUser?.getIdToken()
       if (!token) throw new Error('Not authenticated')
 
-      const res = await fetch(`/api/admin/organizations/${deletingOrg.id}`, {
+      const res = await fetch(`/ api / admin / organizations / ${deletingOrg.id} `, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token} `,
         },
       })
       const data = await res.json()
@@ -497,14 +498,22 @@ export function OrganizationManagement() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Subscription Plan</label>
-                    <Select value={newPlan} onValueChange={setNewPlan}>
+                    <Select value={newPlan} onValueChange={(value) => {
+                      setNewPlan(value)
+                      // Auto-fill quota based on plan
+                      if (value === 'basic') setNewQuota('10')
+                      else if (value === 'plus') setNewQuota('25')
+                      else if (value === 'premium') setNewQuota('50')
+                      else if (value === 'enterprise') setNewQuota('') // Clear for custom entry
+                    }}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select plan" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="basic">Basic (100 tests/month)</SelectItem>
-                        <SelectItem value="premium">Premium (500 tests/month)</SelectItem>
-                        <SelectItem value="enterprise">Enterprise (1000 tests/month)</SelectItem>
+                        <SelectItem value="basic">Basic (10 interviews/month)</SelectItem>
+                        <SelectItem value="plus">Plus (25 interviews/month)</SelectItem>
+                        <SelectItem value="premium">Premium (50 interviews/month)</SelectItem>
+                        <SelectItem value="enterprise">Enterprise (Custom quota)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -579,7 +588,7 @@ export function OrganizationManagement() {
               <TableBody>
                 {filteredOrganizations.map((org) => {
                   const quotaPercentage = org.monthlyQuota > 0 ? (org.usedQuota / org.monthlyQuota) * 100 : 0
-                  
+
                   return (
                     <TableRow key={org.id}>
                       <TableCell>
@@ -643,10 +652,10 @@ export function OrganizationManagement() {
                           <Button variant="ghost" size="sm" onClick={() => openEditDialog(org)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="text-red-600" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600"
                             onClick={() => openDeleteDialog(org)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -679,7 +688,7 @@ export function OrganizationManagement() {
             <DialogTitle>Edit Organization</DialogTitle>
             <DialogDescription>Update organization information, quota, and subdomain</DialogDescription>
           </DialogHeader>
-          
+
           <Tabs defaultValue="general" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="general">General Settings</TabsTrigger>
@@ -688,73 +697,81 @@ export function OrganizationManagement() {
                 Subdomain
               </TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="general" className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Organization Name</label>
-              <Input placeholder="Enter organization name" value={editName} onChange={(e) => setEditName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <Input type="email" placeholder="Enter email address" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} disabled />
-              <p className="text-xs text-muted-foreground">Email cannot be changed</p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Contact Person</label>
-              <Input placeholder="Enter contact person name" value={editContactPerson} onChange={(e) => setEditContactPerson(e.target.value)} disabled />
-              <p className="text-xs text-muted-foreground">Contact info cannot be changed via edit</p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Phone</label>
-              <Input placeholder="Enter phone number" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} disabled />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Organization Type</label>
-              <Select value={editType} onValueChange={setEditType} disabled>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="visa_consultancy">Visa Consultancy</SelectItem>
-                  <SelectItem value="educational">Educational Institution</SelectItem>
-                  <SelectItem value="corporate">Corporate Training</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Type cannot be changed</p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select value={editStatus} onValueChange={setEditStatus} disabled>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="suspended">Suspended</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Use separate API for status changes</p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Subscription Plan</label>
-              <Select value={editPlan} onValueChange={setEditPlan}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select plan" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="basic">Basic (100 tests/month)</SelectItem>
-                  <SelectItem value="premium">Premium (500 tests/month)</SelectItem>
-                  <SelectItem value="enterprise">Enterprise (1000 tests/month)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Monthly Test Quota</label>
-              <Input type="number" placeholder="Enter monthly quota" value={editQuota} onChange={(e) => setEditQuota(e.target.value)} />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Organization Name</label>
+                  <Input placeholder="Enter organization name" value={editName} onChange={(e) => setEditName(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Email</label>
+                  <Input type="email" placeholder="Enter email address" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} disabled />
+                  <p className="text-xs text-muted-foreground">Email cannot be changed</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Contact Person</label>
+                  <Input placeholder="Enter contact person name" value={editContactPerson} onChange={(e) => setEditContactPerson(e.target.value)} disabled />
+                  <p className="text-xs text-muted-foreground">Contact info cannot be changed via edit</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Phone</label>
+                  <Input placeholder="Enter phone number" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} disabled />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Organization Type</label>
+                  <Select value={editType} onValueChange={setEditType} disabled>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="visa_consultancy">Visa Consultancy</SelectItem>
+                      <SelectItem value="educational">Educational Institution</SelectItem>
+                      <SelectItem value="corporate">Corporate Training</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Type cannot be changed</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Status</label>
+                  <Select value={editStatus} onValueChange={setEditStatus} disabled>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="suspended">Suspended</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Use separate API for status changes</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Subscription Plan</label>
+                  <Select value={editPlan} onValueChange={(value) => {
+                    setEditPlan(value)
+                    // Auto-fill quota based on plan
+                    if (value === 'basic') setEditQuota('10')
+                    else if (value === 'plus') setEditQuota('25')
+                    else if (value === 'premium') setEditQuota('50')
+                    else if (value === 'enterprise') setEditQuota('') // Clear for custom entry
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select plan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="basic">Basic (10 interviews/month)</SelectItem>
+                      <SelectItem value="plus">Plus (25 interviews/month)</SelectItem>
+                      <SelectItem value="premium">Premium (50 interviews/month)</SelectItem>
+                      <SelectItem value="enterprise">Enterprise (Custom quota)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Monthly Test Quota</label>
+                  <Input type="number" placeholder="Enter monthly quota" value={editQuota} onChange={(e) => setEditQuota(e.target.value)} />
+                </div>
+              </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={editing}>
                   Cancel
@@ -764,7 +781,7 @@ export function OrganizationManagement() {
                 </Button>
               </div>
             </TabsContent>
-            
+
             <TabsContent value="subdomain" className="space-y-4">
               {editingOrg && (
                 <SubdomainManager

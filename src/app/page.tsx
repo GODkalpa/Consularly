@@ -4,9 +4,12 @@ import { Suspense, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import HeroSection from '@/components/hero-section'
 import { TestimonialsSection } from '@/components/testimonials-section'
-import { Pricing } from '@/components/ui/pricing-cards'
 import FeaturesSection from '@/components/ui/demo'
-import ScrollAdventure from '@/components/ui/animated-scroll'
+import B2BHeroSection from '@/components/ui/b2b-hero-section'
+import WhitelabelSection from '@/components/ui/whitelabel-section'
+import CtaSection from '@/components/ui/cta-section'
+
+
 import { useAuth } from '@/contexts/AuthContext'
 import dynamic from 'next/dynamic'
 
@@ -59,17 +62,17 @@ function HomeContent() {
             if (!response.ok) {
               const result = await response.json()
               console.error('[Home] Session validation failed:', result)
-              
+
               // Sign out the user - they'll stay on the subdomain landing page
               const { signOut } = await import('firebase/auth')
               const { auth } = await import('@/lib/firebase')
               await signOut(auth)
-              
+
               // Don't redirect - the subdomain landing page will show the login form
               // Just return and let the user see the landing page
               return
             }
-            
+
             console.log('[Home] Session validated, proceeding with redirect')
           } catch (error) {
             console.error('[Home] Session validation error:', error)
@@ -106,15 +109,21 @@ function HomeContent() {
       <section id="features">
         <FeaturesSection />
       </section>
-      <section id="scroll-adventure" className="md:-my-16">
-        <ScrollAdventure />
+
+      <section id="b2b" className="my-6 sm:my-8">
+        <B2BHeroSection />
       </section>
+
+      <section id="whitelabel" className="my-6 sm:my-8">
+        <WhitelabelSection />
+      </section>
+
       <section id="testimonials">
         <TestimonialsSection />
       </section>
-      <div className="my-6 sm:my-8" />
-      <section id="pricing">
-        <Pricing />
+
+      <section id="cta" className="mt-6 sm:mt-8 mb-0">
+        <CtaSection />
       </section>
     </>
   )

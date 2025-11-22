@@ -14,7 +14,7 @@ const testimonials = [
   },
   {
     name: "Rajesh Thapa",
-    location: "Pokhara", 
+    location: "Pokhara",
     university: "Stanford University",
     avatar: "RT",
     rating: 5,
@@ -94,14 +94,14 @@ export function TestimonialsSection() {
   return (
     <section className="bg-background relative">
       <div className="container z-10 mx-auto px-4 sm:px-6 py-8 sm:py-12 md:py-16">
-        <div className="flex flex-col items-center justify-center max-w-[540px] mx-auto text-center">
+        <div className="flex flex-col items-center justify-center max-w-4xl mx-auto text-center">
           <div className="flex justify-center">
             <Badge variant="outline" className="border py-1 px-3 sm:px-4 rounded-lg text-xs sm:text-sm">Testimonials</Badge>
           </div>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-[-0.015em] mt-4 sm:mt-5 px-4">
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight mt-4 sm:mt-5 px-4">
             What our users say
           </h2>
-          <p className="text-center mt-3 sm:mt-5 text-muted-foreground text-sm sm:text-base leading-[1.55] px-4">
+          <p className="text-center mt-3 sm:mt-5 text-muted-foreground text-lg sm:text-xl md:text-2xl leading-relaxed px-4">
             See what our customers have to say about us.
           </p>
         </div>

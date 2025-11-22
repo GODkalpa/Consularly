@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { 
-  ArrowRight, 
-  Check, 
-  Sparkles, 
-  Clock, 
+import {
+  ArrowRight,
+  Check,
+  Sparkles,
+  Clock,
   Shield,
   Zap,
   Star,
@@ -31,7 +31,7 @@ export function CTASection() {
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:14px_24px]"></div>
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-[hsl(var(--primary)/0.2)] rounded-full blur-3xl"></div>
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[hsl(var(--primary)/0.15)] rounded-full blur-3xl"></div>
-      
+
       <div className="container mx-auto max-w-6xl relative z-10">
         {/* Section Header */}
         <div className="text-center mb-16">
@@ -39,12 +39,12 @@ export function CTASection() {
             <Gift className="w-4 h-4 mr-2" />
             Limited Time Offer
           </Badge>
-          <h2 className="text-4xl md:text-6xl font-bold mb-6">
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 tracking-tight">
             Start Your Journey to <br />
             <span className="text-accent">Visa Success</span>
           </h2>
-          <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed">
-            Join thousands of successful students who trusted Consularly for their visa interview preparation. 
+          <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed">
+            Join thousands of successful students who trusted Consularly for their visa interview preparation.
             Your dream university is just one successful interview away.
           </p>
         </div>
@@ -71,7 +71,7 @@ export function CTASection() {
               </div>
               <p className="text-muted-foreground">Everything you need to ace your visa interview</p>
             </CardHeader>
-            
+
             <CardContent className="space-y-6">
               {/* Features List */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -98,14 +98,14 @@ export function CTASection() {
 
               {/* CTA Buttons */}
               <div className="space-y-4 pt-6">
-                <Button 
-                  size="lg" 
+                <Button
+                  size="lg"
                   className="w-full py-6 text-xl font-bold shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105"
                 >
                   Start Your Free Trial
                   <ArrowRight className="ml-3 w-6 h-6" />
                 </Button>
-                
+
                 <p className="text-center text-sm text-foreground/70">
                   7-day free trial • No credit card required • Cancel anytime
                 </p>
@@ -136,19 +136,19 @@ export function CTASection() {
             Still have questions?
           </h3>
           <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Our team is here to help you succeed. Get in touch with any questions about the platform 
+            Our team is here to help you succeed. Get in touch with any questions about the platform
             or your visa interview preparation.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="lg"
               className="px-8 py-4 bg-transparent border-2 border-foreground/30 text-foreground hover:bg-foreground/10 hover:border-foreground/50 transition-all"
             >
               Schedule a Demo Call
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="lg"
               className="px-8 py-4 bg-transparent border-2 border-foreground/30 text-foreground hover:bg-foreground/10 hover:border-foreground/50 transition-all"
             >
