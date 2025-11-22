@@ -40,10 +40,10 @@ export const RESERVED_SUBDOMAINS = [
 export function extractSubdomain(hostname: string): string | null {
   // Remove port if present
   const hostWithoutPort = hostname.split(':')[0];
-  
+
   // Get base domain from environment or default
   const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
-  
+
   // Handle localhost development
   if (hostWithoutPort.includes('localhost')) {
     const parts = hostWithoutPort.split('.');
@@ -54,18 +54,25 @@ export function extractSubdomain(hostname: string): string | null {
     // Just "localhost" - no subdomain
     return null;
   }
-  
+
+  // IMPORTANT: Only extract subdomain if hostname actually ends with base domain
+  // This prevents treating deployment URLs (like myapp.vercel.app) as subdomains
+  if (!hostWithoutPort.endsWith(baseDomain)) {
+    console.log(`[extractSubdomain] Hostname ${hostWithoutPort} does not end with base domain ${baseDomain}, treating as main portal`);
+    return null;
+  }
+
   // Handle production domain
   const parts = hostWithoutPort.split('.');
   const baseParts = baseDomain.split('.');
-  
+
   // If hostname has more parts than base domain, extract subdomain
   if (parts.length > baseParts.length) {
     // Get all parts before the base domain
     const subdomainParts = parts.slice(0, parts.length - baseParts.length);
     return subdomainParts.join('.');
   }
-  
+
   // No subdomain
   return null;
 }
@@ -87,30 +94,30 @@ export function validateSubdomainFormat(subdomain: string): {
   if (subdomain.length < 3) {
     return { valid: false, error: 'Subdomain must be at least 3 characters' };
   }
-  
+
   if (subdomain.length > 63) {
     return { valid: false, error: 'Subdomain must be at most 63 characters' };
   }
-  
+
   // Check format (lowercase alphanumeric + hyphens)
   const formatRegex = /^[a-z0-9-]+$/;
   if (!formatRegex.test(subdomain)) {
-    return { 
-      valid: false, 
-      error: 'Subdomain can only contain lowercase letters, numbers, and hyphens' 
+    return {
+      valid: false,
+      error: 'Subdomain can only contain lowercase letters, numbers, and hyphens'
     };
   }
-  
+
   // Cannot start or end with hyphen
   if (subdomain.startsWith('-') || subdomain.endsWith('-')) {
     return { valid: false, error: 'Subdomain cannot start or end with a hyphen' };
   }
-  
+
   // Check reserved subdomains
   if (RESERVED_SUBDOMAINS.includes(subdomain)) {
     return { valid: false, error: 'This subdomain is reserved and cannot be used' };
   }
-  
+
   return { valid: true };
 }
 
@@ -127,17 +134,17 @@ export function isReservedSubdomain(subdomain: string): boolean {
  */
 export function isMainPortal(hostname: string): boolean {
   const subdomain = extractSubdomain(hostname);
-  
+
   // No subdomain = main portal
   if (!subdomain) {
     return true;
   }
-  
+
   // www = main portal
   if (subdomain === 'www') {
     return true;
   }
-  
+
   return false;
 }
 
@@ -162,10 +169,10 @@ export function buildSubdomainUrl(subdomain: string, path: string = '/'): string
   const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
   const port = process.env.NODE_ENV === 'production' ? '' : ':3000';
-  
+
   if (process.env.NODE_ENV === 'development') {
     return `${protocol}://${subdomain}.localhost${port}${path}`;
   }
-  
+
   return `${protocol}://${subdomain}.${baseDomain}${path}`;
 }
