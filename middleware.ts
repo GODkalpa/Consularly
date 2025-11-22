@@ -11,6 +11,47 @@ import {
   logSubdomainAccess
 } from '@/lib/subdomain-middleware'
 
+// Helper function to handle authentication routes
+function handleAuthRoutes(req: NextRequest, pathname: string): NextResponse {
+  // Handle admin and org routes
+  if (pathname.startsWith('/admin') || pathname.startsWith('/org')) {
+    const sessionFlag = req.cookies.get('s')?.value
+    console.log(`[Middleware] ${pathname} - Session cookie:`, sessionFlag)
+    // Redirect if cookie is missing or explicitly set to '0'
+    if (!sessionFlag || sessionFlag === '0') {
+      console.log(`[Middleware] Redirecting ${pathname} to /signin (no valid session)`)
+      const url = req.nextUrl.clone()
+      url.pathname = '/signin'
+      url.searchParams.set('next', pathname)
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // Handle student routes
+  if (pathname.startsWith('/student')) {
+    // Allow public student routes
+    const publicStudentRoutes = ['/student/login', '/student/setup']
+    const isPublicRoute = publicStudentRoutes.some(route => pathname.startsWith(route))
+
+    if (!isPublicRoute) {
+      // Protected student routes - check if user is authenticated
+      const sessionFlag = req.cookies.get('s')?.value
+      console.log(`[Middleware] ${pathname} - Session cookie:`, sessionFlag)
+      // Redirect if cookie is missing or explicitly set to '0'
+      if (!sessionFlag || sessionFlag === '0') {
+        console.log(`[Middleware] Redirecting ${pathname} to /student/login (no valid session)`)
+        const url = req.nextUrl.clone()
+        url.pathname = '/student/login'
+        url.searchParams.set('returnUrl', pathname)
+        return NextResponse.redirect(url)
+      }
+      console.log(`[Middleware] Allowing access to ${pathname} (valid session)`)
+    }
+  }
+
+  return NextResponse.next()
+}
+
 export async function middleware(req: NextRequest) {
   try {
     const { pathname } = req.nextUrl
@@ -26,8 +67,14 @@ export async function middleware(req: NextRequest) {
       return NextResponse.next()
     }
 
-    // Check if subdomain routing is enabled
+    // Check if subdomain routing is enabled - if not, skip all subdomain logic
     const subdomainRoutingEnabled = process.env.NEXT_PUBLIC_ENABLE_SUBDOMAIN_ROUTING === 'true'
+    
+    if (!subdomainRoutingEnabled) {
+      console.log(`[Middleware] Subdomain routing disabled, skipping`)
+      // Skip to auth logic at the bottom
+      return handleAuthRoutes(req, pathname)
+    }
 
     // Extract subdomain from hostname
     const subdomain = extractSubdomain(hostname)
@@ -35,18 +82,20 @@ export async function middleware(req: NextRequest) {
 
     // Log in production to help debug
     if (process.env.NODE_ENV === 'production') {
-      console.log(`[Middleware PROD] Hostname: ${hostname}, Subdomain: ${subdomain}, IsMainPortal: ${isMain}, SubdomainRouting: ${subdomainRoutingEnabled}, Path: ${pathname}`)
+      console.log(`[Middleware PROD] Hostname: ${hostname}, Subdomain: ${subdomain}, IsMainPortal: ${isMain}, Path: ${pathname}`)
     } else {
-      console.log(`[Middleware] Hostname: ${hostname}, Subdomain: ${subdomain}, IsMainPortal: ${isMain}, SubdomainRouting: ${subdomainRoutingEnabled}, Path: ${pathname}`)
+      console.log(`[Middleware] Hostname: ${hostname}, Subdomain: ${subdomain}, IsMainPortal: ${isMain}, Path: ${pathname}`)
     }
 
     // Skip subdomain logic entirely if on main portal
     if (isMain || !subdomain) {
       console.log(`[Middleware] Main portal detected, skipping subdomain logic`)
       // Continue with normal auth logic below
-    } else if (subdomainRoutingEnabled && subdomain) {
-      // Handle subdomain routing if enabled
-      console.log(`[Middleware] Processing subdomain: ${subdomain}`)
+      return handleAuthRoutes(req, pathname)
+    }
+    
+    // Handle subdomain routing if enabled
+    console.log(`[Middleware] Processing subdomain: ${subdomain}`)
 
       try {
         // Check if subdomain is reserved
@@ -141,46 +190,6 @@ export async function middleware(req: NextRequest) {
         // This ensures the app remains accessible even if subdomain features fail
         return NextResponse.next()
       }
-    } // End of subdomain routing block
-
-    // Original authentication logic for main portal
-    // Handle admin and org routes
-    if (pathname.startsWith('/admin') || pathname.startsWith('/org')) {
-      const sessionFlag = req.cookies.get('s')?.value
-      console.log(`[Middleware] ${pathname} - Session cookie:`, sessionFlag)
-      // Redirect if cookie is missing or explicitly set to '0'
-      if (!sessionFlag || sessionFlag === '0') {
-        console.log(`[Middleware] Redirecting ${pathname} to /signin (no valid session)`)
-        const url = req.nextUrl.clone()
-        url.pathname = '/signin'
-        url.searchParams.set('next', pathname)
-        return NextResponse.redirect(url)
-      }
-    }
-
-    // Handle student routes
-    if (pathname.startsWith('/student')) {
-      // Allow public student routes
-      const publicStudentRoutes = ['/student/login', '/student/setup']
-      const isPublicRoute = publicStudentRoutes.some(route => pathname.startsWith(route))
-
-      if (!isPublicRoute) {
-        // Protected student routes - check if user is authenticated
-        const sessionFlag = req.cookies.get('s')?.value
-        console.log(`[Middleware] ${pathname} - Session cookie:`, sessionFlag)
-        // Redirect if cookie is missing or explicitly set to '0'
-        if (!sessionFlag || sessionFlag === '0') {
-          console.log(`[Middleware] Redirecting ${pathname} to /student/login (no valid session)`)
-          const url = req.nextUrl.clone()
-          url.pathname = '/student/login'
-          url.searchParams.set('returnUrl', pathname)
-          return NextResponse.redirect(url)
-        }
-        console.log(`[Middleware] Allowing access to ${pathname} (valid session)`)
-      }
-    }
-
-    return NextResponse.next()
   } catch (error) {
     // Catch-all error handler to prevent middleware from breaking the entire app
     console.error('[Middleware] Critical error:', error)
