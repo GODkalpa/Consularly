@@ -34,12 +34,19 @@ export async function getOrganizationBySubdomain(
     
     console.log(`[Subdomain Middleware] Querying Firestore for subdomain: ${subdomain}`);
     
-    const orgsSnapshot = await adminDb()
+    // Add timeout to prevent hanging
+    const queryPromise = adminDb()
       .collection('organizations')
       .where('subdomain', '==', subdomain)
       .where('subdomainEnabled', '==', true)
       .limit(1)
       .get();
+    
+    const timeoutPromise = new Promise<null>((_, reject) => 
+      setTimeout(() => reject(new Error('Firestore query timeout')), 3000)
+    );
+    
+    const orgsSnapshot = await Promise.race([queryPromise, timeoutPromise]) as FirebaseFirestore.QuerySnapshot;
 
     console.log(`[Subdomain Middleware] Query completed. Empty: ${orgsSnapshot.empty}, Size: ${orgsSnapshot.size}`);
 
@@ -118,8 +125,12 @@ export async function validateUserAccessToOrg(
   }
 
   try {
-    // Fetch user's organization from API
+    // Fetch user's organization from API with timeout
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+    
     const response = await fetch(`${baseUrl}/api/subdomain/validate-access`, {
       method: 'POST',
       headers: {
@@ -127,7 +138,10 @@ export async function validateUserAccessToOrg(
       },
       body: JSON.stringify({ userId, orgId }),
       cache: 'no-store',
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return false;

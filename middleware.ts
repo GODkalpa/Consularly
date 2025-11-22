@@ -20,7 +20,8 @@ export async function middleware(req: NextRequest) {
     if (
       pathname.startsWith('/_next') ||
       pathname.startsWith('/favicon.ico') ||
-      pathname.startsWith('/api/')
+      pathname.startsWith('/api/') ||
+      pathname.includes('.')  // Skip files with extensions (images, etc.)
     ) {
       return NextResponse.next()
     }
@@ -32,10 +33,19 @@ export async function middleware(req: NextRequest) {
     const subdomain = extractSubdomain(hostname)
     const isMain = isMainPortal(hostname)
 
-    console.log(`[Middleware] Hostname: ${hostname}, Subdomain: ${subdomain}, IsMainPortal: ${isMain}, SubdomainRouting: ${subdomainRoutingEnabled}, Path: ${pathname}`)
+    // Log in production to help debug
+    if (process.env.NODE_ENV === 'production') {
+      console.log(`[Middleware PROD] Hostname: ${hostname}, Subdomain: ${subdomain}, IsMainPortal: ${isMain}, SubdomainRouting: ${subdomainRoutingEnabled}, Path: ${pathname}`)
+    } else {
+      console.log(`[Middleware] Hostname: ${hostname}, Subdomain: ${subdomain}, IsMainPortal: ${isMain}, SubdomainRouting: ${subdomainRoutingEnabled}, Path: ${pathname}`)
+    }
 
-    // Handle subdomain routing if enabled
-    if (subdomainRoutingEnabled && subdomain && !isMain) {
+    // Skip subdomain logic entirely if on main portal
+    if (isMain || !subdomain) {
+      console.log(`[Middleware] Main portal detected, skipping subdomain logic`)
+      // Continue with normal auth logic below
+    } else if (subdomainRoutingEnabled && subdomain) {
+      // Handle subdomain routing if enabled
       console.log(`[Middleware] Processing subdomain: ${subdomain}`)
 
       try {
@@ -131,7 +141,7 @@ export async function middleware(req: NextRequest) {
         // This ensures the app remains accessible even if subdomain features fail
         return NextResponse.next()
       }
-    }
+    } // End of subdomain routing block
 
     // Original authentication logic for main portal
     // Handle admin and org routes
@@ -174,6 +184,17 @@ export async function middleware(req: NextRequest) {
   } catch (error) {
     // Catch-all error handler to prevent middleware from breaking the entire app
     console.error('[Middleware] Critical error:', error)
+    
+    // In production, log more details
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[Middleware PROD] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        hostname: req.headers.get('host'),
+        pathname: req.nextUrl.pathname
+      })
+    }
+    
     // Allow the request to continue even if middleware fails
     return NextResponse.next()
   }
