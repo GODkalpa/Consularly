@@ -28,20 +28,9 @@ function HomeContent() {
   const searchParams = useSearchParams()
   const hasRedirected = useRef(false)
 
-  // Check if we're on a subdomain - only on client side
-  const [isSubdomain, setIsSubdomain] = React.useState(false)
-  const [subdomain, setSubdomain] = React.useState('')
-
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname
-      const isSubdomainCheck = hostname.split('.').length > 2 && !hostname.startsWith('www.')
-      setIsSubdomain(isSubdomainCheck)
-      if (isSubdomainCheck) {
-        setSubdomain(hostname.split('.')[0])
-      }
-    }
-  }, [])
+  // Check if we're on a subdomain
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
+  const isSubdomain = hostname.split('.').length > 2 && !hostname.startsWith('www.')
 
   // Validate session for subdomain access before redirecting
   useEffect(() => {
@@ -105,7 +94,8 @@ function HomeContent() {
   }, [user, profileLoading, redirectToDashboard, searchParams, isSubdomain, router])
 
   // If on subdomain, show custom landing page
-  if (isSubdomain && subdomain) {
+  if (isSubdomain) {
+    const subdomain = hostname.split('.')[0]
     return <SubdomainLandingPage subdomain={subdomain} />
   }
 
