@@ -8,6 +8,7 @@ import { auth, firebaseEnabled } from "@/lib/firebase"
 import type { OrganizationWithId } from "@/types/firestore"
 import { fetchWithCache, cache } from "@/lib/cache"
 import { DynamicFavicon } from "@/components/branding/DynamicFavicon"
+import { BrandingImage } from "@/components/branding/BrandingImage"
 
 import {
   Sidebar,
@@ -170,6 +171,32 @@ function OrganizationDashboard() {
     return () => { mounted = false }
   }, [orgId])
 
+  // Listen for branding updates and refresh organization data
+  useEffect(() => {
+    const handleBrandingUpdate = (event: CustomEvent) => {
+      const updatedBranding = event.detail?.branding
+      if (updatedBranding && org) {
+        // Update the org state with new branding
+        setOrg((prevOrg) => {
+          if (!prevOrg) return prevOrg
+          return {
+            ...prevOrg,
+            settings: {
+              ...prevOrg.settings,
+              customBranding: updatedBranding,
+            },
+          }
+        })
+      }
+    }
+
+    window.addEventListener('brandingUpdated', handleBrandingUpdate as EventListener)
+
+    return () => {
+      window.removeEventListener('brandingUpdated', handleBrandingUpdate as EventListener)
+    }
+  }, [org])
+
   const renderOverview = () => {
     const quotaLimit = org?.quotaLimit || 0
     const quotaUsed = org?.quotaUsed || 0
@@ -202,7 +229,7 @@ function OrganizationDashboard() {
         <div className="flex items-center gap-4">
           {brandLogo && (
             <div className="relative h-16 w-16 flex items-center justify-center overflow-hidden shrink-0">
-              <Image src={brandLogo} alt={brandName} fill sizes="64px" className="object-contain" />
+              <BrandingImage src={brandLogo} alt={brandName} fill sizes="64px" className="object-contain" />
             </div>
           )}
           <div>
@@ -493,7 +520,7 @@ function OrganizationDashboard() {
                   <div className="flex items-center gap-3">
                     <div className="relative h-14 w-14 rounded-lg bg-white border shadow-sm overflow-hidden flex items-center justify-center shrink-0">
                       {brandLogo ? (
-                        <Image src={brandLogo} alt={brandName} fill sizes="56px" className="object-contain p-1.5" />
+                        <BrandingImage src={brandLogo} alt={brandName} fill sizes="56px" className="object-contain p-1.5" />
                       ) : (
                         <span className="font-semibold text-lg" style={{ color: brandColor }}>
                           {brandName.slice(0,2).toUpperCase()}
@@ -736,7 +763,7 @@ function OrganizationDashboard() {
           <div className="flex items-center gap-3">
             <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 shadow-sm border border-primary/20 shrink-0">
               {brandLogo ? (
-                <Image src={brandLogo} alt={brandName} fill sizes="48px" className="object-contain" />
+                <BrandingImage src={brandLogo} alt={brandName} fill sizes="48px" className="object-contain" />
               ) : (
                 <span className="font-bold text-lg" style={{ color: brandColor }}>
                   {brandName.slice(0,2).toUpperCase()}

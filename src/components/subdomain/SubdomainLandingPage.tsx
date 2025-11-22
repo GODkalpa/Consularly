@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { auth } from '@/lib/firebase'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { DynamicFavicon } from '@/components/branding/DynamicFavicon'
+import { addCacheBuster } from '@/lib/favicon-utils'
 
 interface SubdomainLandingPageProps {
   subdomain: string
@@ -41,6 +42,25 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
     }
     fetchOrg()
   }, [subdomain])
+
+  // Listen for branding updates
+  useEffect(() => {
+    const handleBrandingUpdate = (event: CustomEvent) => {
+      const updatedBranding = event.detail?.branding
+      if (updatedBranding && org) {
+        setOrg((prevOrg: any) => ({
+          ...prevOrg,
+          branding: updatedBranding,
+        }))
+      }
+    }
+
+    window.addEventListener('brandingUpdated', handleBrandingUpdate as EventListener)
+
+    return () => {
+      window.removeEventListener('brandingUpdated', handleBrandingUpdate as EventListener)
+    }
+  }, [org])
 
   const checkIfStudent = async (email: string): Promise<boolean> => {
     try {
@@ -171,10 +191,10 @@ export default function SubdomainLandingPage({ subdomain }: SubdomainLandingPage
           </div>
 
           <div className="relative z-10 flex flex-col items-center text-center">
-            {org.logo ? (
+            {(org.logo || org.branding?.logoUrl) ? (
               <div className="w-20 h-20 sm:w-28 sm:h-28 md:w-32 md:h-32 bg-white/10 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 mb-4 sm:mb-6 md:mb-8 shadow-lg border border-white/20 flex items-center justify-center">
                 <img
-                  src={org.logo}
+                  src={addCacheBuster(org.branding?.logoUrl || org.logo)}
                   alt={org.name}
                   className="max-w-full max-h-full object-contain brightness-0 invert"
                 />

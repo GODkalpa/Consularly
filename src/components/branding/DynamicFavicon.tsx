@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect } from 'react'
+import { updateFavicon, resetFavicon } from '@/lib/favicon-utils'
+import { onBrandingUpdate } from '@/lib/branding-events'
 
 interface DynamicFaviconProps {
   faviconUrl?: string
@@ -9,37 +11,27 @@ interface DynamicFaviconProps {
 /**
  * Client component that dynamically updates the favicon
  * based on organization branding
+ * 
+ * Handles browser caching and ensures reliable favicon updates
  */
 export function DynamicFavicon({ faviconUrl }: DynamicFaviconProps) {
   useEffect(() => {
-    if (!faviconUrl) return
-
-    // Find existing favicon links
-    const existingLinks = document.querySelectorAll('link[rel*="icon"]')
-    
-    // Remove existing favicon links
-    existingLinks.forEach(link => link.remove())
-
-    // Create new favicon link
-    const link = document.createElement('link')
-    link.rel = 'icon'
-    link.type = 'image/x-icon'
-    link.href = faviconUrl
-    
-    // Append to head
-    document.head.appendChild(link)
-
-    // Also create apple-touch-icon for better mobile support
-    const appleLink = document.createElement('link')
-    appleLink.rel = 'apple-touch-icon'
-    appleLink.href = faviconUrl
-    document.head.appendChild(appleLink)
-
-    // Cleanup function
-    return () => {
-      link.remove()
-      appleLink.remove()
+    if (!faviconUrl) {
+      // Reset to default if no favicon provided
+      resetFavicon()
+      return
     }
+
+    // Update favicon with cache busting
+    updateFavicon(faviconUrl)
+
+    // Listen for branding update events
+    return onBrandingUpdate((detail) => {
+      const newFavicon = detail.branding?.favicon
+      if (newFavicon && newFavicon !== faviconUrl) {
+        updateFavicon(newFavicon)
+      }
+    })
   }, [faviconUrl])
 
   return null

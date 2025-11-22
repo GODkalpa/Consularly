@@ -17,34 +17,8 @@ import { toast } from "sonner"
 import type { OrganizationBranding } from "@/types/firestore"
 import { brandingCache } from "@/lib/branding/branding-cache"
 import { useOrgContext } from "@/hooks/useOrgContext"
-
-/**
- * Updates the page favicon dynamically
- */
-function updateFavicon(faviconUrl: string) {
-  if (typeof window === 'undefined') return;
-  
-  // Find existing favicon links
-  const existingLinks = document.querySelectorAll('link[rel*="icon"]');
-  
-  // Remove existing favicon links
-  existingLinks.forEach(link => link.remove());
-
-  // Create new favicon link
-  const link = document.createElement('link');
-  link.rel = 'icon';
-  link.type = 'image/x-icon';
-  link.href = faviconUrl;
-  
-  // Append to head
-  document.head.appendChild(link);
-
-  // Also create apple-touch-icon for better mobile support
-  const appleLink = document.createElement('link');
-  appleLink.rel = 'apple-touch-icon';
-  appleLink.href = faviconUrl;
-  document.head.appendChild(appleLink);
-}
+import { updateFavicon } from "@/lib/favicon-utils"
+import { dispatchBrandingUpdate } from "@/lib/branding-events"
 
 interface OrgBrandingSettingsProps {
   organizationPlan?: 'basic' | 'premium' | 'enterprise';
@@ -65,9 +39,12 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
   useEffect(() => {
     if (initialBranding) {
       setBranding(initialBranding)
-      // Apply favicon if present
+      // Apply favicon if present with immediate update
       if (initialBranding.favicon) {
-        updateFavicon(initialBranding.favicon)
+        // Use a small delay to ensure DOM is ready
+        setTimeout(() => {
+          updateFavicon(initialBranding.favicon!)
+        }, 50)
       }
     }
   }, [initialBranding])
@@ -91,7 +68,26 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
 
       setBranding((prev) => ({ ...prev, [field]: result.url }))
       setHasChanges(true)
-      toast.success('Image uploaded successfully')
+      
+      // Dispatch event for immediate preview update
+      const updatedBranding = { ...branding, [field]: result.url }
+      dispatchBrandingUpdate(updatedBranding, field)
+      
+      // If it's a favicon, update it immediately for preview
+      if (field === 'favicon') {
+        updateFavicon(result.url)
+        toast.success('Favicon uploaded successfully', { 
+          description: 'Preview updated. Click "Save Changes" to persist.' 
+        })
+      } else if (field === 'logoUrl') {
+        toast.success('Logo uploaded successfully', { 
+          description: 'Preview updated. Click "Save Changes" to persist.' 
+        })
+      } else {
+        toast.success('Image uploaded successfully', { 
+          description: 'Preview updated. Click "Save Changes" to persist.' 
+        })
+      }
     } catch (error: any) {
       toast.error('Upload failed', { description: error.message })
     } finally {
@@ -163,9 +159,7 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
       }
       
       // Trigger a custom event to notify other components about branding update
-      window.dispatchEvent(new CustomEvent('brandingUpdated', { 
-        detail: { branding } 
-      }))
+      dispatchBrandingUpdate(branding)
     } catch (error: any) {
       toast.error('Failed to save branding', { description: error.message })
     } finally {
@@ -337,6 +331,12 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
                   Upload Favicon
                 </Button>
               </div>
+              {branding.favicon && (
+                <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-md">
+                  <AlertCircle className="h-3 w-3 inline mr-1" />
+                  Note: Browsers cache favicons aggressively. If you don&apos;t see changes immediately, try hard refreshing (Ctrl+Shift+R or Cmd+Shift+R) or clearing your browser cache.
+                </div>
+              )}
             </CardContent>
           </Card>
 
