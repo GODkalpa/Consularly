@@ -55,13 +55,6 @@ export function extractSubdomain(hostname: string): string | null {
     return null;
   }
 
-  // IMPORTANT: Only extract subdomain if hostname actually ends with base domain
-  // This prevents treating deployment URLs (like myapp.vercel.app) as subdomains
-  if (!hostWithoutPort.endsWith(baseDomain)) {
-    console.log(`[extractSubdomain] Hostname ${hostWithoutPort} does not end with base domain ${baseDomain}, treating as main portal`);
-    return null;
-  }
-
   // Handle production domain
   const parts = hostWithoutPort.split('.');
   const baseParts = baseDomain.split('.');
