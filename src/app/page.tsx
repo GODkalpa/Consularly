@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useRef } from 'react'
+import React, { Suspense, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import HeroSection from '@/components/hero-section'
 import { TestimonialsSection } from '@/components/testimonials-section'
@@ -28,9 +28,20 @@ function HomeContent() {
   const searchParams = useSearchParams()
   const hasRedirected = useRef(false)
 
-  // Check if we're on a subdomain
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
-  const isSubdomain = hostname.split('.').length > 2 && !hostname.startsWith('www.')
+  // Check if we're on a subdomain - only on client side
+  const [isSubdomain, setIsSubdomain] = React.useState(false)
+  const [subdomain, setSubdomain] = React.useState('')
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname
+      const isSubdomainCheck = hostname.split('.').length > 2 && !hostname.startsWith('www.')
+      setIsSubdomain(isSubdomainCheck)
+      if (isSubdomainCheck) {
+        setSubdomain(hostname.split('.')[0])
+      }
+    }
+  }, [])
 
   // Validate session for subdomain access before redirecting
   useEffect(() => {
@@ -94,8 +105,7 @@ function HomeContent() {
   }, [user, profileLoading, redirectToDashboard, searchParams, isSubdomain, router])
 
   // If on subdomain, show custom landing page
-  if (isSubdomain) {
-    const subdomain = hostname.split('.')[0]
+  if (isSubdomain && subdomain) {
     return <SubdomainLandingPage subdomain={subdomain} />
   }
 
