@@ -4,22 +4,5 @@
       "memory": 1024,
       "maxDuration": 10
     }
-  },
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/$1"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-DNS-Prefetch-Control",
-          "value": "on"
-        }
-      ]
-    }
-  ]
+  }
 }
