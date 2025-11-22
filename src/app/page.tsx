@@ -6,9 +6,6 @@ import HeroSection from '@/components/hero-section'
 import { TestimonialsSection } from '@/components/testimonials-section'
 import { Pricing } from '@/components/ui/pricing-cards'
 import FeaturesSection from '@/components/ui/demo'
-import B2BHeroSection from '@/components/ui/b2b-hero-section'
-import WhitelabelSection from '@/components/ui/whitelabel-section'
-import CtaSection from '@/components/ui/cta-section'
 import { useAuth } from '@/contexts/AuthContext'
 import dynamic from 'next/dynamic'
 
@@ -19,6 +16,18 @@ const SubdomainLandingPage = dynamic(() => import('@/components/subdomain/Subdom
     </div>
   ),
   ssr: false
+})
+
+const B2BHeroSection = dynamic(() => import('@/components/ui/b2b-hero-section'), {
+  ssr: true
+})
+
+const WhitelabelSection = dynamic(() => import('@/components/ui/whitelabel-section'), {
+  ssr: true
+})
+
+const CtaSection = dynamic(() => import('@/components/ui/cta-section'), {
+  ssr: true
 })
 
 function HomeContent() {
