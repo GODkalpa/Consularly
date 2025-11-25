@@ -28,7 +28,7 @@ export default function EmailAliasManager({ orgId, orgName }: EmailAliasManagerP
       setLoading(true)
       const response = await fetch(`/api/admin/organizations/${orgId}/email-alias`)
       if (!response.ok) throw new Error('Failed to fetch email alias')
-      
+
       const data = await response.json()
       setEmailAlias(data.emailAlias || '')
       setManualAlias(data.emailAlias || '')
@@ -278,13 +278,6 @@ export default function EmailAliasManager({ orgId, orgName }: EmailAliasManagerP
           </div>
         )}
 
-        {/* Info Box */}
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-900">
-            <strong>Note:</strong> After creating an email alias, you must also create it in your Hostinger email panel.
-            All emails sent to students will use this alias as the sender address.
-          </p>
-        </div>
       </div>
     </div>
   )

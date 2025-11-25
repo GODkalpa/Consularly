@@ -541,9 +541,10 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
         {/* Advanced */}
         <TabsContent value="advanced" className="space-y-6">
           {/* Email Alias Manager */}
-          {context?.orgId && context?.orgName && (
-            <EmailAliasManager orgId={context.orgId} orgName={context.orgName} />
-          )}
+          <EmailAliasManager
+            orgId={context?.orgId || ''}
+            orgName={context?.orgName || 'Organization'}
+          />
 
           <Card>
             <CardHeader>
