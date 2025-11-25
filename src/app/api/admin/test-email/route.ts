@@ -12,9 +12,9 @@ import type { OrganizationBranding } from '@/types/firestore'
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify admin authentication
+    // Verify authentication
     const authResult = await verifyAuth(request)
-    if (!authResult.authenticated || authResult.user?.role !== 'admin') {
+    if (!authResult.authenticated) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -28,6 +28,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields: orgId and recipientEmail' },
         { status: 400 }
+      )
+    }
+
+    // Allow platform admins OR users from the same organization
+    const isAdmin = authResult.user?.role === 'admin'
+    const isOrgUser = authResult.user?.orgId === orgId
+    
+    if (!isAdmin && !isOrgUser) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - You can only test emails for your own organization' },
+        { status: 403 }
       )
     }
 
