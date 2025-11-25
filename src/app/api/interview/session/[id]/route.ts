@@ -80,7 +80,7 @@ export async function GET(
         .get();
       
       if (!studentQuery.empty) {
-        isStudent = true;
+        // Student found - they are both a student and an org member
         isOrgMember = true;
       }
     }

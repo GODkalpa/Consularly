@@ -155,12 +155,16 @@ export class LLMQuestionService {
         
         for (const h of conversationHistory) {
           // CRITICAL FIX: If questionId is stored in history, use it directly
+          // This handles both bank questions (UK_001, USA_001) and follow-ups (FOLLOWUP_*)
           if ((h as any).questionId) {
             const qid = (h as any).questionId;
             if (!seen.has(qid)) {
               askedIds.push(qid);
               seen.add(qid);
-              console.log(`[Question Service] ✅ Direct ID from history: ${qid}`);
+              // Only log bank question IDs, not follow-ups (reduces noise)
+              if (!qid.startsWith('FOLLOWUP_') && !qid.startsWith('UNKNOWN_') && !qid.startsWith('GENERIC_FB_') && !qid.startsWith('USA_FB_') && !qid.startsWith('F1_FALLBACK_')) {
+                console.log(`[Question Service] ✅ Direct ID from history: ${qid}`);
+              }
             }
             continue;
           }
@@ -182,8 +186,10 @@ export class LLMQuestionService {
             if (best && best.score >= 0.8) {
               match = bank.questions.find(q => q.id === best!.id) as any
               console.log(`[Question Service] Soft-matched history question to ${match?.id} (score: ${best.score.toFixed(2)})`);
-            } else if (best) {
-              console.log(`[Question Service] ⚠️ No match for history question (best score: ${best.score.toFixed(2)}, threshold: 0.8): "${h.question.substring(0, 60)}..."`);
+            } else if (best && best.score >= 0.5) {
+              // CRITICAL FIX: Log but don't fail for follow-up questions (they won't match bank)
+              // Follow-ups are dynamically generated and won't be in the bank
+              console.log(`[Question Service] ℹ️ Question not in bank (likely follow-up): "${h.question.substring(0, 60)}..." (best match: ${best.score.toFixed(2)})`);
             }
           } else {
             console.log(`[Question Service] Exact-matched history question to ${match.id}`);

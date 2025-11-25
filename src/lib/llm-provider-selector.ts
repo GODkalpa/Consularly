@@ -1,14 +1,13 @@
 /**
  * LLM Provider Selector
- * Routes LLM requests to appropriate providers based on interview route and use case
- * Supports: MegaLLM (primary) and Groq (fallback)
+ * Routes all LLM requests to CometAPI with Claude 4.5 Haiku
  */
 
 export type InterviewRoute = 'usa_f1' | 'uk_student' | 'france_ema' | 'france_icn';
 export type LLMUseCase = 'question_selection' | 'answer_scoring' | 'final_evaluation';
 
 export interface LLMProviderConfig {
-  provider: 'groq' | 'megallm';
+  provider: 'cometapi';
   model: string;
   apiKey: string;
   baseUrl: string;
@@ -24,91 +23,30 @@ interface LLMResponse {
 }
 
 /**
- * Select the appropriate LLM provider based on route and use case
+ * Select the LLM provider - always returns CometAPI config
  */
 export function selectLLMProvider(
   route: InterviewRoute,
   useCase: LLMUseCase
 ): LLMProviderConfig | null {
-  // Debug: Log available API keys on first call
+  const apiKey = process.env.COMETAPI_API_KEY;
+  
+  if (!apiKey) {
+    console.warn('[LLM Provider] COMETAPI_API_KEY not set - LLM features will use heuristic fallbacks');
+    return null;
+  }
+
+  // Log provider selection on first call per use case
   if (useCase === 'question_selection') {
-    const hasGroq = !!process.env.GROQ_API_KEY;
-    const hasMega = !!process.env.MEGALLM_API_KEY;
-    console.log(`[LLM Provider Debug] Available keys: MegaLLM=${hasMega}, Groq=${hasGroq}`);
+    console.log(`[LLM Provider] Using CometAPI with Claude 4.5 Haiku`);
   }
 
-  // PERFORMANCE OPTIMIZATION: Use Claude Haiku 4.5 for question selection (fast + smart)
-  // For other use cases, use Gemini 2.5 Flash (cheaper)
-  if (process.env.MEGALLM_API_KEY) {
-    // Question selection: Use Claude Haiku 4.5 (200-400ms, structured outputs)
-    if (useCase === 'question_selection') {
-      return {
-        provider: 'megallm',
-        model: process.env.MEGALLM_MODEL_QUESTIONS || process.env.MEGALLM_MODEL || 'moonshotai/kimi-k2-instruct-0905', // Fast + reliable structured outputs (MegaLLM model ID)
-        apiKey: process.env.MEGALLM_API_KEY,
-        baseUrl: process.env.MEGALLM_BASE_URL || 'https://ai.megallm.io/v1',
-      };
-    }
-    
-    // Scoring/Evaluation: Use Gemini 2.5 Flash (cheaper, still good quality)
-    return {
-      provider: 'megallm',
-      model: process.env.MEGALLM_MODEL || 'gemini-2.5-flash',
-      apiKey: process.env.MEGALLM_API_KEY,
-      baseUrl: process.env.MEGALLM_BASE_URL || 'https://ai.megallm.io/v1',
-    };
-  }
-
-  // Question Selection: Always use Groq Llama 3.1 8B (fast + cheap)
-  // PERFORMANCE: 8B instant model is 3-5x faster than 70B models
-  if (useCase === 'question_selection') {
-    if (process.env.GROQ_API_KEY) {
-      return {
-        provider: 'groq',
-        model: process.env.LLM_MODEL_QUESTIONS || 'llama-3.1-8b-instant', // Ultra-fast for question selection
-        apiKey: process.env.GROQ_API_KEY,
-        baseUrl: 'https://api.groq.com/openai/v1',
-      };
-    }
-  }
-
-  // UK Scoring/Evaluation: Use Groq Llama 3.3 70B by default
-  if (route === 'uk_student' && (useCase === 'answer_scoring' || useCase === 'final_evaluation')) {
-    if (process.env.GROQ_API_KEY) {
-      return {
-        provider: 'groq',
-        model: process.env.LLM_MODEL_SCORING || 'llama-3.3-70b-versatile',
-        apiKey: process.env.GROQ_API_KEY,
-        baseUrl: 'https://api.groq.com/openai/v1',
-      };
-    }
-  }
-
-  // France Scoring/Evaluation: Use Groq Llama 3.3 70B by default
-  if ((route === 'france_ema' || route === 'france_icn') && (useCase === 'answer_scoring' || useCase === 'final_evaluation')) {
-    if (process.env.GROQ_API_KEY) {
-      return {
-        provider: 'groq',
-        model: process.env.LLM_MODEL_SCORING || 'llama-3.3-70b-versatile',
-        apiKey: process.env.GROQ_API_KEY,
-        baseUrl: 'https://api.groq.com/openai/v1',
-      };
-    }
-  }
-
-  // USA Scoring/Evaluation: Use Groq Llama 3.3 70B
-  if (route === 'usa_f1' && (useCase === 'answer_scoring' || useCase === 'final_evaluation')) {
-    if (process.env.GROQ_API_KEY) {
-      return {
-        provider: 'groq',
-        model: process.env.LLM_MODEL_SCORING || 'llama-3.3-70b-versatile',
-        apiKey: process.env.GROQ_API_KEY,
-        baseUrl: 'https://api.groq.com/openai/v1',
-      };
-    }
-  }
-
-  return null;
+  return {
+    provider: 'cometapi',
+    model: process.env.COMETAPI_MODEL || 'claude-haiku-4-5-20251001',
+    apiKey: apiKey,
+    baseUrl: process.env.COMETAPI_BASE_URL || 'https://api.cometapi.com/v1',
+  };
 }
 
 /**
@@ -120,34 +58,15 @@ export async function callLLMProvider(
   userPrompt: string,
   temperature: number = 0.3,
   maxTokens: number = 8192,
-  timeoutMs?: number // Optional custom timeout
+  timeoutMs?: number
 ): Promise<LLMResponse> {
-  if (config.provider === 'groq' || config.provider === 'megallm') {
-    return callOpenAICompatible(config, systemPrompt, userPrompt, temperature, maxTokens, timeoutMs);
-  }
-
-  throw new Error(`Unsupported provider: ${config.provider}`);
-}
-
-/**
- * Call OpenAI-compatible API (Groq, MegaLLM)
- */
-async function callOpenAICompatible(
-  config: LLMProviderConfig,
-  systemPrompt: string,
-  userPrompt: string,
-  temperature: number,
-  maxTokens: number,
-  customTimeout?: number
-): Promise<LLMResponse> {
-  // PERFORMANCE FIX: Add timeout to prevent hanging requests
-  // Default: 25s for quick requests, 60s for final evaluation
-  const timeoutDuration = customTimeout || 25000;
+  // Default timeouts: 30s for quick requests, can be overridden
+  const timeoutDuration = timeoutMs || 30000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
   
   try {
-    const payload: any = {
+    const payload = {
       model: config.model,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -155,12 +74,8 @@ async function callOpenAICompatible(
       ],
       temperature,
       max_tokens: maxTokens,
+      response_format: { type: 'json_object' },
     };
-
-    // Enable JSON mode for all providers
-    // Claude Haiku 4.5 has native structured output support
-    // Gemini 2.5 Flash has buggy JSON mode (see MEGALLM_JSON_MODE_BUG.md)
-    payload.response_format = { type: 'json_object' };
 
     const response = await fetch(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -176,59 +91,38 @@ async function callOpenAICompatible(
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`${config.provider} API error: ${response.status} - ${error}`);
+      throw new Error(`CometAPI error: ${response.status} - ${error}`);
     }
 
     const data = await response.json();
-
-    // Normalize content so callers always receive a string
     let content: any = data?.choices?.[0]?.message?.content;
     
-    // CRITICAL FIX: MegaLLM/Gemini returns null when hitting max_tokens limit
-    if ((content === null || typeof content === 'undefined') && config.provider === 'megallm') {
+    // Handle null content (may occur if max_tokens limit hit)
+    if (content === null || typeof content === 'undefined') {
       const usage = data?.usage;
       const finishReason = data?.choices?.[0]?.finish_reason;
       
-      console.error('[MegaLLM Debug] Null content received:', {
+      console.error('[CometAPI] Null content received:', {
         finish_reason: finishReason,
         prompt_tokens: usage?.prompt_tokens,
         total_tokens: usage?.total_tokens,
         max_tokens_requested: maxTokens,
-        response_preview: JSON.stringify(data).slice(0, 500)
       });
       
-      // If finish_reason is "length", we hit the token limit
       if (finishReason === 'length') {
-        throw new Error(`MegaLLM hit max_tokens limit (${maxTokens}). Prompt: ${usage?.prompt_tokens} tokens, Total: ${usage?.total_tokens} tokens. Increase max_tokens or reduce prompt size.`);
+        throw new Error(`CometAPI hit max_tokens limit (${maxTokens}). Increase max_tokens or reduce prompt size.`);
       }
       
-      throw new Error('MegaLLM returned null content without hitting token limit. API may be unstable.');
+      throw new Error('CometAPI returned null content. API may be unstable.');
     }
     
+    // Ensure content is a string
     if (typeof content !== 'string') {
       content = JSON.stringify(content);
     }
     
-    // CRITICAL FIX: MegaLLM/Gemini doesn't properly support JSON mode
-    // It returns explanatory text with JSON embedded, sometimes with HTML tags
-    if (config.provider === 'megallm' && typeof content === 'string') {
-      // Strip markdown code blocks (e.g., ```json...```)
-      content = content.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-      
-      // Extract JSON from HTML tags (e.g., <span style='color:red'>{...}</span>)
-      const htmlJsonMatch = content.match(/<[^>]+>(\{.*\})<\/[^>]+>/s);
-      if (htmlJsonMatch) {
-        console.log('[MegaLLM Fix] Extracted JSON from HTML tags');
-        content = htmlJsonMatch[1];
-      }
-      
-      // Extract JSON from explanatory text (find first { to last })
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch && content.length > jsonMatch[0].length + 50) {
-        console.log('[MegaLLM Fix] Extracted JSON from explanatory text');
-        content = jsonMatch[0];
-      }
-    }
+    // Clean up response - extract JSON from various wrapper formats
+    content = extractJSON(content);
     
     return {
       content,
@@ -237,10 +131,34 @@ async function callOpenAICompatible(
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      throw new Error(`${config.provider} API timeout after ${timeoutDuration / 1000} seconds`);
+      throw new Error(`CometAPI timeout after ${timeoutDuration / 1000} seconds`);
     }
     throw error;
   }
+}
+
+/**
+ * Extract JSON from potentially wrapped content (markdown blocks, HTML, explanatory text)
+ */
+function extractJSON(content: string): string {
+  // Strip markdown code blocks (e.g., ```json...```)
+  content = content.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+  
+  // Extract JSON from HTML tags (e.g., <span>{...}</span>)
+  const htmlJsonMatch = content.match(/<[^>]+>(\{[\s\S]*\})<\/[^>]+>/);
+  if (htmlJsonMatch) {
+    console.log('[CometAPI] Extracted JSON from HTML tags');
+    return htmlJsonMatch[1];
+  }
+  
+  // Extract JSON from explanatory text (find first { to last })
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (jsonMatch && content.length > jsonMatch[0].length + 50) {
+    console.log('[CometAPI] Extracted JSON from explanatory text');
+    return jsonMatch[0];
+  }
+  
+  return content;
 }
 
 /**

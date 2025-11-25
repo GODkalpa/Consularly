@@ -123,6 +123,17 @@ export class InterviewSimulationService {
     session.askedSemanticClusters = cluster ? [cluster] : [];
     session.askedQuestionIds = [questionId];
     
+    // CRITICAL FIX: Add first question to conversation history immediately
+    // This ensures the questionId is tracked from the start
+    session.conversationHistory.push({
+      question: firstQuestion.question,
+      answer: '', // Will be filled when student responds
+      timestamp: new Date().toISOString(),
+      questionType: firstQuestion.questionType,
+      difficulty: firstQuestion.difficulty,
+      questionId: questionId,
+    });
+    
     console.log(`[Session Init] First question - ID: ${questionId}, Cluster: ${cluster || 'none'}`);
 
     return { session, firstQuestion };
@@ -140,6 +151,7 @@ export class InterviewSimulationService {
     isComplete: boolean;
   }> {
     // Get the current question (last question asked)
+    // The first question is now added to history in startInterview, so history should never be empty
     const currentQuestion = session.conversationHistory.length > 0 
       ? session.conversationHistory[session.conversationHistory.length - 1].question
       : "Welcome to your visa interview. Let's begin.";
@@ -152,6 +164,7 @@ export class InterviewSimulationService {
     const updatedHistory = [...session.conversationHistory];
     if (session.conversationHistory.length > 0) {
       // Update the last question entry with the answer
+      // The question was already added (either in startInterview or previous processAnswer)
       updatedHistory[updatedHistory.length - 1] = {
         ...updatedHistory[updatedHistory.length - 1],
         answer,
@@ -451,12 +464,16 @@ export class InterviewSimulationService {
         // CRITICAL FIX: Add semantic cluster tracking for fallback questions
         const semanticCluster = getSemanticCluster(q);
         
+        // CRITICAL FIX: Generate a proper fallback ID instead of leaving it undefined
+        const fallbackId = `F1_FALLBACK_${session.currentQuestionNumber}_${idx}`;
+        
         return {
           question: q,
           questionType: qType,
           difficulty: 'medium',
           expectedAnswerLength: 'medium',
           semanticCluster: semanticCluster || undefined,
+          questionId: fallbackId, // ✅ Now fallback questions have IDs too
         }
       }
 
@@ -559,48 +576,56 @@ export class InterviewSimulationService {
     }
     const fallbackQuestions = [
       {
+        id: 'GENERIC_FB_001',
         question: "Good morning. Please tell me about yourself and why you want to study in the United States.",
         questionType: 'background' as const,
         difficulty: 'easy' as const,
         expectedAnswerLength: 'medium' as const
       },
       {
+        id: 'GENERIC_FB_002',
         question: "What is your intended major and why did you choose this field of study?",
         questionType: 'academic' as const,
         difficulty: 'easy' as const,
         expectedAnswerLength: 'medium' as const
       },
       {
+        id: 'GENERIC_FB_003',
         question: "How will you finance your education in the United States?",
         questionType: 'financial' as const,
         difficulty: 'medium' as const,
         expectedAnswerLength: 'long' as const
       },
       {
+        id: 'GENERIC_FB_004',
         question: "Why did you choose this particular university over others?",
         questionType: 'academic' as const,
         difficulty: 'medium' as const,
         expectedAnswerLength: 'medium' as const
       },
       {
+        id: 'GENERIC_FB_005',
         question: "What are your career plans after completing your studies?",
         questionType: 'intent' as const,
         difficulty: 'medium' as const,
         expectedAnswerLength: 'long' as const
       },
       {
+        id: 'GENERIC_FB_006',
         question: "What ties do you have to your home country that will ensure your return?",
         questionType: 'intent' as const,
         difficulty: 'hard' as const,
         expectedAnswerLength: 'long' as const
       },
       {
+        id: 'GENERIC_FB_007',
         question: "How did you learn about this university and program?",
         questionType: 'academic' as const,
         difficulty: 'easy' as const,
         expectedAnswerLength: 'short' as const
       },
       {
+        id: 'GENERIC_FB_008',
         question: "Do you have any relatives or friends in the United States?",
         questionType: 'background' as const,
         difficulty: 'medium' as const,
@@ -609,7 +634,11 @@ export class InterviewSimulationService {
     ];
 
     const index = (questionNumber - 1) % fallbackQuestions.length;
-    return fallbackQuestions[index];
+    const selected = fallbackQuestions[index];
+    return {
+      ...selected,
+      questionId: selected.id, // ✅ Now generic fallback questions have IDs too
+    };
   }
 
   /**
@@ -678,60 +707,70 @@ export class InterviewSimulationService {
     // USA F1 and generic fallback
     const pool = [
       {
+        id: 'USA_FB_001',
         question: "Why do you want to study in the US?",
         questionType: 'background' as const,
         difficulty: 'easy' as const,
         expectedAnswerLength: 'medium' as const
       },
       {
+        id: 'USA_FB_002',
         question: "Why can't you continue your education in your home country?",
         questionType: 'background' as const,
         difficulty: 'medium' as const,
         expectedAnswerLength: 'medium' as const
       },
       {
+        id: 'USA_FB_003',
         question: "How many schools did you apply to? How many rejected you?",
         questionType: 'academic' as const,
         difficulty: 'medium' as const,
         expectedAnswerLength: 'short' as const
       },
       {
+        id: 'USA_FB_004',
         question: "Why did you choose this particular university over others?",
         questionType: 'academic' as const,
         difficulty: 'medium' as const,
         expectedAnswerLength: 'medium' as const
       },
       {
+        id: 'USA_FB_005',
         question: "Who is sponsoring your education? What is their annual income?",
         questionType: 'financial' as const,
         difficulty: 'medium' as const,
         expectedAnswerLength: 'short' as const
       },
       {
+        id: 'USA_FB_006',
         question: "How will you pay for your tuition and living expenses?",
         questionType: 'financial' as const,
         difficulty: 'medium' as const,
         expectedAnswerLength: 'long' as const
       },
       {
+        id: 'USA_FB_007',
         question: "What are your GRE and TOEFL scores? Did you fail any subjects?",
         questionType: 'academic' as const,
         difficulty: 'medium' as const,
         expectedAnswerLength: 'short' as const
       },
       {
+        id: 'USA_FB_008',
         question: "What are your plans after graduation? Do you plan to return to Nepal?",
         questionType: 'intent' as const,
         difficulty: 'hard' as const,
         expectedAnswerLength: 'long' as const
       },
       {
+        id: 'USA_FB_009',
         question: "What is the guarantee that you will come back to Nepal after your studies?",
         questionType: 'intent' as const,
         difficulty: 'hard' as const,
         expectedAnswerLength: 'long' as const
       },
       {
+        id: 'USA_FB_010',
         question: "Do you have any relatives or friends in the United States?",
         questionType: 'background' as const,
         difficulty: 'medium' as const,
@@ -741,7 +780,12 @@ export class InterviewSimulationService {
 
     // USA F1 fallback: use default rotation, return first not-yet-asked question
     for (const q of pool) {
-      if (!askedNormalized.has(normalized(q.question))) return q;
+      if (!askedNormalized.has(normalized(q.question))) {
+        return {
+          ...q,
+          questionId: q.id, // ✅ Now USA F1 fallback questions have IDs too
+        };
+      }
     }
     return this.getFallbackQuestion(questionNumber, route);
   }

@@ -408,20 +408,29 @@ export class SmartQuestionSelector {
       const followUp = this.detectFollowUpNeed(context.route, lastInteraction.answer);
       
       if (followUp) {
-        // CRITICAL FIX: Track semantic cluster for follow-ups too
-        const cluster = getSemanticCluster(followUp);
+        // CRITICAL FIX: Check if this follow-up is too similar to any previous question
+        // This prevents duplicate follow-ups like "Are you aware of work hour restrictions?"
+        const isDuplicateFollowUp = this.isFollowUpDuplicate(followUp, context.history);
         
-        // CRITICAL FIX: Generate a synthetic questionId for follow-ups to enable tracking
-        // Format: FOLLOWUP_<route>_<step>_<timestamp>
-        const followUpId = `FOLLOWUP_${context.route}_${context.history.length + 1}_${Date.now()}`;
-        
-        return {
-          question: followUp,
-          type: 'followup',
-          questionId: followUpId, // ✅ Now follow-ups have IDs too
-          reasoning: 'Detected incomplete or vague answer requiring clarification',
-          semanticCluster: cluster || undefined,
-        };
+        if (isDuplicateFollowUp) {
+          console.log(`[Question Selector] ⚠️ Skipping duplicate follow-up: "${followUp.substring(0, 60)}..."`);
+          // Fall through to bank selection instead of returning duplicate follow-up
+        } else {
+          // CRITICAL FIX: Track semantic cluster for follow-ups too
+          const cluster = getSemanticCluster(followUp);
+          
+          // CRITICAL FIX: Generate a synthetic questionId for follow-ups to enable tracking
+          // Format: FOLLOWUP_<route>_<step>_<timestamp>
+          const followUpId = `FOLLOWUP_${context.route}_${context.history.length + 1}_${Date.now()}`;
+          
+          return {
+            question: followUp,
+            type: 'followup',
+            questionId: followUpId, // ✅ Now follow-ups have IDs too
+            reasoning: 'Detected incomplete or vague answer requiring clarification',
+            semanticCluster: cluster || undefined,
+          };
+        }
       }
     }
 
@@ -456,6 +465,56 @@ export class SmartQuestionSelector {
     }
 
     return null;
+  }
+
+  /**
+   * Check if a follow-up question is too similar to any previously asked question
+   * This prevents duplicate follow-ups like asking about work hour restrictions twice
+   */
+  private isFollowUpDuplicate(
+    followUp: string,
+    history: Array<{ question: string; answer: string }>
+  ): boolean {
+    const normalize = (s: string) => s
+      .toLowerCase()
+      .replace(/["""'']/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    const STOP = new Set(['what','why','how','do','did','are','is','your','you','the','in','to','of','for','on','at','this','that','it','a','an','any','have','will','can','be','with','about','more']);
+    const tokens = (s: string) => normalize(s).split(' ').filter(t => t.length > 2 && !STOP.has(t));
+    
+    const jaccard = (a: string[], b: string[]) => {
+      const A = new Set(a), B = new Set(b);
+      let inter = 0;
+      A.forEach((t) => { if (B.has(t)) inter++ });
+      const union = A.size + B.size - inter;
+      return union === 0 ? 0 : inter / union;
+    };
+    
+    const followUpNorm = normalize(followUp);
+    const followUpToks = tokens(followUp);
+    
+    for (const h of history) {
+      const histNorm = normalize(h.question);
+      const histToks = tokens(h.question);
+      
+      // Exact match check
+      if (followUpNorm === histNorm) {
+        console.log(`[Follow-up Check] Exact duplicate detected`);
+        return true;
+      }
+      
+      // Semantic similarity check (50% threshold for follow-ups - stricter)
+      const similarity = jaccard(followUpToks, histToks);
+      if (similarity >= 0.50) {
+        console.log(`[Follow-up Check] Semantic duplicate (${(similarity * 100).toFixed(0)}% similar): "${followUp.substring(0, 50)}..." vs "${h.question.substring(0, 50)}..."`);
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   /**
