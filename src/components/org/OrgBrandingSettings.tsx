@@ -16,6 +16,7 @@ import type { OrganizationBranding } from "@/types/firestore"
 import { brandingCache } from "@/lib/branding/branding-cache"
 import { updateFavicon } from "@/lib/favicon-utils"
 import { dispatchBrandingUpdate } from "@/lib/branding-events"
+import { invalidate as invalidateCache } from "@/lib/cache"
 import EmailAliasManager from "@/components/admin/EmailAliasManager"
 
 interface OrgBrandingSettingsProps {
@@ -147,6 +148,8 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
       // Invalidate branding cache to force refresh
       if (orgId) {
         brandingCache.invalidate(orgId)
+        // Also invalidate dashboard cache so fresh data is fetched on next load
+        invalidateCache(`dashboard_${orgId}`)
       }
 
       toast.success('Branding settings saved successfully')
