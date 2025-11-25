@@ -189,13 +189,16 @@ export async function GET(req: NextRequest) {
         enableMetricsCollection: !!orgData?.settings?.enableMetricsCollection,
         customBranding: {
           logoUrl: orgData?.settings?.customBranding?.logoUrl || undefined,
+          favicon: orgData?.settings?.customBranding?.favicon || undefined,
           primaryColor: orgData?.settings?.customBranding?.primaryColor || undefined,
           secondaryColor: orgData?.settings?.customBranding?.secondaryColor || undefined,
+          backgroundColor: orgData?.settings?.customBranding?.backgroundColor || undefined,
           companyName: orgData?.settings?.customBranding?.companyName || undefined,
           tagline: orgData?.settings?.customBranding?.tagline || undefined,
           welcomeMessage: orgData?.settings?.customBranding?.welcomeMessage || undefined,
           backgroundImage: orgData?.settings?.customBranding?.backgroundImage || undefined,
           fontFamily: orgData?.settings?.customBranding?.fontFamily || undefined,
+          footerText: orgData?.settings?.customBranding?.footerText || undefined,
           socialLinks: orgData?.settings?.customBranding?.socialLinks || undefined,
         },
         notifications: {
