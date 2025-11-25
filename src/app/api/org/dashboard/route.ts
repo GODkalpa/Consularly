@@ -174,6 +174,9 @@ export async function GET(req: NextRequest) {
     const queryTime = Date.now() - startTime
     console.log(`[Dashboard API] ✅ Combined fetch completed in ${queryTime}ms for org: ${orgId}`)
 
+    // Debug: Log raw branding data from Firestore
+    console.log(`[Dashboard API] 🎨 Raw branding from Firestore:`, JSON.stringify(orgData?.settings?.customBranding, null, 2))
+
     // Build combined response
     const responseStep = logStep('Response Building', Date.now())
     const organization = {

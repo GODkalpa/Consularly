@@ -148,11 +148,16 @@ function OrganizationDashboard() {
           const json = await res.json()
           if (!res.ok) throw new Error(json?.error || 'Dashboard fetch failed')
           console.log('✅ [OrganizationDashboard] COMBINED API call completed successfully')
+          // Debug: Log what API actually returned
+          console.log('📦 [OrganizationDashboard] API Response branding:', JSON.stringify(json.organization?.settings?.customBranding, null, 2))
           return json
         }
         
         // Use cache with background refresh for combined data
         const dashboardData = await fetchWithCache(`dashboard_${orgId}`, fetchDashboard, { ttl: 60 * 1000 })
+
+        // Debug: Log the branding data received from API
+        console.log('[OrganizationDashboard] Branding from API:', JSON.stringify(dashboardData.organization?.settings?.customBranding, null, 2))
 
         if (!mounted) return
         setOrg(dashboardData.organization)

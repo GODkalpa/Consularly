@@ -16,7 +16,7 @@ import type { OrganizationBranding } from "@/types/firestore"
 import { brandingCache } from "@/lib/branding/branding-cache"
 import { updateFavicon } from "@/lib/favicon-utils"
 import { dispatchBrandingUpdate } from "@/lib/branding-events"
-import { invalidate as invalidateCache } from "@/lib/cache"
+import { invalidate as invalidateCache, cache } from "@/lib/cache"
 import EmailAliasManager from "@/components/admin/EmailAliasManager"
 
 interface OrgBrandingSettingsProps {
@@ -36,15 +36,54 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
   const faviconInputRef = useRef<HTMLInputElement>(null)
   const backgroundInputRef = useRef<HTMLInputElement>(null)
 
+  // Debug function to fetch branding directly from API
+  const debugFetchBranding = async () => {
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) {
+        console.error('[Debug] No auth token')
+        return
+      }
+      
+      // Clear all caches first
+      if (orgId) {
+        cache.clear()
+        brandingCache.invalidate(orgId)
+      }
+      
+      const response = await fetch('/api/debug/branding', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const data = await response.json()
+      console.log('[Debug] Direct API branding response:', data)
+      
+      if (data.customBranding) {
+        setBranding(data.customBranding)
+        if (data.customBranding.favicon) {
+          updateFavicon(data.customBranding.favicon)
+        }
+        toast.success('Branding refreshed from server')
+      }
+    } catch (error) {
+      console.error('[Debug] Failed to fetch branding:', error)
+    }
+  }
+
   useEffect(() => {
+    // Debug: Log what initialBranding contains
+    console.log('[OrgBrandingSettings] initialBranding received:', JSON.stringify(initialBranding, null, 2))
+    
     if (initialBranding) {
       setBranding(initialBranding)
       // Apply favicon if present with immediate update
       if (initialBranding.favicon) {
+        console.log('[OrgBrandingSettings] Favicon found in initialBranding:', initialBranding.favicon)
         // Use a small delay to ensure DOM is ready
         setTimeout(() => {
           updateFavicon(initialBranding.favicon!)
         }, 50)
+      } else {
+        console.log('[OrgBrandingSettings] No favicon in initialBranding')
       }
     }
   }, [initialBranding])
@@ -339,6 +378,15 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
                   Note: Browsers cache favicons aggressively. If you don&apos;t see changes immediately, try hard refreshing (Ctrl+Shift+R or Cmd+Shift+R) or clearing your browser cache.
                 </div>
               )}
+              {/* Debug: Refresh from server button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={debugFetchBranding}
+                className="text-xs text-muted-foreground"
+              >
+                🔄 Refresh from server (debug)
+              </Button>
             </CardContent>
           </Card>
 
