@@ -14,7 +14,6 @@ import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary"
 import { toast } from "sonner"
 import type { OrganizationBranding } from "@/types/firestore"
 import { brandingCache } from "@/lib/branding/branding-cache"
-import { useOrgContext } from "@/hooks/useOrgContext"
 import { updateFavicon } from "@/lib/favicon-utils"
 import { dispatchBrandingUpdate } from "@/lib/branding-events"
 import EmailAliasManager from "@/components/admin/EmailAliasManager"
@@ -22,10 +21,11 @@ import EmailAliasManager from "@/components/admin/EmailAliasManager"
 interface OrgBrandingSettingsProps {
   organizationPlan?: 'basic' | 'premium' | 'enterprise';
   initialBranding?: OrganizationBranding;
+  orgId?: string;
+  orgName?: string;
 }
 
-export function OrgBrandingSettings({ organizationPlan = 'basic', initialBranding }: OrgBrandingSettingsProps) {
-  const { context } = useOrgContext()
+export function OrgBrandingSettings({ organizationPlan = 'basic', initialBranding, orgId, orgName }: OrgBrandingSettingsProps) {
   const [branding, setBranding] = useState<OrganizationBranding>(initialBranding || {})
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState<string | null>(null)
@@ -145,8 +145,8 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
       await response.json()
 
       // Invalidate branding cache to force refresh
-      if (context?.orgId) {
-        brandingCache.invalidate(context.orgId)
+      if (orgId) {
+        brandingCache.invalidate(orgId)
       }
 
       toast.success('Branding settings saved successfully')
@@ -539,10 +539,10 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
         {/* Advanced */}
         <TabsContent value="advanced" className="space-y-6">
           {/* Email Alias Manager - Only show when org context is loaded */}
-          {context?.orgId && context?.orgName && (
+          {orgId && orgName && (
             <EmailAliasManager
-              orgId={context.orgId}
-              orgName={context.orgName}
+              orgId={orgId}
+              orgName={orgName}
             />
           )}
 

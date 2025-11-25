@@ -667,6 +667,8 @@ function OrganizationDashboard() {
       <OrgBrandingSettings 
         organizationPlan={org?.plan || 'basic'}
         initialBranding={org?.settings?.customBranding}
+        orgId={org?.id}
+        orgName={org?.name}
       />
     )
   }

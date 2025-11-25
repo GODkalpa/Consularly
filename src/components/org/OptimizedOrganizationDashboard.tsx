@@ -321,6 +321,8 @@ export function OptimizedOrganizationDashboard() {
             <OrgBrandingSettings 
               organizationPlan={org?.plan || 'basic'}
               initialBranding={org?.settings?.customBranding}
+              orgId={org?.id}
+              orgName={org?.name}
             />
           </Suspense>
         )
