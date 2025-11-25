@@ -10,7 +10,7 @@ import { generateEmailAlias, validateEmailAlias } from '@/lib/email-alias-genera
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verify authentication
@@ -22,7 +22,7 @@ export async function GET(
       )
     }
 
-    const orgId = params.id
+    const { id: orgId } = await params
 
     // Allow platform admins OR users from the same organization
     const isAdmin = authResult.user?.role === 'admin'
@@ -67,7 +67,7 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verify authentication
@@ -79,7 +79,7 @@ export async function POST(
       )
     }
 
-    const orgId = params.id
+    const { id: orgId } = await params
 
     // Allow platform admins OR users from the same organization
     const isAdmin = authResult.user?.role === 'admin'

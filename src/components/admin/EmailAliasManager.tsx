@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Mail, RefreshCw, Send, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { auth } from '@/lib/firebase'
 
 interface EmailAliasManagerProps {
   orgId: string
@@ -26,8 +27,16 @@ export default function EmailAliasManager({ orgId, orgName }: EmailAliasManagerP
   const fetchEmailAlias = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/admin/organizations/${orgId}/email-alias`)
-      if (!response.ok) throw new Error('Failed to fetch email alias')
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+      
+      const response = await fetch(`/api/admin/organizations/${orgId}/email-alias`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to fetch email alias')
+      }
 
       const data = await response.json()
       setEmailAlias(data.emailAlias || '')
@@ -45,9 +54,15 @@ export default function EmailAliasManager({ orgId, orgName }: EmailAliasManagerP
       setError('')
       setSuccess('')
 
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
       const response = await fetch(`/api/admin/organizations/${orgId}/email-alias`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
         body: JSON.stringify({ autoGenerate: true }),
       })
 
@@ -77,9 +92,15 @@ export default function EmailAliasManager({ orgId, orgName }: EmailAliasManagerP
         throw new Error('Email alias cannot be empty')
       }
 
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
       const response = await fetch(`/api/admin/organizations/${orgId}/email-alias`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
         body: JSON.stringify({ emailAlias: manualAlias.trim() }),
       })
 
@@ -108,9 +129,15 @@ export default function EmailAliasManager({ orgId, orgName }: EmailAliasManagerP
         throw new Error('Please enter a recipient email address')
       }
 
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
       const response = await fetch('/api/admin/test-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
         body: JSON.stringify({ orgId, recipientEmail: testEmail.trim() }),
       })
 
