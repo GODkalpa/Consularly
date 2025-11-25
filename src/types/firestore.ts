@@ -44,24 +44,24 @@ export interface OrgStudent {
   email: string;
   interviewCountry?: 'usa' | 'uk' | 'france';
   studentProfile?: StudentProfileInfo;
-  
+
   // Authentication fields
   firebaseUid?: string;              // Link to Firebase Auth user
   accountStatus: StudentAccountStatus;
   dashboardEnabled: boolean;         // Can access student dashboard?
   canSelfStartInterviews: boolean;   // Can initiate own interviews?
-  
+
   // Credit system
   creditsAllocated: number;          // Total credits from org
   creditsUsed: number;               // Interviews completed
   creditsRemaining: number;          // Computed: allocated - used
-  
+
   // Invitation system
   invitationToken?: string;          // For account setup
   invitedAt?: Timestamp;
   invitationAcceptedAt?: Timestamp;
   lastLoginAt?: Timestamp;
-  
+
   // Timestamps
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -244,24 +244,24 @@ export interface OrganizationBranding {
   logoLight?: string;            // Light mode logo
   logoDark?: string;             // Dark mode logo
   favicon?: string;              // Favicon URL
-  
+
   // Colors
   primaryColor?: string;         // Primary brand color (CSS)
   secondaryColor?: string;       // Secondary/accent color
   backgroundColor?: string;      // Custom background
-  
+
   // Text branding
   companyName?: string;
   tagline?: string;              // Company tagline/slogan
   welcomeMessage?: string;       // Custom dashboard greeting
   footerText?: string;           // Footer copyright/disclaimer
-  
+
   // Visual assets
   backgroundImage?: string;      // Hero/background image URL
-  
+
   // Typography
   fontFamily?: 'inter' | 'poppins' | 'roboto' | 'montserrat' | 'system';
-  
+
   // Social links
   socialLinks?: {
     website?: string;
@@ -269,13 +269,12 @@ export interface OrganizationBranding {
     twitter?: string;
     facebook?: string;
   };
-  
+
   // Email configuration
   emailAlias?: string;           // Organization-specific email alias
-                                 // Format: org-{slug}@consularly.com
-  
+  // Format: org-{slug}@consularly.com
+
   // Advanced (enterprise)
-  customCSS?: string;            // Custom CSS overrides
   whiteLabel?: boolean;          // Hide platform branding
 }
 
@@ -299,7 +298,7 @@ export interface OrganizationSettings {
     allowStudentReschedule: boolean;
     maxReschedules: number;           // per student (default 2)
   };
-  
+
   // Student dashboard settings
   studentDashboard?: {
     enabled: boolean;                 // Feature flag for student dashboard
@@ -319,17 +318,17 @@ export interface Organization {
   quotaUsed: number;
   adminUsers: string[]; // array of user IDs
   settings: OrganizationSettings;
-  
+
   // Student credit management
   studentCreditsAllocated: number;   // Total credits allocated to students
   studentCreditsUsed: number;        // Credits actually used by students
-  
+
   // Subdomain white-labeling
   subdomain?: string;                // Unique subdomain identifier (e.g., "acmecorp")
   subdomainEnabled?: boolean;        // Feature flag to enable/disable subdomain access
   subdomainCreatedAt?: Timestamp;    // When subdomain was first assigned
   subdomainUpdatedAt?: Timestamp;    // When subdomain was last updated
-  
+
   // Timestamps
   createdAt: Timestamp;
   updatedAt: Timestamp;

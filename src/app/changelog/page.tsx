@@ -18,7 +18,6 @@ export default function ChangelogPage() {
                         "Custom Subdomains: Agencies can now have their own dedicated web address (e.g., global-edu.consularly.com), providing a professional entry point for their students",
                         "Dynamic Logo & Favicon: Upload your agency's logo and favicon. The system dynamically updates the browser tab icon and application header to match your brand identity",
                         "Brand Colors & Theming: Dynamic styling engine that injects your primary and secondary brand colors across the entire application—from buttons and borders to progress bars and accents",
-                        "Custom CSS Support: For agencies needing pixel-perfect control, we now support safe injection of custom CSS to fine-tune the look and feel",
                         "Branded Emails: Automated notifications and updates now carry your agency's branding, ensuring a consistent communication experience",
                         "New B2B Hero Section: A redesigned landing page section specifically targeting consultancies, highlighting student tracking and AI capabilities",
                         "Student Tracking Dashboard: A comprehensive view to monitor every student's journey from enrollment to visa approval",

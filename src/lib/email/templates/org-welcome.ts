@@ -20,8 +20,9 @@ export function generateOrgWelcomeEmail(data: OrgWelcomeEmailData): { subject: s
   const planFeatures = {
     basic: ['Logo customization', 'Primary color branding', 'Company name display'],
     premium: ['All Basic features', 'Secondary colors', 'Tagline & welcome message', 'Background images', 'Custom fonts', 'Social links'],
-    enterprise: ['All Premium features', 'White-label mode', 'Custom CSS', 'Priority support', 'Advanced analytics']
+    enterprise: ['All Premium features', 'White-label mode', 'Priority support', 'Advanced analytics']
   };
+
 
   const html = `
 <!DOCTYPE html>

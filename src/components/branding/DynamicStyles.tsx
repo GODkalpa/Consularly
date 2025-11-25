@@ -3,23 +3,24 @@
 /**
  * Dynamic Styles Component
  * 
- * Injects organization colors, fonts, and custom CSS into the page.
- * Ensures proper scoping and sanitization for security.
+ * Injects organization colors and fonts into the page.
+ * Ensures proper scoping for security.
  */
+
 
 import { useEffect } from 'react';
 import { OrganizationBranding } from '@/types/firestore';
-import { sanitizeCSS, minifyCSS } from '@/lib/branding/css-sanitizer';
 import { getFontFamilyCSS, loadFont } from '@/lib/branding/font-loader';
+
 
 interface DynamicStylesProps {
   branding: OrganizationBranding;
   scope?: string;
 }
 
-export function DynamicStyles({ 
-  branding, 
-  scope = 'branded-app' 
+export function DynamicStyles({
+  branding,
+  scope = 'branded-app'
 }: DynamicStylesProps) {
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -32,7 +33,7 @@ export function DynamicStyles({
     // Add CSS variables for colors
     if (branding.primaryColor || branding.secondaryColor || branding.backgroundColor) {
       css += `.${scope} {\n`;
-      
+
       if (branding.primaryColor) {
         css += `  --brand-primary: ${branding.primaryColor};\n`;
       }
@@ -42,7 +43,7 @@ export function DynamicStyles({
       if (branding.backgroundColor) {
         css += `  --brand-background: ${branding.backgroundColor};\n`;
       }
-      
+
       css += '}\n\n';
     }
 
@@ -108,25 +109,17 @@ export function DynamicStyles({
 `;
     }
 
-    // Add custom CSS if provided (sanitize and scope it)
-    if (branding.customCSS) {
-      const sanitized = sanitizeCSS(branding.customCSS, scope);
-      const minified = minifyCSS(sanitized);
-      css += '\n/* Custom CSS */\n';
-      css += minified;
-    }
-
     // Create or update style element
     const styleId = `branding-styles-${scope}`;
     let styleElement = document.getElementById(styleId) as HTMLStyleElement;
-    
+
     if (!styleElement) {
       styleElement = document.createElement('style');
       styleElement.id = styleId;
       styleElement.type = 'text/css';
       document.head.appendChild(styleElement);
     }
-    
+
     styleElement.textContent = css;
 
     // Cleanup function

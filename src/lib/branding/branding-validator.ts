@@ -5,7 +5,7 @@
  */
 
 import { OrganizationBranding } from '@/types/firestore';
-import { validateCSS } from './css-sanitizer';
+
 
 export interface ValidationResult {
   valid: boolean;
@@ -98,28 +98,14 @@ export function validateBranding(
     errors.footerText = 'Footer text must be 300 characters or less';
   }
 
+
   // Enforce plan restrictions
   if (plan !== 'enterprise') {
-    if (branding.customCSS) {
-      errors.customCSS = 'Custom CSS requires an Enterprise plan. Please upgrade to use this feature.';
-    }
     if (branding.whiteLabel) {
       errors.whiteLabel = 'White label mode requires an Enterprise plan. Please upgrade to use this feature.';
     }
   }
 
-  // Validate custom CSS if provided and allowed
-  if (branding.customCSS && plan === 'enterprise') {
-    const cssValidation = validateCSS(branding.customCSS);
-    if (!cssValidation.valid) {
-      errors.customCSS = cssValidation.errors.join('; ');
-    }
-
-    // Check CSS length
-    if (branding.customCSS.length > 50000) {
-      errors.customCSS = 'Custom CSS must be 50,000 characters or less';
-    }
-  }
 
   return {
     valid: Object.keys(errors).length === 0,

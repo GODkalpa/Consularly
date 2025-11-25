@@ -7,9 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import { Upload, Loader2, X, Save, AlertCircle, Image as ImageIcon, Palette, Type, Link2 } from "lucide-react"
 import { auth } from "@/lib/firebase"
 import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary"
@@ -540,11 +538,13 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
 
         {/* Advanced */}
         <TabsContent value="advanced" className="space-y-6">
-          {/* Email Alias Manager */}
-          <EmailAliasManager
-            orgId={context?.orgId || ''}
-            orgName={context?.orgName || 'Organization'}
-          />
+          {/* Email Alias Manager - Only show when org context is loaded */}
+          {context?.orgId && context?.orgName && (
+            <EmailAliasManager
+              orgId={context.orgId}
+              orgName={context.orgName}
+            />
+          )}
 
           <Card>
             <CardHeader>
@@ -599,53 +599,6 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
               </div>
             </CardContent>
           </Card>
-
-          {isEnterprise && (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    White Label Mode
-                    <Badge className="ml-2">Enterprise</Badge>
-                  </CardTitle>
-                  <CardDescription>
-                    Hide platform branding to use only your organization&apos;s branding
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="whiteLabel">Enable White Label</Label>
-                    <Switch
-                      id="whiteLabel"
-                      checked={branding.whiteLabel || false}
-                      onCheckedChange={(checked) => handleInputChange('whiteLabel', checked)}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    Custom CSS
-                    <Badge className="ml-2">Enterprise</Badge>
-                  </CardTitle>
-                  <CardDescription>
-                    Add custom CSS for advanced styling (use with caution)
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    value={branding.customCSS || ''}
-                    onChange={(e) => handleInputChange('customCSS', e.target.value)}
-                    placeholder=".org-dashboard { /* your custom styles */ }"
-                    rows={8}
-                    className="font-mono text-sm"
-                  />
-                </CardContent>
-              </Card>
-            </>
-          )}
         </TabsContent>
       </Tabs>
 
