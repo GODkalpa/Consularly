@@ -13,9 +13,9 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Verify admin authentication
+    // Verify authentication
     const authResult = await verifyAuth(request)
-    if (!authResult.authenticated || authResult.user?.role !== 'admin') {
+    if (!authResult.authenticated) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -23,6 +23,17 @@ export async function GET(
     }
 
     const orgId = params.id
+
+    // Allow platform admins OR users from the same organization
+    const isAdmin = authResult.user?.role === 'admin'
+    const isOrgUser = authResult.user?.orgId === orgId
+    
+    if (!isAdmin && !isOrgUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized - You can only access your own organization' },
+        { status: 403 }
+      )
+    }
 
     // Fetch organization
     const orgDoc = await adminDb().collection('organizations').doc(orgId).get()
@@ -59,9 +70,9 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Verify admin authentication
+    // Verify authentication
     const authResult = await verifyAuth(request)
-    if (!authResult.authenticated || authResult.user?.role !== 'admin') {
+    if (!authResult.authenticated) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -69,6 +80,17 @@ export async function POST(
     }
 
     const orgId = params.id
+
+    // Allow platform admins OR users from the same organization
+    const isAdmin = authResult.user?.role === 'admin'
+    const isOrgUser = authResult.user?.orgId === orgId
+    
+    if (!isAdmin && !isOrgUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized - You can only manage your own organization' },
+        { status: 403 }
+      )
+    }
     const body = await request.json()
     const { emailAlias, autoGenerate } = body
 
