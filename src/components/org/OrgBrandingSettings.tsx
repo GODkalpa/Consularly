@@ -19,6 +19,7 @@ import { brandingCache } from "@/lib/branding/branding-cache"
 import { useOrgContext } from "@/hooks/useOrgContext"
 import { updateFavicon } from "@/lib/favicon-utils"
 import { dispatchBrandingUpdate } from "@/lib/branding-events"
+import EmailAliasManager from "@/components/admin/EmailAliasManager"
 
 interface OrgBrandingSettingsProps {
   organizationPlan?: 'basic' | 'premium' | 'enterprise';
@@ -68,24 +69,24 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
 
       setBranding((prev) => ({ ...prev, [field]: result.url }))
       setHasChanges(true)
-      
+
       // Dispatch event for immediate preview update
       const updatedBranding = { ...branding, [field]: result.url }
       dispatchBrandingUpdate(updatedBranding, field)
-      
+
       // If it's a favicon, update it immediately for preview
       if (field === 'favicon') {
         updateFavicon(result.url)
-        toast.success('Favicon uploaded successfully', { 
-          description: 'Preview updated. Click "Save Changes" to persist.' 
+        toast.success('Favicon uploaded successfully', {
+          description: 'Preview updated. Click "Save Changes" to persist.'
         })
       } else if (field === 'logoUrl') {
-        toast.success('Logo uploaded successfully', { 
-          description: 'Preview updated. Click "Save Changes" to persist.' 
+        toast.success('Logo uploaded successfully', {
+          description: 'Preview updated. Click "Save Changes" to persist.'
         })
       } else {
-        toast.success('Image uploaded successfully', { 
-          description: 'Preview updated. Click "Save Changes" to persist.' 
+        toast.success('Image uploaded successfully', {
+          description: 'Preview updated. Click "Save Changes" to persist.'
         })
       }
     } catch (error: any) {
@@ -144,20 +145,20 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
       }
 
       await response.json()
-      
+
       // Invalidate branding cache to force refresh
       if (context?.orgId) {
         brandingCache.invalidate(context.orgId)
       }
-      
+
       toast.success('Branding settings saved successfully')
       setHasChanges(false)
-      
+
       // Update favicon immediately if changed
       if (branding.favicon) {
         updateFavicon(branding.favicon)
       }
-      
+
       // Trigger a custom event to notify other components about branding update
       dispatchBrandingUpdate(branding)
     } catch (error: any) {
@@ -539,6 +540,11 @@ export function OrgBrandingSettings({ organizationPlan = 'basic', initialBrandin
 
         {/* Advanced */}
         <TabsContent value="advanced" className="space-y-6">
+          {/* Email Alias Manager */}
+          {context?.orgId && context?.orgName && (
+            <EmailAliasManager orgId={context.orgId} orgName={context.orgName} />
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Social Links</CardTitle>
