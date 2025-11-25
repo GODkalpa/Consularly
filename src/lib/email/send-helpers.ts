@@ -23,7 +23,7 @@ export async function sendWelcomeEmail(params: {
   userId: string;
 }) {
   const emailService = getEmailService();
-  
+
   const { subject, html, text } = generateWelcomeEmail({
     displayName: params.displayName,
     email: params.to,
@@ -50,9 +50,9 @@ export async function sendAccountCreationEmail(params: {
   orgName?: string;
 }) {
   const emailService = getEmailService();
-  
+
   const dashboardLink = params.orgName ? `${BASE_URL}/org` : `${BASE_URL}/dashboard`;
-  
+
   const { subject, html, text } = generateAccountCreationEmail({
     displayName: params.displayName,
     email: params.to,
@@ -81,7 +81,7 @@ export async function sendPasswordResetEmail(params: {
   orgBranding?: OrganizationBranding;
 }) {
   const emailService = getEmailService();
-  
+
   const { subject, html, text } = generatePasswordResetEmail({
     displayName: params.displayName,
     email: params.to,
@@ -110,7 +110,7 @@ export async function sendOrgWelcomeEmail(params: {
   quotaLimit: number;
 }) {
   const emailService = getEmailService();
-  
+
   const { subject, html, text } = generateOrgWelcomeEmail({
     adminName: params.adminName,
     orgName: params.orgName,
@@ -149,7 +149,7 @@ export async function sendInterviewResultsEmail(params: {
   interviewDate?: string;
 }) {
   const emailService = getEmailService();
-  
+
   const { subject, html, text } = generateInterviewResultsEmail({
     studentName: params.studentName,
     interviewType: params.interviewType,
@@ -168,12 +168,23 @@ export async function sendInterviewResultsEmail(params: {
     }),
   });
 
+  // Build custom 'from' address using organization email alias if available
+  let fromAddress: string | undefined = undefined;
+  if (params.orgBranding?.emailAlias) {
+    const senderName = params.orgBranding.companyName || params.orgName || 'Consularly';
+    fromAddress = `"${senderName}" <${params.orgBranding.emailAlias}>`;
+    console.log(`[Email] Sending interview results from org alias: ${fromAddress}`);
+  } else {
+    console.log('[Email] No org email alias configured, using default sender');
+  }
+
   return await emailService.sendEmail({
     to: params.to,
     cc: params.cc,
     subject,
     html,
     text,
+    from: fromAddress, // Pass custom sender address or undefined to use default
   });
 }
 
@@ -190,7 +201,7 @@ export async function sendQuotaAlertEmail(params: {
   orgId: string;
 }) {
   const emailService = getEmailService();
-  
+
   const { subject, html, text } = generateQuotaAlertEmail({
     orgName: params.orgName,
     adminName: params.adminName,
@@ -220,7 +231,7 @@ export async function sendNotificationEmail(params: {
   actionLink?: string;
 }) {
   const emailService = getEmailService();
-  
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -280,15 +291,15 @@ export async function checkAndSendQuotaAlert(params: {
   lastAlertSent?: { threshold: string; timestamp: number };
 }): Promise<boolean> {
   const percentage = (params.quotaUsed / params.quotaLimit) * 100;
-  
+
   // Determine threshold
   let threshold: '75%' | '90%' | '100%' | null = null;
   if (percentage >= 100) threshold = '100%';
   else if (percentage >= 90) threshold = '90%';
   else if (percentage >= 75) threshold = '75%';
-  
+
   if (!threshold) return false;
-  
+
   // Check if we already sent this alert recently (within 24 hours)
   const now = Date.now();
   const twentyFourHours = 24 * 60 * 60 * 1000;
@@ -298,7 +309,7 @@ export async function checkAndSendQuotaAlert(params: {
   ) {
     return false; // Don't spam alerts
   }
-  
+
   // Send alert
   await sendQuotaAlertEmail({
     to: params.adminEmails,
@@ -309,6 +320,6 @@ export async function checkAndSendQuotaAlert(params: {
     quotaLimit: params.quotaLimit,
     orgId: params.orgId,
   });
-  
+
   return true;
 }
