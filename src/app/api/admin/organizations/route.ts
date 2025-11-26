@@ -233,8 +233,21 @@ export async function POST(req: NextRequest) {
             welcomeEmailSent: false, // Track if welcome email has been sent
           })
 
-          // Generate password reset link
-          resetLink = await adminAuth().generatePasswordResetLink(orgEmail)
+          // Generate password reset link with org subdomain
+          let continueUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+
+          // Use org subdomain if available and enabled
+          if (subdomain && subdomainEnabled) {
+            const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'localhost:3000'
+            const protocol = baseDomain.includes('localhost') ? 'http' : 'https'
+            continueUrl = `${protocol}://${subdomain}.${baseDomain}`
+            console.log(`[api/admin/organizations] Using org subdomain for reset link: ${continueUrl}`)
+          }
+
+          resetLink = await adminAuth().generatePasswordResetLink(orgEmail, {
+            url: continueUrl,
+            handleCodeInApp: false,
+          })
           userCreated = true
           console.log('[api/admin/organizations] Created new user for org:', orgEmail)
 

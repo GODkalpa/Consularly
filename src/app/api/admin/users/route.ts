@@ -72,10 +72,37 @@ export async function POST(req: NextRequest) {
       welcomeEmailSent: false, // Track if welcome email has been sent
     })
 
-    // Generate password reset link
+    // Generate password reset link with org subdomain
     let resetLink: string | undefined
     try {
-      resetLink = await adminAuth().generatePasswordResetLink(email)
+      // Build the continue URL using org subdomain if available
+      let continueUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+
+      if (orgId) {
+        try {
+          const orgSnap = await adminDb().collection('organizations').doc(orgId).get()
+          if (orgSnap.exists) {
+            const orgData = orgSnap.data()
+            const subdomain = orgData?.subdomain
+            const subdomainEnabled = orgData?.subdomainEnabled
+            const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'localhost:3000'
+
+            // Use subdomain URL if subdomain exists and is enabled
+            if (subdomain && subdomainEnabled) {
+              const protocol = baseDomain.includes('localhost') ? 'http' : 'https'
+              continueUrl = `${protocol}://${subdomain}.${baseDomain}`
+              console.log(`[api/admin/users] Using org subdomain for reset link: ${continueUrl}`)
+            }
+          }
+        } catch (e) {
+          console.warn('[api/admin/users] Could not fetch org subdomain, using base URL:', e)
+        }
+      }
+
+      resetLink = await adminAuth().generatePasswordResetLink(email, {
+        url: continueUrl,
+        handleCodeInApp: false,
+      })
     } catch {
       // ignore if not configured
     }

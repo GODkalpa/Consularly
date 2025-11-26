@@ -234,5 +234,3 @@ const AIAssistantIllustration = () => {
         </Card>
     )
 }
-
-
