@@ -11,10 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import { 
-  Mic, 
-  Square, 
-  Trash2, 
+import {
+  Mic,
+  Square,
+  Trash2,
   Download,
   Wifi,
   WifiOff,
@@ -104,21 +104,23 @@ const AssemblyAITranscriptionComponent = ({
     if (running === undefined) return;
     const control = async () => {
       try {
-        if (running && !transcription.isRecording) {
+        if (running) {
           console.log('[STT Component] Starting recording (answer phase)...');
           await transcription.startTranscription();
-        } else if (!running && transcription.isRecording) {
+        } else {
           console.log('[STT Component] Stopping recording...');
-          await transcription.stopTranscription();
+          // Pass false to keep connection alive (hot mic) but stop streaming
+          // @ts-ignore - stopTranscription accepts an argument in our updated hook
+          await transcription.stopTranscription(false);
         }
       } catch (e) {
         console.error('[STT Component] Recording control error:', e);
       }
     };
     control();
-    // We intentionally depend only on 'running' and the booleans to avoid re-creating functions
+    // We intentionally depend only on 'running' to avoid re-creating functions
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, transcription.isRecording]);
+  }, [running]);
 
   // Clear transcripts when resetKey changes
   useEffect(() => {
@@ -150,10 +152,10 @@ const AssemblyAITranscriptionComponent = ({
 
   // Export transcripts
   const handleExport = () => {
-    const text = transcription.finalTranscripts.map((t: TranscriptionResult, index: number) => 
+    const text = transcription.finalTranscripts.map((t: TranscriptionResult, index: number) =>
       `[${index + 1}] ${t.text} (Confidence: ${(t.confidence * 100).toFixed(1)}%)`
     ).join('\n\n');
-    
+
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -336,7 +338,7 @@ const AssemblyAITranscriptionComponent = ({
               </div>
               <div>
                 <div className="text-2xl font-bold">
-                  {transcription.finalTranscripts.reduce((acc: number, t: TranscriptionResult) => 
+                  {transcription.finalTranscripts.reduce((acc: number, t: TranscriptionResult) =>
                     acc + t.text.split(' ').length, 0
                   )}
                 </div>
@@ -344,16 +346,16 @@ const AssemblyAITranscriptionComponent = ({
               </div>
               <div>
                 <div className="text-2xl font-bold">
-                  {transcription.finalTranscripts.length > 0 
-                    ? ((transcription.finalTranscripts.reduce((acc: number, t: TranscriptionResult) => 
-                        acc + t.confidence, 0) / transcription.finalTranscripts.length) * 100).toFixed(1)
+                  {transcription.finalTranscripts.length > 0
+                    ? ((transcription.finalTranscripts.reduce((acc: number, t: TranscriptionResult) =>
+                      acc + t.confidence, 0) / transcription.finalTranscripts.length) * 100).toFixed(1)
                     : 0}%
                 </div>
                 <div className="text-xs text-muted-foreground">Avg Confidence</div>
               </div>
               <div>
                 <div className="text-2xl font-bold">
-                  {Math.round(transcription.finalTranscripts.reduce((acc: number, t: TranscriptionResult) => 
+                  {Math.round(transcription.finalTranscripts.reduce((acc: number, t: TranscriptionResult) =>
                     acc + (t.audio_end - t.audio_start), 0) / 1000)}s
                 </div>
                 <div className="text-xs text-muted-foreground">Duration</div>

@@ -42,6 +42,7 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
   const assemblyAIRef = useRef<AssemblyAIService | null>(null);
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const isInitializedRef = useRef(false);
+  const isStreamingRef = useRef(false);
 
   // Initialize services (audio recorder + AssemblyAI service setup)
   const initialize = useCallback(async () => {
@@ -56,7 +57,9 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
 
       // Set up audio recorder event handlers early; the callbacks will run only when recording
       audioRecorderRef.current.onAudioChunk((chunk: AudioChunk) => {
-        if (assemblyAIRef.current?.isActive()) {
+        // CRITICAL FIX: Only send audio data if we are actively streaming (answer phase)
+        // This allows the mic to be "hot" (recording) during prep phase without sending data
+        if (assemblyAIRef.current?.isActive() && isStreamingRef.current) {
           assemblyAIRef.current.sendAudioData(chunk.data);
         }
       });
@@ -136,29 +139,34 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
     }
   }, [options]);
 
-  // Connect to AssemblyAI service without starting recording (for pre-connection during prep phase)
+  // Connect to AssemblyAI service AND start microphone (hot mic)
+  // This ensures zero latency when the answer phase starts
   const connectService = useCallback(async () => {
     if (!isInitializedRef.current) {
       await initialize();
     }
 
     try {
-      if (!assemblyAIRef.current) {
-        throw new Error('AssemblyAI service not initialized');
+      if (!assemblyAIRef.current || !audioRecorderRef.current) {
+        throw new Error('Services not initialized');
       }
 
-      // Already connected, skip
-      if (assemblyAIRef.current.isActive()) {
-        console.log('[STT] Already connected, skipping connection');
-        return;
+      // Ensure streaming is OFF initially
+      isStreamingRef.current = false;
+
+      // 1. Connect WebSocket if not active
+      if (!assemblyAIRef.current.isActive()) {
+        setState(prev => ({ ...prev, isConnecting: true }));
+        console.log('[STT] Establishing connection...');
+        await assemblyAIRef.current.startTranscription();
+        console.log('[STT] Connection established');
       }
 
-      setState(prev => ({ ...prev, isConnecting: true }));
-      console.log('[STT] Establishing connection (no recording yet)...');
-      
-      // Start AssemblyAI connection only (no audio recording)
-      await assemblyAIRef.current.startTranscription();
-      console.log('[STT] Connection established, ready for recording');
+      // 2. Start Microphone if not active (Warm up)
+      if (!audioRecorderRef.current.isActive()) {
+        console.log('[STT] Starting microphone (warm-up mode)...');
+        await audioRecorderRef.current.startRecording();
+      }
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to connect service';
@@ -167,7 +175,8 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
     }
   }, [initialize]);
 
-  // Start recording (assumes connection already established or will establish it)
+  // Start streaming audio data to AssemblyAI
+  // Assumes connectService has already been called (mic is hot)
   const startTranscription = useCallback(async () => {
     if (!isInitializedRef.current) {
       await initialize();
@@ -178,17 +187,20 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
         throw new Error('Services not initialized');
       }
 
-      // If not connected yet, connect first
+      // If not connected/recording yet (fallback), do it now
       if (!assemblyAIRef.current.isActive()) {
         setState(prev => ({ ...prev, isConnecting: true }));
         await assemblyAIRef.current.startTranscription();
       }
-      
-      // Start audio recording (connection is now ready)
+
       if (!audioRecorderRef.current.isActive()) {
         console.log('[STT] Starting audio recording...');
         await audioRecorderRef.current.startRecording();
       }
+
+      // CRITICAL: Enable data streaming immediately
+      console.log('[STT] 🔴 STREAMING STARTED (Zero Latency)');
+      isStreamingRef.current = true;
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to start transcription';
@@ -206,14 +218,20 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
   }, [options.autoStart, startTranscription]);
 
   // Stop transcription
-  const stopTranscription = useCallback(async () => {
+  const stopTranscription = useCallback(async (disconnect = true) => {
     try {
-      if (audioRecorderRef.current?.isActive()) {
-        audioRecorderRef.current.stopRecording();
-      }
+      // Stop streaming immediately
+      isStreamingRef.current = false;
+      console.log('[STT] Streaming stopped (disconnect:', disconnect, ')');
 
-      if (assemblyAIRef.current?.isActive()) {
-        await assemblyAIRef.current.stopTranscription();
+      if (disconnect) {
+        if (audioRecorderRef.current?.isActive()) {
+          audioRecorderRef.current.stopRecording();
+        }
+
+        if (assemblyAIRef.current?.isActive()) {
+          await assemblyAIRef.current.stopTranscription();
+        }
       }
 
     } catch (error) {
