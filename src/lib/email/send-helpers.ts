@@ -12,7 +12,21 @@ import { generateQuotaAlertEmail } from './templates/quota-alert';
 import { generatePasswordResetEmail } from './templates/password-reset';
 import type { OrganizationBranding } from './index';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+// Build base URL with proper fallback for production
+// Ensures emails never contain localhost links in production
+const getBaseUrl = (): string => {
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL;
+  }
+  // In production, use the base domain; in development, use localhost
+  if (process.env.NODE_ENV === 'production') {
+    const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
+    return `https://${baseDomain}`;
+  }
+  return 'http://localhost:3000';
+};
+
+const BASE_URL = getBaseUrl();
 
 /**
  * Send welcome email to new signup users

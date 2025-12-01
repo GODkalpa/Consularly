@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin'
 import { sendInterviewResultsEmail } from '@/lib/email/send-helpers'
+import { buildSubdomainUrl } from '@/lib/subdomain-utils'
 
 // PATCH /api/org/interviews/[id]
 // Body: { status?: 'scheduled'|'in_progress'|'completed'|'cancelled', endTime?: string ISO, score?: number, scoreDetails?: Partial<{communication:number;technical:number;confidence:number;overall:number}> }
@@ -94,7 +95,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
           if (studentEmail) {
             const finalReport = body.finalReport
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+            
+            // Build report link using organization subdomain if available
+            // This ensures links in emails point to the correct subdomain, not localhost
+            let reportLink: string
+            const orgSubdomain = orgData?.subdomain
+            
+            if (orgSubdomain) {
+              // Use subdomain URL for organizations with custom subdomains
+              reportLink = buildSubdomainUrl(orgSubdomain, `/org/results?id=${interviewId}`)
+            } else {
+              // Fallback to main app URL (ensure it's not localhost in production)
+              const appUrl = process.env.NEXT_PUBLIC_APP_URL || 
+                (process.env.NODE_ENV === 'production' 
+                  ? `https://${process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com'}` 
+                  : 'http://localhost:3000')
+              reportLink = `${appUrl}/org/results?id=${interviewId}`
+            }
+
+            console.log(`[Email] Sending interview results to ${studentEmail}, reportLink: ${reportLink}`)
 
             sendInterviewResultsEmail({
               to: studentEmail,
@@ -105,7 +124,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
               summary: finalReport.summary || 'Interview completed',
               strengths: finalReport.strengths || [],
               weaknesses: finalReport.weaknesses || [],
-              reportLink: `${appUrl}/org/results?id=${interviewId}`,
+              reportLink,
               orgName: orgData?.name,
               orgBranding: orgData?.settings?.customBranding,
               interviewDate: new Date().toLocaleDateString('en-US', {
