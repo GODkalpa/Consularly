@@ -54,7 +54,6 @@ export function useAssemblyAITranscription(options: UseAssemblyAITranscriptionOp
         sampleRate: options.sampleRate || 16000,
         channels: 1
       });
-
       // Set up audio recorder event handlers early; the callbacks will run only when recording
       audioRecorderRef.current.onAudioChunk((chunk: AudioChunk) => {
         // CRITICAL FIX: Only send audio data if we are actively streaming (answer phase)

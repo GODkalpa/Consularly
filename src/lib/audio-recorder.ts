@@ -23,7 +23,7 @@ export class AudioRecorder {
   private source: MediaStreamAudioSourceNode | null = null;
   private isRecording = false;
   private config: AudioRecorderConfig;
-  
+
   // Event handlers
   private onAudioChunkHandler?: (chunk: AudioChunk) => void;
   private onStartHandler?: () => void;
@@ -73,22 +73,6 @@ export class AudioRecorder {
         this.config.channels
       );
 
-      // Handle audio processing
-      this.processor.onaudioprocess = (event) => {
-        if (!this.isRecording) return;
-
-        const inputBuffer = event.inputBuffer;
-        const audioData = inputBuffer.getChannelData(0);
-        
-        // Convert Float32Array to ArrayBuffer
-        const arrayBuffer = this.float32ToArrayBuffer(audioData);
-        
-        this.onAudioChunkHandler?.({
-          data: arrayBuffer,
-          timestamp: Date.now()
-        });
-      };
-
       // Connect audio nodes
       this.source.connect(this.processor);
       // Do not play mic back to speakers. Route through a silent gain node
@@ -96,6 +80,19 @@ export class AudioRecorder {
       silent.gain.value = 0;
       this.processor.connect(silent);
       silent.connect(this.audioContext.destination);
+
+      // Handle audio processing events
+      this.processor.onaudioprocess = (e) => {
+        if (!this.isRecording) return;
+
+        const inputData = e.inputBuffer.getChannelData(0);
+        const audioData = this.float32ToArrayBuffer(inputData);
+
+        this.onAudioChunkHandler?.({
+          data: audioData,
+          timestamp: e.playbackTime
+        });
+      };
 
       console.log('Audio recorder initialized successfully');
     } catch (error) {
@@ -228,13 +225,13 @@ export class AudioRecorder {
   private float32ToArrayBuffer(float32Array: Float32Array): ArrayBuffer {
     // Convert float32 (-1 to 1) to int16 (-32768 to 32767)
     const int16Array = new Int16Array(float32Array.length);
-    
+
     for (let i = 0; i < float32Array.length; i++) {
       // Clamp and convert to 16-bit integer
       const sample = Math.max(-1, Math.min(1, float32Array[i]));
       int16Array[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
     }
-    
+
     return int16Array.buffer;
   }
 
@@ -246,7 +243,7 @@ export class AudioRecorder {
       if (!navigator.permissions) {
         return 'granted'; // Assume granted if permissions API not available
       }
-      
+
       const permission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
       return permission.state;
     } catch (error) {

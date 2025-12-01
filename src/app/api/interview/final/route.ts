@@ -3,6 +3,8 @@ import { selectLLMProvider, callLLMProvider, logProviderSelection, type Intervie
 import type { DetailedInsight } from '@/types/firestore'
 import { buildOptimizedPrompt, logPromptMetrics, type ConversationEntry, type PerAnswerScore } from '@/lib/prompt-compression'
 import { performanceTracker, createEvaluationMetric } from '@/lib/performance-benchmark'
+import { UK_SCORING_CONFIG, checkScoreDiscrepancy } from '@/lib/f1-mvp-config'
+import { detectScoringAnomaly, type ScoringAnomaly } from '@/lib/uk-score-validator'
 
 // Final interview evaluation focused on UK pre-CAS metrics with graceful fallback
 // Request body:
@@ -92,16 +94,16 @@ function buildDegradedPrompt(
   const isUKFrance = route === 'uk_student' || route === 'france_ema' || route === 'france_icn'
   const countryName = route === 'uk_student' ? 'UK' : route.startsWith('france_') ? 'France' : 'USA'
   
-  // Ultra-minimal system prompt
+  // Ultra-minimal system prompt with updated UK thresholds
   const system = isUKFrance
     ? `${countryName} visa evaluator. Evaluate interview performance.
 
 CRITERIA: courseAndUniversityFit, financialRequirement, accommodationLogistics, complianceCredibility, postStudyIntent, communication
 
-THRESHOLDS:
-- accepted: All ≥75, no red flags
-- borderline: Any 55-74 OR minor red flags
-- rejected: Any <55 OR major red flags
+THRESHOLDS (UPDATED - more achievable):
+- accepted: Overall ≥70, no major red flags
+- borderline: Overall 50-69 OR minor red flags
+- rejected: Overall <50 OR major red flags
 
 Return JSON: decision, overall, dimensions, summary, detailedInsights, strengths, weaknesses, recommendations.`
     : `US F1 visa evaluator. Evaluate interview performance.
@@ -552,8 +554,21 @@ function evaluateHeuristically(
     const communication = Math.round(avgSpeech)
     const content = Math.round(avgContent)
     
+    // UK SCORING FIX: Use updated thresholds (70 for accepted, 50 for rejected)
+    const isUKRoute = route === 'uk_student';
+    const acceptedThreshold = isUKRoute ? UK_SCORING_CONFIG.thresholds.accepted : 75;
+    const rejectedThreshold = isUKRoute ? UK_SCORING_CONFIG.thresholds.borderline : 55;
+    
     const decision: 'accepted' | 'rejected' | 'borderline' = 
-      avgOverall >= 75 ? 'accepted' : avgOverall < 55 ? 'rejected' : 'borderline'
+      avgOverall >= acceptedThreshold ? 'accepted' : avgOverall < rejectedThreshold ? 'rejected' : 'borderline'
+    
+    // Check for score discrepancy and log warning if needed
+    if (isUKRoute) {
+      const discrepancyCheck = checkScoreDiscrepancy(avgOverall, avgOverall); // Will be used with final score later
+      if (discrepancyCheck.hasWarning) {
+        console.warn(`⚠️ [Score Discrepancy] ${discrepancyCheck.message}`);
+      }
+    }
     
     const dimensions = route === 'uk_student'
       ? {
@@ -584,6 +599,38 @@ function evaluateHeuristically(
         example: 'Multiple questions were answered with silence or very brief responses',
         actionItem: 'Prepare thoroughly and provide detailed answers (30-100 words) to ALL questions. Silence or very brief answers will result in automatic failure.'
       })
+    }
+    
+    // SCORING ANOMALY DETECTION (Requirement 3.2): Detect scores < 40 with word count > 10
+    // This indicates potential scoring issues rather than missing responses
+    const scoringAnomalies: ScoringAnomaly[] = [];
+    answers.forEach((answer: string, index: number) => {
+      const score = perAnswerScores[index]?.overall ?? 0;
+      const wordCount = answer?.trim().split(/\s+/).filter((w: string) => w.length > 0).length ?? 0;
+      
+      if (detectScoringAnomaly(score, wordCount)) {
+        scoringAnomalies.push({
+          questionIndex: index,
+          score,
+          wordCount,
+          anomalyType: 'zero_dimension_pattern',
+          correctedScore: score, // Already corrected by LLM scorer
+        });
+      }
+    });
+    
+    if (scoringAnomalies.length > 0) {
+      console.warn('⚠️ [Final Evaluation] Scoring anomalies detected:', scoringAnomalies);
+      // Flag for manual review if multiple anomalies (Requirement 5.4)
+      if (scoringAnomalies.length >= 3) {
+        detailedInsights.push({
+          category: 'Content Quality',
+          type: 'weakness',
+          finding: `${scoringAnomalies.length} questions had low scores despite having substantive answers (${scoringAnomalies.map(a => `Q${a.questionIndex + 1}: ${a.wordCount} words, score ${a.score}`).join('; ')})`,
+          example: 'This may indicate scoring anomalies for factual questions',
+          actionItem: 'Review these answers manually - low scores may be due to question type mismatch rather than poor answers'
+        });
+      }
     }
     
     if (avgContent >= 75) {
@@ -643,14 +690,22 @@ function evaluateHeuristically(
       weaknesses.push('Overall performance significantly below expectations')
     }
     
+    // Build summary with anomaly awareness (Requirement 3.1, 3.3, 3.4)
+    // IMPORTANT: Do NOT claim "zero words recorded" when scoring anomalies are detected
+    const anomalyNote = scoringAnomalies.length > 0 
+      ? ` Note: ${scoringAnomalies.length} question(s) had low scores despite substantive answers (word counts: ${scoringAnomalies.map(a => `Q${a.questionIndex + 1}: ${a.wordCount} words`).join(', ')}). This may indicate scoring anomalies for factual questions.`
+      : '';
+    
     const summary = `Based on detailed per-answer analysis across ${perAnswerScores.length} questions, the candidate achieved an average score of ${Math.round(avgOverall)}/100. ${
-      zeroScoreCount >= 3
+      zeroScoreCount >= 3 && scoringAnomalies.length === 0
         ? `CRITICAL ISSUE: ${zeroScoreCount} question${zeroScoreCount !== 1 ? 's were' : ' was'} answered with insufficient content (< 10 words each), resulting in automatic zero scores. This suggests inadequate preparation or technical issues with the microphone. Content quality scored ${Math.round(avgContent)}/100, speech delivery ${Math.round(avgSpeech)}/100, and body language ${Math.round(avgBody)}/100. The candidate must retake the interview and provide detailed verbal responses to ALL questions.`
+        : zeroScoreCount >= 3 && scoringAnomalies.length > 0
+        ? `Some questions received low scores. However, ${scoringAnomalies.length} of these had substantive answers (${scoringAnomalies.map(a => `Q${a.questionIndex + 1}: ${a.wordCount} words`).join(', ')}), suggesting potential scoring anomalies rather than missing responses. Content quality scored ${Math.round(avgContent)}/100, speech delivery ${Math.round(avgSpeech)}/100, and body language ${Math.round(avgBody)}/100.${anomalyNote}`
         : decision === 'accepted' 
-        ? 'The performance demonstrated strong capabilities across content quality (avg: ' + Math.round(avgContent) + '/100), speech delivery (avg: ' + Math.round(avgSpeech) + '/100), and body language (avg: ' + Math.round(avgBody) + '/100). The candidate showed consistent preparation and understanding of the subject matter.' 
+        ? 'The performance demonstrated strong capabilities across content quality (avg: ' + Math.round(avgContent) + '/100), speech delivery (avg: ' + Math.round(avgSpeech) + '/100), and body language (avg: ' + Math.round(avgBody) + '/100). The candidate showed consistent preparation and understanding of the subject matter.' + anomalyNote
         : decision === 'rejected' 
-        ? 'Significant weaknesses were detected in the interview performance. Content quality scored ' + Math.round(avgContent) + '/100, speech delivery ' + Math.round(avgSpeech) + '/100, and body language ' + Math.round(avgBody) + '/100. These scores indicate substantial gaps in preparation and presentation that need to be addressed.' 
-        : 'The performance showed mixed results with some areas of strength and others requiring improvement. Content quality averaged ' + Math.round(avgContent) + '/100, communication ' + Math.round(avgSpeech) + '/100, and body language ' + Math.round(avgBody) + '/100. With focused practice on the identified weaknesses, the candidate can significantly improve their interview readiness.'
+        ? 'Significant weaknesses were detected in the interview performance. Content quality scored ' + Math.round(avgContent) + '/100, speech delivery ' + Math.round(avgSpeech) + '/100, and body language ' + Math.round(avgBody) + '/100. These scores indicate substantial gaps in preparation and presentation that need to be addressed.' + anomalyNote
+        : 'The performance showed mixed results with some areas of strength and others requiring improvement. Content quality averaged ' + Math.round(avgContent) + '/100, communication ' + Math.round(avgSpeech) + '/100, and body language ' + Math.round(avgBody) + '/100. With focused practice on the identified weaknesses, the candidate can significantly improve their interview readiness.' + anomalyNote
     }`
     
     return {
@@ -698,14 +753,18 @@ function evaluateHeuristically(
     overall = clamp(0.4 * communication + 0.3 * content + 0.2 * financials + 0.1 * intent)
   }
 
-  // Stricter UK decision thresholds (all dimensions must be strong)
+  // UK SCORING FIX: Updated thresholds (70 for accepted, 50 for rejected)
   const minDimension = route === 'uk_student' 
     ? Math.min(courseAndUniversityFit, financialRequirement, accommodationLogistics, complianceCredibility, postStudyIntent)
     : overall
   
+  // Use UK_SCORING_CONFIG thresholds for UK interviews
+  const ukAccepted = UK_SCORING_CONFIG.thresholds.accepted; // 70
+  const ukBorderline = UK_SCORING_CONFIG.thresholds.borderline; // 50
+  
   const decision: 'accepted' | 'rejected' | 'borderline' = 
     route === 'uk_student'
-      ? (overall >= 75 && minDimension >= 70 ? 'accepted' : (overall < 60 || minDimension < 50 ? 'rejected' : 'borderline'))
+      ? (overall >= ukAccepted && minDimension >= 60 ? 'accepted' : (overall < ukBorderline || minDimension < 40 ? 'rejected' : 'borderline'))
       : (overall >= 75 ? 'accepted' : overall < 55 ? 'rejected' : 'borderline')
 
   const recommendations: string[] = []

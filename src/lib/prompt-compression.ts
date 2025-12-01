@@ -127,15 +127,16 @@ export function buildOptimizedPrompt(
   const allRedFlags = summaries.flatMap(s => s.redFlags || [])
   
   // Build ultra-concise system prompt (reduced from ~2000 tokens to ~500 tokens)
+  // UK SCORING FIX: Updated thresholds (70 for accepted, 50 for rejected)
   const system = isUKFrance
     ? `${countryName} visa evaluator. Assess interview performance.
 
 CRITERIA: courseAndUniversityFit, financialRequirement, accommodationLogistics, complianceCredibility, postStudyIntent, communication
 
-THRESHOLDS:
-- accepted: All ≥75, no red flags
-- borderline: Any 55-74 OR minor flags
-- rejected: Any <55 OR major flags
+THRESHOLDS (UPDATED - more achievable):
+- accepted: Overall ≥70, no major red flags
+- borderline: Overall 50-69 OR minor flags
+- rejected: Overall <50 OR major flags
 
 RED FLAGS: No course modules, ${route === 'uk_student' ? 'no 28-day rule' : 'no financial docs'}, vague accommodation, agent dependency, contradictions
 

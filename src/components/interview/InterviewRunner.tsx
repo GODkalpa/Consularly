@@ -81,11 +81,11 @@ export default function InterviewRunner() {
   const asrConfidencesRef = useRef<number[]>([])
   const [latestAsrConfidence, setLatestAsrConfidence] = useState<number | null>(null)
   // Track language detection data (for non-English detection)
-  const languageDataRef = useRef<{code: string; confidence: number}[]>([])
+  const languageDataRef = useRef<{ code: string; confidence: number }[]>([])
   const captureBodyScoreRef = useRef<(() => BodyLanguageScore | null) | null>(null)
   // Persist targets
   const firestoreInterviewIdRef = useRef<string | null>(null)
-  const scopeRef = useRef<'org'|'user'|null>(null)
+  const scopeRef = useRef<'org' | 'user' | null>(null)
   // PERFORMANCE FIX: Debounce transcript updates to reduce re-renders (increased to 300ms)
   const transcriptDebounceRef = useRef<number | null>(null)
   // PERFORMANCE FIX: Use ref for phase to avoid timer callback recreation
@@ -124,7 +124,7 @@ export default function InterviewRunner() {
     const maxLocalRetries = 3
     let serverRetryCount = 0
     const maxServerRetries = 3
-    
+
     // Helper to initialize session from data payload
     const initializeSession = (init: any) => {
       try {
@@ -190,7 +190,7 @@ export default function InterviewRunner() {
         throw e
       }
     }
-    
+
     // Layer 1: Try localStorage (fast path)
     const tryLocalStorage = () => {
       try {
@@ -199,12 +199,12 @@ export default function InterviewRunner() {
           setLoading(false)
           return false
         }
-        
+
         const key = `interview:init:${id}`
         console.log(`[InterviewRunner] Layer 1: Checking localStorage (attempt ${localRetryCount + 1}/${maxLocalRetries})`)
-        
+
         const raw = localStorage.getItem(key)
-        
+
         if (!raw) {
           localRetryCount++
           console.warn(`[InterviewRunner] localStorage empty, retry ${localRetryCount}/${maxLocalRetries}`)
@@ -217,7 +217,7 @@ export default function InterviewRunner() {
           tryServerFetch()
           return false
         }
-        
+
         console.log('[InterviewRunner] Layer 1: localStorage data found ✓')
         const init = JSON.parse(raw)
         initializeSession(init)
@@ -229,7 +229,7 @@ export default function InterviewRunner() {
         return false
       }
     }
-    
+
     // Layer 2: Fetch from server (reliable fallback)
     const tryServerFetch = async () => {
       try {
@@ -237,9 +237,9 @@ export default function InterviewRunner() {
           setLoading(false)
           return
         }
-        
+
         console.log(`[InterviewRunner] Layer 2: Fetching from server (attempt ${serverRetryCount + 1}/${maxServerRetries})`)
-        
+
         // Get auth token
         const user = auth.currentUser
         if (!user) {
@@ -254,14 +254,14 @@ export default function InterviewRunner() {
           }, 1000)
           return
         }
-        
+
         const token = await user.getIdToken()
         const response = await fetch(`/api/interview/session/${id}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         })
-        
+
         if (!response.ok) {
           if (response.status === 404) {
             console.error('[InterviewRunner] Interview not found')
@@ -275,10 +275,10 @@ export default function InterviewRunner() {
           }
           throw new Error(`Server returned ${response.status}`)
         }
-        
+
         const init = await response.json()
         console.log('[InterviewRunner] Layer 2: Server fetch successful ✓')
-        
+
         // Cache in localStorage for future use
         try {
           const key = `interview:init:${id}`
@@ -287,7 +287,7 @@ export default function InterviewRunner() {
         } catch (e) {
           console.warn('[InterviewRunner] Failed to cache in localStorage:', e)
         }
-        
+
         initializeSession(init)
       } catch (e: any) {
         console.error('[InterviewRunner] Server fetch error:', e)
@@ -301,7 +301,7 @@ export default function InterviewRunner() {
         }
       }
     }
-    
+
     // Layer 3: Show error state
     const showError = (type: 'not-found' | 'forbidden' | 'network' | 'authentication') => {
       setLoading(false)
@@ -315,10 +315,10 @@ export default function InterviewRunner() {
         responses: [],
         status: 'error'
       })
-      // Store error type for rendering
-      ;(window as any).__interviewLoadError = type
+        // Store error type for rendering
+        ; (window as any).__interviewLoadError = type
     }
-    
+
     // Start with localStorage
     tryLocalStorage()
   }, [id])
@@ -330,11 +330,11 @@ export default function InterviewRunner() {
       return permissionsReady
     }
     permissionRequestingRef.current = true
-    
+
     try {
       setPermError(null)
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      try { stream.getTracks().forEach((t) => t.stop()) } catch {}
+      try { stream.getTracks().forEach((t) => t.stop()) } catch { }
       setPermissionsReady(true)
       return true
     } catch (e: any) {
@@ -397,18 +397,18 @@ export default function InterviewRunner() {
   const timerRafRef = useRef<number | null>(null)
   const lastSecondsSentRef = useRef<number>(-1)
   const finalizeAnswerRef = useRef<(() => void) | null>(null)
-  
+
   // PERFORMANCE FIX: Stable timer callback with NO dependencies to prevent recreation
   const updateTimer = useCallback(() => {
     const elapsed = (performance.now() - timerStartTimeRef.current) / 1000
     const remaining = Math.max(0, timerDurationRef.current - elapsed)
     const roundedRemaining = Math.ceil(remaining)
-    
+
     if (roundedRemaining !== lastSecondsSentRef.current) {
       lastSecondsSentRef.current = roundedRemaining
       setSecondsRemaining(roundedRemaining)
     }
-    
+
     if (remaining > 0.1) {
       // Continue timer updates
       timerRafRef.current = requestAnimationFrame(updateTimer)
@@ -435,7 +435,7 @@ export default function InterviewRunner() {
     if (phaseTimerRef.current) window.clearTimeout(phaseTimerRef.current)
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
     if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
-    
+
     // PERFORMANCE FIX: Update both state and ref to keep them in sync
     phaseRef.current = p
     setPhase(p)
@@ -453,7 +453,7 @@ export default function InterviewRunner() {
       // Clear language detection buffer for new answer
       languageDataRef.current = []
     }
-    
+
     // Start smooth RAF-based timer
     timerStartTimeRef.current = performance.now()
     timerDurationRef.current = durationSec
@@ -481,7 +481,7 @@ export default function InterviewRunner() {
           : `/api/interviews/${interviewId}`
         await fetch(url, { method: 'PATCH', headers, body: JSON.stringify({ status: 'in_progress' }) })
       }
-    } catch {}
+    } catch { }
     if (session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') {
       // UK: 15s prep, France: 30s prep
       const prepDuration = session.route === 'uk_student' ? 15 : 30
@@ -495,13 +495,13 @@ export default function InterviewRunner() {
   const startUSF1QuestionTimer = useCallback(() => {
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
     if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
-    
+
     // Clear ASR confidence for new question
     asrConfidencesRef.current = []
     setLatestAsrConfidence(null)
     // Clear language detection buffer for new question
     languageDataRef.current = []
-    
+
     // Use RAF-based timer for USA F1 as well
     timerStartTimeRef.current = performance.now()
     timerDurationRef.current = 40
@@ -528,14 +528,14 @@ export default function InterviewRunner() {
       conversationLength: finalApiSession.conversationHistory?.length,
       perAnswerScoresCount: perfList?.length,
     })
-    
+
     // Set timeout to 35 seconds (backend has 30s + 5s buffer)
     const controller = new AbortController()
     const timeoutId = setTimeout(() => {
       console.warn('⏱️ Final report API timeout (35s)')
       controller.abort()
     }, 35000)
-    
+
     try {
       // CRITICAL FIX: Pass per-answer scores to final evaluation for consistency
       const res = await fetch('/api/interview/final', {
@@ -544,20 +544,22 @@ export default function InterviewRunner() {
         body: JSON.stringify({
           route: session?.route,
           studentProfile: finalApiSession.studentProfile,
-          conversationHistory: finalApiSession.conversationHistory,
+          // CRITICAL FIX: Only include conversation history that has a corresponding score
+          // This prevents the "zero response" issue where the last (unanswered) question is counted
+          conversationHistory: finalApiSession.conversationHistory.slice(0, perfList.length),
           perAnswerScores: perfList,  // Include detailed per-answer scoring data
         }),
         signal: controller.signal,
       })
-      
+
       clearTimeout(timeoutId)
-      
+
       if (!res.ok) {
         const errorText = await res.text().catch(() => 'Unknown error')
         console.error('⚠️ Final report API error:', res.status, errorText)
         throw new Error(`Evaluation service returned error ${res.status}. Please try again.`)
       }
-      
+
       const data = await res.json()
       console.log('✅ Final report generated successfully:', {
         decision: data.decision,
@@ -568,7 +570,7 @@ export default function InterviewRunner() {
     } catch (e: any) {
       clearTimeout(timeoutId)
       console.error('❌ Final report generation failed:', e?.name, e?.message)
-      
+
       // Throw error to be caught by caller for retry logic
       if (e?.name === 'AbortError') {
         throw new Error('Evaluation is taking longer than expected. Please retry.')
@@ -580,18 +582,18 @@ export default function InterviewRunner() {
   // Retry evaluation function
   const retryEvaluation = useCallback(async () => {
     if (!apiSession) return
-    
+
     const MAX_RETRIES = 3
     if (retryCount >= MAX_RETRIES) {
       setEvaluationError('Maximum retry attempts reached. Please contact support.')
       return
     }
-    
+
     console.log(`🔄 Retrying evaluation (attempt ${retryCount + 1}/${MAX_RETRIES})`)
     setRetryCount(prev => prev + 1)
     setSession((prev) => prev ? { ...prev, status: 'analyzing' } : prev)
     setEvaluationError(null)
-    
+
     try {
       await computeFinalReport(apiSession)
       setSession((prev) => prev ? { ...prev, status: 'completed' } : prev)
@@ -610,29 +612,29 @@ export default function InterviewRunner() {
       // Stop timers
       if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
       if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
-      
+
       // CRITICAL FIX: Capture body language score at the exact moment of answer finalization
       const capturedBodyScore = captureBodyScoreRef.current ? captureBodyScoreRef.current() : null
-      
+
       // Calculate average ASR confidence across all segments for this answer
       const avgConfidence = asrConfidencesRef.current.length > 0
         ? asrConfidencesRef.current.reduce((sum, c) => sum + c, 0) / asrConfidencesRef.current.length
         : undefined
-      
+
       // Calculate most common language detected and its average confidence
       let detectedLanguage: string | undefined;
       let languageConfidence: number | undefined;
       if (languageDataRef.current.length > 0) {
         // Count occurrences of each language
-        const langCounts: Record<string, {count: number, totalConfidence: number}> = {};
-        languageDataRef.current.forEach(({code, confidence}) => {
+        const langCounts: Record<string, { count: number, totalConfidence: number }> = {};
+        languageDataRef.current.forEach(({ code, confidence }) => {
           if (!langCounts[code]) {
-            langCounts[code] = {count: 0, totalConfidence: 0};
+            langCounts[code] = { count: 0, totalConfidence: 0 };
           }
           langCounts[code].count++;
           langCounts[code].totalConfidence += confidence;
         });
-        
+
         // Find most common language
         let maxCount = 0;
         for (const [code, data] of Object.entries(langCounts)) {
@@ -643,7 +645,7 @@ export default function InterviewRunner() {
           }
         }
       }
-      
+
       console.log('📊 Scoring answer:', {
         transcriptLength: transcriptText.length,
         bodyScoreCaptured: !!capturedBodyScore,
@@ -653,7 +655,7 @@ export default function InterviewRunner() {
         detectedLanguage: detectedLanguage || 'N/A',
         languageConfidence: languageConfidence ? Math.round(languageConfidence * 100) + '%' : 'N/A',
       })
-      
+
       // PERFORMANCE FIX: Run scoring and next question generation in PARALLEL
       // This cuts latency in half by not waiting for scoring to complete
       const currentQText = session.questions[session.currentQuestionIndex]?.question || ''
@@ -663,25 +665,25 @@ export default function InterviewRunner() {
         studentProfile: apiSession.studentProfile,
         conversationHistory: apiSession.conversationHistory.map((h: any) => ({ question: h.question, answer: h.answer, timestamp: h.timestamp }))
       }
-      
+
       // Persist helper and start both API calls simultaneously
       const orderValue = session.currentQuestionIndex + 1
       const words = transcriptText ? transcriptText.trim().split(/\s+/).filter(w => w.length > 0).length : 0
       const MIN_WORD_COUNT = 10 // Minimum words for a valid answer
-      
+
       // CRITICAL FIX: If answer is too brief (< 10 words), give 0 for content/speech
       // This prevents gaming the system by clicking "Next" without speaking
       const isTooShort = words < MIN_WORD_COUNT
       const contentHeuristic = isTooShort ? 0 : Math.min(100, Math.round(words * 3))
       const speechHeuristic = isTooShort ? 0 : (typeof avgConfidence === 'number' ? Math.round(avgConfidence * 100) : 70)
       const bodyHeuristic = capturedBodyScore ? Math.round(capturedBodyScore.overallScore) : 0
-      
+
       // Overall score with proper weights: 70% content, 20% speech, 10% body
       const perfFallback = {
         overall: Math.round(0.7 * contentHeuristic + 0.2 * speechHeuristic + 0.1 * bodyHeuristic),
         categories: { content: contentHeuristic, speech: speechHeuristic, bodyLanguage: bodyHeuristic }
       }
-      
+
       if (isTooShort) {
         console.warn(`⚠️ [Fallback Scoring] Answer too brief (${words} words < ${MIN_WORD_COUNT} minimum) - using fallback: ${perfFallback.overall}/100`)
       }
@@ -762,31 +764,31 @@ export default function InterviewRunner() {
             setPerfList((prev) => [...prev, perfFallback])
             await persistResponse(orderValue, perfFallback)
           }
-        }).catch(async err => { 
+        }).catch(async err => {
           console.error('❌ Scoring API failed:', err)
           setPerfList((prev) => [...prev, perfFallback])
           await persistResponse(orderValue, perfFallback)
         }),
-        
+
         fetch('/api/interview/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'answer', sessionId: apiSession.id, session: apiSession, answer: transcriptText })
         })
       ]
-      
+
       // PERFORMANCE OPTIMIZATION: Show immediate UI feedback before API completes
       // This makes the transition feel instant to the user
       setCurrentTranscript('')
       answerBufferRef.current = ''
-      
+
       // Wait only for next question (scoring runs in background)
       const res = await nextQuestionPromise
       if (!res.ok) throw new Error('Failed to process answer')
       const data = await res.json()
       const updated = data.session
       setApiSession(updated)
-      
+
       // push response to UI list
       setSession((prev) => prev ? {
         ...prev,
@@ -797,12 +799,12 @@ export default function InterviewRunner() {
         // Transition to analyzing state
         setSession((prev) => prev ? { ...prev, status: 'analyzing' } : prev)
         setEvaluationError(null)
-        
+
         // compute final report - this will trigger setFinalReport
         try {
           await computeFinalReport(updated)
           // Wait for scoring to complete
-          try { await scoringPromise } catch {}
+          try { await scoringPromise } catch { }
           // Set session to completed - the finalization useEffect will wait for finalReport
           setSession((prev) => prev ? { ...prev, status: 'completed' } : prev)
         } catch (error: any) {
@@ -824,7 +826,7 @@ export default function InterviewRunner() {
       asrConfidencesRef.current = []
       // Clear language detection buffer for next answer
       languageDataRef.current = []
-      
+
       // UK/France flow: new question => prep phase (UK: 15s, France: 30s)
       if (session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') {
         const prepDuration = session.route === 'uk_student' ? 15 : 30
@@ -833,7 +835,7 @@ export default function InterviewRunner() {
         // USA F1: restart 40s timer for next question
         startUSF1QuestionTimer()
       }
-      
+
       // Scoring continues in background - no need to await
     } catch (e) {
       // eslint-disable-next-line no-console
@@ -848,31 +850,40 @@ export default function InterviewRunner() {
     if (processingRef.current || isProcessingTranscript) return
     processingRef.current = true
     setIsProcessingTranscript(true)
-    
+
     console.log('🎙️ [STT] Finalizing answer - starting optimized grace period for final transcript segments...')
-    
+
     if (phaseTimerRef.current) window.clearTimeout(phaseTimerRef.current)
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current)
     if (timerRafRef.current) cancelAnimationFrame(timerRafRef.current)
-    
-    // PERFORMANCE OPTIMIZATION: Reduced grace period from 2.5s to 1.5s for UK/France routes
-    // AssemblyAI typically finalizes segments within 1-1.5s, so 1.5s is sufficient
-    // This reduces perceived lag by 40% while still capturing complete transcripts
+
+    // PERFORMANCE OPTIMIZATION: Grace period set to 2.5s to ensure full capture
+    // AssemblyAI VAD needs ~1s to detect silence, plus network latency.
+    // 2.5s is safe to prevent truncation while keeping flow reasonably fast.
     const currentBufferBefore = answerBufferRef.current
     console.log(`🎙️ [STT] Buffer before grace period: "${currentBufferBefore}" (${currentBufferBefore.length} chars)`)
-    
-    const gracePeriod = (session?.route === 'uk_student' || session?.route === 'france_ema' || session?.route === 'france_icn') ? 1500 : 2500
+
+    const gracePeriod = (session?.route === 'uk_student' || session?.route === 'france_ema' || session?.route === 'france_icn') ? 2500 : 2500
     await new Promise(resolve => setTimeout(resolve, gracePeriod))
-    
+
     // After grace period, capture the complete accumulated transcript
     const finalText = answerBufferRef.current.trim()
     console.log(`🎙️ [STT] Buffer after grace period: "${finalText}" (${finalText.length} chars)`)
     console.log(`🎙️ [STT] Words captured: ${finalText.split(/\s+/).filter(w => w.length > 0).length}`)
-    
+
+    // VERIFICATION LOG: Explicitly show the user what is being sent
+    console.log(`✅ [VERIFICATION] FULL TRANSCRIPT CAPTURED:
+    ----------------------------------------
+    Length: ${finalText.length} chars
+    Word Count: ${finalText.split(/\s+/).filter(w => w.length > 0).length}
+    Content: "${finalText}"
+    ----------------------------------------
+    This text is now being sent to the scoring API.`)
+
     setIsProcessingTranscript(false)
     await processAnswer(finalText.length >= 1 ? finalText : '[No response]')
   }, [isProcessingTranscript, processAnswer, session?.route])
-  
+
   // PERFORMANCE FIX: Keep finalizeAnswerRef in sync with finalizeAnswer
   useEffect(() => {
     finalizeAnswerRef.current = finalizeAnswer
@@ -880,14 +891,14 @@ export default function InterviewRunner() {
 
   const handleTranscriptComplete = async (t: TranscriptionResult) => {
     if (!session || session.status !== 'active') return
-    
+
     // CRITICAL FIX: Track ASR confidence for ALL segments (accumulate for averaging)
     if (typeof t.confidence === 'number' && t.confidence > 0) {
       asrConfidencesRef.current.push(t.confidence)
       setLatestAsrConfidence(t.confidence) // Update real-time audio quality indicator
       console.log('🎤 [STT] ASR confidence:', Math.round(t.confidence * 100) + '%', `(${asrConfidencesRef.current.length} segments)`)
     }
-    
+
     // Track language detection data
     if (t.language_code && typeof t.language_confidence === 'number') {
       languageDataRef.current.push({
@@ -896,48 +907,48 @@ export default function InterviewRunner() {
       });
       console.log('🌐 [STT] Language detected:', t.language_code, Math.round(t.language_confidence * 100) + '%');
     }
-    
+
     const text = t.text.trim()
     if (!text) return
-    
+
     // CRITICAL FIX: Accumulate ALL final transcript segments for ALL routes
     // This ensures we capture every single word spoken by the user
     console.log(`🎙️ [STT] Final segment received: "${text}" (${text.split(/\s+/).length} words)`)
-    
+
     // Append to buffer (add space if buffer already has content)
     const newBuffer = answerBufferRef.current ? `${answerBufferRef.current} ${text}` : text
     answerBufferRef.current = newBuffer
     console.log(`🎙️ [STT] Buffer updated: "${newBuffer}" (${newBuffer.length} chars total)`)
-    
+
     // UK/France: Only show transcript during answer phase
     if (session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') {
       if (phase !== 'answer') return
       setCurrentTranscript(answerBufferRef.current)
       return
     }
-    
+
     // USA F1: Accumulate transcript and show immediately
     if (session.route === 'usa_f1') {
       setCurrentTranscript(answerBufferRef.current)
       return
     }
-    
+
     // Other routes: legacy behavior (if any)
     setCurrentTranscript(answerBufferRef.current)
   }
 
   // PERFORMANCE FIX: Memoize expensive computations to prevent recalculation on every render
   const currentQuestion = useMemo(() => session?.questions[session.currentQuestionIndex], [session?.questions, session?.currentQuestionIndex])
-  
+
   const progressPct = useMemo(() => {
     if (!session) return 0
     if (session.status === 'preparing') return 0
     const total = session.route === 'uk_student' ? 16 : (session.route === 'france_ema' || session.route === 'france_icn') ? 10 : session.questions.length
     return Math.round(((session.currentQuestionIndex + 1) / total) * 100)
   }, [session])
-  
+
   const phaseLabel = useMemo(() => phase ? (phase === 'prep' ? 'Prep' : 'Answer') : null, [phase])
-  
+
   // PERFORMANCE FIX: Memoize interview title to avoid recalculation
   const interviewTitle = useMemo(() => getInterviewTitle(session?.route || 'usa_f1'), [session?.route])
 
@@ -971,16 +982,16 @@ export default function InterviewRunner() {
   useEffect(() => {
     const interviewId = firestoreInterviewIdRef.current
     const scope = scopeRef.current
-    
-    console.log('[Finalize] useEffect triggered', { 
-      interviewId, 
-      scope, 
+
+    console.log('[Finalize] useEffect triggered', {
+      interviewId,
+      scope,
       sessionStatus: session?.status,
       hasScore: typeof finalReport?.overall === 'number',
       hasFinalReport: !!finalReport,
       hasCombinedAggregate: !!combinedAggregate
     })
-    
+
     if (!interviewId || !scope) {
       console.warn('[Finalize] Skipping - missing interviewId or scope', { interviewId, scope })
       return
@@ -989,7 +1000,7 @@ export default function InterviewRunner() {
       console.log('[Finalize] Skipping - session not completed', { status: session?.status })
       return
     }
-    
+
     // CRITICAL FIX: Wait for finalReport to be ready before saving
     // This prevents saving incomplete data to Firestore
     if (!finalReport) {
@@ -1007,53 +1018,53 @@ export default function InterviewRunner() {
       overall: combinedAggregate.overall,
     } : undefined
 
-    ;(async () => {
-      try {
-        // Force refresh token to prevent expiration issues
-        const token = await auth.currentUser?.getIdToken(true)
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-        if (token) headers['Authorization'] = `Bearer ${token}`
-        const url = scope === 'org'
-          ? `/api/org/interviews/${interviewId}`
-          : `/api/interviews/${interviewId}`
-        
-        // Prepare conversation history from apiSession
-        const conversationHistory = apiSession?.conversationHistory?.map((h: any) => ({
-          question: h.question,
-          answer: h.answer,
-          timestamp: h.timestamp,
-          questionType: h.questionType,
-        })) || []
-        
-        const body: any = {
-          status: 'completed',
-          endTime: new Date().toISOString(),
+      ; (async () => {
+        try {
+          // Force refresh token to prevent expiration issues
+          const token = await auth.currentUser?.getIdToken(true)
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+          if (token) headers['Authorization'] = `Bearer ${token}`
+          const url = scope === 'org'
+            ? `/api/org/interviews/${interviewId}`
+            : `/api/interviews/${interviewId}`
+
+          // Prepare conversation history from apiSession
+          const conversationHistory = apiSession?.conversationHistory?.map((h: any) => ({
+            question: h.question,
+            answer: h.answer,
+            timestamp: h.timestamp,
+            questionType: h.questionType,
+          })) || []
+
+          const body: any = {
+            status: 'completed',
+            endTime: new Date().toISOString(),
+          }
+          if (typeof score === 'number') {
+            body.score = score
+            body.finalScore = score // CRITICAL FIX: Set finalScore for dashboard queries
+          }
+          if (scoreDetails) body.scoreDetails = scoreDetails
+          if (finalReport) body.finalReport = finalReport
+          if (perfList.length > 0) body.perAnswerScores = perfList
+          if (perfList.length > 0) body.completedQuestions = perfList.length
+          if (conversationHistory.length > 0) body.conversationHistory = conversationHistory
+
+          console.log('[Finalize] Sending PATCH', { url, hasFinalReport: !!finalReport, perfListLength: perfList.length })
+          const res = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) })
+
+          if (!res.ok) {
+            const errorText = await res.text()
+            console.error('[Finalize] PATCH failed', { status: res.status, error: errorText })
+            throw new Error(`PATCH failed: ${res.status} - ${errorText}`)
+          }
+
+          console.log('[Finalize] Successfully updated interview to completed')
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error('[InterviewRunner] Finalize interview patch failed', e)
         }
-        if (typeof score === 'number') {
-          body.score = score
-          body.finalScore = score // CRITICAL FIX: Set finalScore for dashboard queries
-        }
-        if (scoreDetails) body.scoreDetails = scoreDetails
-        if (finalReport) body.finalReport = finalReport
-        if (perfList.length > 0) body.perAnswerScores = perfList
-        if (perfList.length > 0) body.completedQuestions = perfList.length
-        if (conversationHistory.length > 0) body.conversationHistory = conversationHistory
-        
-        console.log('[Finalize] Sending PATCH', { url, hasFinalReport: !!finalReport, perfListLength: perfList.length })
-        const res = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) })
-        
-        if (!res.ok) {
-          const errorText = await res.text()
-          console.error('[Finalize] PATCH failed', { status: res.status, error: errorText })
-          throw new Error(`PATCH failed: ${res.status} - ${errorText}`)
-        }
-        
-        console.log('[Finalize] Successfully updated interview to completed')
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[InterviewRunner] Finalize interview patch failed', e)
-      }
-    })()
+      })()
   }, [session?.status, combinedAggregate, finalReport, perfList, apiSession])
 
   if (loading) {
@@ -1069,7 +1080,7 @@ export default function InterviewRunner() {
 
   if (!session || !apiSession) {
     const errorType = (window as any).__interviewLoadError || 'unknown'
-    
+
     const errorMessages = {
       'not-found': {
         title: 'Interview Not Found',
@@ -1117,9 +1128,9 @@ export default function InterviewRunner() {
         ]
       }
     }
-    
+
     const error = errorMessages[errorType as keyof typeof errorMessages] || errorMessages.unknown
-    
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-muted/40 p-6">
         <Card className="max-w-xl w-full">
@@ -1292,7 +1303,7 @@ export default function InterviewRunner() {
       finalReportOverall: finalReport?.overall,
       finalReportDecision: finalReport?.decision,
     })
-    
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-muted/20 to-muted/40 p-6">
         <div className="max-w-7xl mx-auto space-y-8">
@@ -1424,13 +1435,12 @@ export default function InterviewRunner() {
                                 initial={{ width: 0 }}
                                 animate={{ width: `${Math.round(v as number)}%` }}
                                 transition={{ duration: 0.8, delay: 1.0 + idx * 0.1 }}
-                                className={`h-full rounded-full ${
-                                  Math.round(v as number) >= 75 
-                                    ? 'bg-gradient-to-r from-green-500 to-green-600' 
-                                    : Math.round(v as number) >= 50 
-                                    ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' 
+                                className={`h-full rounded-full ${Math.round(v as number) >= 75
+                                  ? 'bg-gradient-to-r from-green-500 to-green-600'
+                                  : Math.round(v as number) >= 50
+                                    ? 'bg-gradient-to-r from-yellow-500 to-yellow-600'
                                     : 'bg-gradient-to-r from-red-500 to-red-600'
-                                }`}
+                                  }`}
                               />
                             </div>
                           </motion.div>
@@ -1549,25 +1559,21 @@ export default function InterviewRunner() {
                               initial={{ opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: 1.1 + i * 0.05 }}
-                              className={`p-5 rounded-xl border-2 ${
-                                isStrength
-                                  ? 'bg-gradient-to-r from-green-50/80 to-green-50/30 dark:from-green-950/30 dark:to-green-950/10 border-green-500/20'
-                                  : 'bg-gradient-to-r from-orange-50/80 to-orange-50/30 dark:from-orange-950/30 dark:to-orange-950/10 border-orange-500/20'
-                              }`}
+                              className={`p-5 rounded-xl border-2 ${isStrength
+                                ? 'bg-gradient-to-r from-green-50/80 to-green-50/30 dark:from-green-950/30 dark:to-green-950/10 border-green-500/20'
+                                : 'bg-gradient-to-r from-orange-50/80 to-orange-50/30 dark:from-orange-950/30 dark:to-orange-950/10 border-orange-500/20'
+                                }`}
                             >
                               <div className="flex items-start gap-4">
-                                <div className={`flex-shrink-0 p-2 rounded-lg ${
-                                  isStrength ? 'bg-green-100 dark:bg-green-900/50' : 'bg-orange-100 dark:bg-orange-900/50'
-                                }`}>
-                                  <IconComponent className={`h-5 w-5 ${
-                                    isStrength ? 'text-green-700 dark:text-green-400' : 'text-orange-700 dark:text-orange-400'
-                                  }`} />
+                                <div className={`flex-shrink-0 p-2 rounded-lg ${isStrength ? 'bg-green-100 dark:bg-green-900/50' : 'bg-orange-100 dark:bg-orange-900/50'
+                                  }`}>
+                                  <IconComponent className={`h-5 w-5 ${isStrength ? 'text-green-700 dark:text-green-400' : 'text-orange-700 dark:text-orange-400'
+                                    }`} />
                                 </div>
                                 <div className="flex-1 space-y-2">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <Badge variant={isStrength ? 'default' : 'secondary'} className={`text-xs ${
-                                      isStrength ? 'bg-green-600' : 'bg-orange-600'
-                                    }`}>
+                                    <Badge variant={isStrength ? 'default' : 'secondary'} className={`text-xs ${isStrength ? 'bg-green-600' : 'bg-orange-600'
+                                      }`}>
                                       {insight.category}
                                     </Badge>
                                     <Badge variant="outline" className="text-xs">
@@ -1662,267 +1668,267 @@ export default function InterviewRunner() {
       <div className="w-full min-h-screen flex flex-col">
         {/* Permission overlay - Modern centered modal */}
         {!permissionsReady && (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed inset-0 z-50 bg-background/90 backdrop-blur-lg flex items-center justify-center p-4"
-        >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            transition={{ type: "spring", stiffness: 200, damping: 20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 z-50 bg-background/90 backdrop-blur-lg flex items-center justify-center p-4"
           >
-            <Card className="max-w-md w-full border-2 shadow-2xl">
-              <CardHeader className="text-center pb-3">
-                <div className="mx-auto mb-3 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-3xl">🎥</span>
-                </div>
-                <CardTitle className="text-2xl">Camera & Microphone Access</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-center text-muted-foreground">We need access to your camera and microphone to conduct the interview. <br/><span className="font-semibold text-foreground">Please click &ldquo;Allow&rdquo; when your browser asks for permission.</span></p>
-                {permError && (
-                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                    <p className="text-xs text-destructive font-medium">{permError}</p>
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              transition={{ type: "spring", stiffness: 200, damping: 20 }}
+            >
+              <Card className="max-w-md w-full border-2 shadow-2xl">
+                <CardHeader className="text-center pb-3">
+                  <div className="mx-auto mb-3 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="text-3xl">🎥</span>
                   </div>
-                )}
-                <Button size="lg" className="w-full" onClick={requestPermissions}>
-                  <Play className="h-5 w-5 mr-2" /> Grant Permissions
-                </Button>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </motion.div>
-      )}
-
-      {/* Split Screen Layout */}
-      <div className="flex-1 flex flex-col lg:flex-row">
-        {/* Left Panel - Question/Statement Section (30%) */}
-        <div className="lg:w-[30%] bg-white dark:bg-gray-50 flex items-center justify-center p-8 lg:p-12">
-          <div className="max-w-2xl w-full space-y-6">
-            {session.status !== 'preparing' ? (
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={session.currentQuestionIndex}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.4 }}
-                  className="space-y-4"
-                >
-                  <div className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider font-medium mb-2">
-                    {interviewTitle} • Question {session.currentQuestionIndex + 1}{session.route === 'uk_student' ? ' of 16' : (session.route === 'france_ema' || session.route === 'france_icn') ? ' of 10' : ''}
-                  </div>
-                  <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-900 leading-snug">
-                    {currentQuestion?.question}
-                  </h1>
-                  {(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase && (
-                    <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-100 rounded-lg border border-gray-200">
-                      <div className="text-sm text-gray-700 dark:text-gray-800 leading-relaxed flex items-start gap-2">
-                        {phase === 'prep' ? (
-                          <>
-                            <span className="text-lg flex-shrink-0">⏱️</span>
-                            <div>
-                              <span className="font-semibold block text-gray-900 mb-1">Preparation Time</span>
-                              <span className="text-gray-600">You have <span className="font-bold text-primary">{secondsRemaining} seconds</span> to review the question silently.</span>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-lg flex-shrink-0">🎙️</span>
-                            <div>
-                              <span className="font-semibold block text-gray-900 mb-1">Recording Your Answer</span>
-                              <span className="text-gray-600">Speak clearly. <span className="font-bold text-primary">{secondsRemaining} seconds</span> remaining.</span>
-                            </div>
-                          </>
-                        )}
-                      </div>
+                  <CardTitle className="text-2xl">Camera & Microphone Access</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-center text-muted-foreground">We need access to your camera and microphone to conduct the interview. <br /><span className="font-semibold text-foreground">Please click &ldquo;Allow&rdquo; when your browser asks for permission.</span></p>
+                  {permError && (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                      <p className="text-xs text-destructive font-medium">{permError}</p>
                     </div>
                   )}
-                  {session.route === 'usa_f1' && session.status === 'active' && typeof secondsRemaining === 'number' && (
-                    <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-100 rounded-lg border border-gray-200">
-                      <div className="text-sm text-gray-700 dark:text-gray-800 leading-relaxed flex items-start gap-2">
-                        <span className="text-lg flex-shrink-0">⏱️</span>
-                        <div>
-                          <span className="font-semibold block text-gray-900 mb-1">Time Remaining</span>
-                          <span className="text-gray-600">You have <span className="font-bold text-primary">{Math.max(0, secondsRemaining)} seconds</span>. Click <span className="font-semibold">Next Question</span> when ready.</span>
+                  <Button size="lg" className="w-full" onClick={requestPermissions}>
+                    <Play className="h-5 w-5 mr-2" /> Grant Permissions
+                  </Button>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Split Screen Layout */}
+        <div className="flex-1 flex flex-col lg:flex-row">
+          {/* Left Panel - Question/Statement Section (30%) */}
+          <div className="lg:w-[30%] bg-white dark:bg-gray-50 flex items-center justify-center p-8 lg:p-12">
+            <div className="max-w-2xl w-full space-y-6">
+              {session.status !== 'preparing' ? (
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={session.currentQuestionIndex}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.4 }}
+                    className="space-y-4"
+                  >
+                    <div className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider font-medium mb-2">
+                      {interviewTitle} • Question {session.currentQuestionIndex + 1}{session.route === 'uk_student' ? ' of 16' : (session.route === 'france_ema' || session.route === 'france_icn') ? ' of 10' : ''}
+                    </div>
+                    <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-900 leading-snug">
+                      {currentQuestion?.question}
+                    </h1>
+                    {(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase && (
+                      <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-100 rounded-lg border border-gray-200">
+                        <div className="text-sm text-gray-700 dark:text-gray-800 leading-relaxed flex items-start gap-2">
+                          {phase === 'prep' ? (
+                            <>
+                              <span className="text-lg flex-shrink-0">⏱️</span>
+                              <div>
+                                <span className="font-semibold block text-gray-900 mb-1">Preparation Time</span>
+                                <span className="text-gray-600">You have <span className="font-bold text-primary">{secondsRemaining} seconds</span> to review the question silently.</span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-lg flex-shrink-0">🎙️</span>
+                              <div>
+                                <span className="font-semibold block text-gray-900 mb-1">Recording Your Answer</span>
+                                <span className="text-gray-600">Speak clearly. <span className="font-bold text-primary">{secondsRemaining} seconds</span> remaining.</span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
+                    )}
+                    {session.route === 'usa_f1' && session.status === 'active' && typeof secondsRemaining === 'number' && (
+                      <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-100 rounded-lg border border-gray-200">
+                        <div className="text-sm text-gray-700 dark:text-gray-800 leading-relaxed flex items-start gap-2">
+                          <span className="text-lg flex-shrink-0">⏱️</span>
+                          <div>
+                            <span className="font-semibold block text-gray-900 mb-1">Time Remaining</span>
+                            <span className="text-gray-600">You have <span className="font-bold text-primary">{Math.max(0, secondsRemaining)} seconds</span>. Click <span className="font-semibold">Next Question</span> when ready.</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              ) : (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  <div className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider font-medium mb-2">
+                    {interviewTitle}
+                  </div>
+                  <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-900 leading-snug">
+                    Welcome, {session.studentName}
+                  </h1>
+                  <p className="text-base text-gray-600 dark:text-gray-700 leading-relaxed">
+                    Please ensure your camera and microphone are working correctly. Click <span className="font-semibold text-gray-900">Start Interview</span> when you&apos;re ready to begin.
+                  </p>
+                  {permissionsReady && micRunning && (
+                    <div className="mt-6 p-4 bg-green-50 dark:bg-green-100 rounded-lg border border-green-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold text-sm text-green-900 flex items-center gap-2">
+                          <span>🎤</span>
+                          <span>Microphone Level</span>
+                        </div>
+                        <div className="text-sm font-bold text-green-900">{Math.round((micLevel || 0) * 100)}%</div>
+                      </div>
+                      <div className="h-3 w-full bg-green-200 rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-3 bg-green-600 rounded-full"
+                          animate={{ width: `${Math.min(100, Math.round((micLevel || 0) * 100))}%` }}
+                          transition={{ duration: 0.1 }}
+                        />
+                      </div>
+                      <p className="text-xs text-green-700">Speak to test your microphone (not recorded)</p>
                     </div>
                   )}
                 </motion.div>
-              </AnimatePresence>
-            ) : (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-                <div className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider font-medium mb-2">
-                  {interviewTitle}
-                </div>
-                <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-900 leading-snug">
-                  Welcome, {session.studentName}
-                </h1>
-                <p className="text-base text-gray-600 dark:text-gray-700 leading-relaxed">
-                  Please ensure your camera and microphone are working correctly. Click <span className="font-semibold text-gray-900">Start Interview</span> when you&apos;re ready to begin.
-                </p>
-                {permissionsReady && micRunning && (
-                  <div className="mt-6 p-4 bg-green-50 dark:bg-green-100 rounded-lg border border-green-200 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-semibold text-sm text-green-900 flex items-center gap-2">
-                        <span>🎤</span>
-                        <span>Microphone Level</span>
-                      </div>
-                      <div className="text-sm font-bold text-green-900">{Math.round((micLevel || 0) * 100)}%</div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Panel - Video Section with Brand Gradient (70%) */}
+          <div className="lg:w-[70%] bg-gradient-to-br from-primary via-primary-700 to-primary-900 relative overflow-hidden flex items-center justify-center p-8">
+            {/* Decorative Elements */}
+            <div className="absolute top-0 right-0 w-96 h-96 bg-secondary/20 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
+            <div className="absolute bottom-0 right-8 w-32 h-32 grid grid-cols-8 gap-1 opacity-30">
+              {Array.from({ length: 64 }).map((_, i) => (
+                <div key={i} className="w-1 h-1 bg-white rounded-full"></div>
+              ))}
+            </div>
+
+            {/* Audio Quality Indicator */}
+            {session.status === 'active' && latestAsrConfidence !== null && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute top-4 right-4 z-20"
+              >
+                <div className="bg-white/90 backdrop-blur-md rounded-lg shadow-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🎤</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-600 font-medium">Audio Quality</span>
+                      <Badge
+                        variant={
+                          latestAsrConfidence >= 0.7 ? 'default' :
+                            latestAsrConfidence >= 0.5 ? 'secondary' :
+                              'destructive'
+                        }
+                        className="text-xs px-2 py-0 mt-0.5"
+                      >
+                        {latestAsrConfidence >= 0.7 ? 'Excellent' :
+                          latestAsrConfidence >= 0.5 ? 'Good' :
+                            'Poor'} ({Math.round(latestAsrConfidence * 100)}%)
+                      </Badge>
                     </div>
-                    <div className="h-3 w-full bg-green-200 rounded-full overflow-hidden">
-                      <motion.div 
-                        className="h-3 bg-green-600 rounded-full" 
-                        animate={{ width: `${Math.min(100, Math.round((micLevel || 0) * 100))}%` }}
-                        transition={{ duration: 0.1 }}
-                      />
-                    </div>
-                    <p className="text-xs text-green-700">Speak to test your microphone (not recorded)</p>
                   </div>
-                )}
+                </div>
               </motion.div>
             )}
-          </div>
-        </div>
 
-        {/* Right Panel - Video Section with Brand Gradient (70%) */}
-        <div className="lg:w-[70%] bg-gradient-to-br from-primary via-primary-700 to-primary-900 relative overflow-hidden flex items-center justify-center p-8">
-          {/* Decorative Elements */}
-          <div className="absolute top-0 right-0 w-96 h-96 bg-secondary/20 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
-          <div className="absolute bottom-0 right-8 w-32 h-32 grid grid-cols-8 gap-1 opacity-30">
-            {Array.from({ length: 64 }).map((_, i) => (
-              <div key={i} className="w-1 h-1 bg-white rounded-full"></div>
-            ))}
-          </div>
-
-          {/* Audio Quality Indicator */}
-          {session.status === 'active' && latestAsrConfidence !== null && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="absolute top-4 right-4 z-20"
-            >
-              <div className="bg-white/90 backdrop-blur-md rounded-lg shadow-lg px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">🎤</span>
-                  <div className="flex flex-col">
-                    <span className="text-xs text-gray-600 font-medium">Audio Quality</span>
-                    <Badge 
-                      variant={
-                        latestAsrConfidence >= 0.7 ? 'default' : 
-                        latestAsrConfidence >= 0.5 ? 'secondary' : 
-                        'destructive'
-                      }
-                      className="text-xs px-2 py-0 mt-0.5"
-                    >
-                      {latestAsrConfidence >= 0.7 ? 'Excellent' : 
-                       latestAsrConfidence >= 0.5 ? 'Good' : 
-                       'Poor'} ({Math.round(latestAsrConfidence * 100)}%)
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-          
-          <div className="relative z-10 w-full max-w-3xl aspect-video">
-            <InterviewStage
-              running={session.status === 'active'}
-              preview={permissionsReady && session.status === 'preparing'}
-              questionCategory={session.status === 'preparing' ? '' : (currentQuestion?.category || '')}
-              questionText={''}
-              currentTranscript={currentTranscript}
-              onScore={setBodyScore}
-              captureScoreRef={captureBodyScoreRef}
-              startedAt={session.startTime}
-              statusBadge={session.status === 'active' ? 'Live' : 'Preparing'}
-              candidateName={session.studentName}
-              questionIndex={session.currentQuestionIndex}
-              questionTotal={session.route === 'uk_student' ? 16 : (session.route === 'france_ema' || session.route === 'france_icn') ? 10 : session.questions.length}
-              phase={phase ?? undefined}
-              secondsRemaining={session.route === 'usa_f1' || phase ? secondsRemaining : undefined}
-              onStartAnswer={(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') ? startAnswerNow : undefined}
-              onStopAndNext={(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') ? finalizeAnswer : undefined}
-              onNext={session.route === 'usa_f1' && session.status === 'active' ? finalizeAnswer : undefined}
-              showCaptions={false}
-              showQuestionOverlay={false}
-              showBodyBadge={false}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Floating Action Button (Bottom Center) */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-gray-900 rounded-full shadow-2xl border border-gray-200 dark:border-gray-700 px-6 py-3">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800">
-              <div className="text-xs text-gray-600 dark:text-gray-400">Progress</div>
-              <div className="text-sm font-semibold">{progressPct}%</div>
+            <div className="relative z-10 w-full max-w-3xl aspect-video">
+              <InterviewStage
+                running={session.status === 'active'}
+                preview={permissionsReady && session.status === 'preparing'}
+                questionCategory={session.status === 'preparing' ? '' : (currentQuestion?.category || '')}
+                questionText={''}
+                currentTranscript={currentTranscript}
+                onScore={setBodyScore}
+                captureScoreRef={captureBodyScoreRef}
+                startedAt={session.startTime}
+                statusBadge={session.status === 'active' ? 'Live' : 'Preparing'}
+                candidateName={session.studentName}
+                questionIndex={session.currentQuestionIndex}
+                questionTotal={session.route === 'uk_student' ? 16 : (session.route === 'france_ema' || session.route === 'france_icn') ? 10 : session.questions.length}
+                phase={phase ?? undefined}
+                secondsRemaining={session.route === 'usa_f1' || phase ? secondsRemaining : undefined}
+                onStartAnswer={(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') ? startAnswerNow : undefined}
+                onStopAndNext={(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') ? finalizeAnswer : undefined}
+                onNext={session.route === 'usa_f1' && session.status === 'active' ? finalizeAnswer : undefined}
+                showCaptions={false}
+                showQuestionOverlay={false}
+                showBodyBadge={false}
+              />
             </div>
-            {session.status === 'preparing' && !permissionsReady && (
-              <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={requestPermissions}>
-                <Play className="h-5 w-5 mr-2" /> Allow Camera & Microphone
-              </Button>
-            )}
-            {session.status === 'preparing' && permissionsReady && livenessVerified && (
-              <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={beginInterview}>
-                <Play className="h-5 w-5 mr-2" /> Start Interview
-              </Button>
-            )}
-            {(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'prep' && (
-              <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={startAnswerNow}>
-                <Play className="h-5 w-5 mr-2" /> Start Answer
-              </Button>
-            )}
-            {(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'answer' && (
-              <Button 
-                size="lg" 
-                className="px-8 h-12 text-base font-semibold transition-all hover:scale-105" 
-                onClick={finalizeAnswer}
-                disabled={isProcessingTranscript}
-              >
-                {isProcessingTranscript ? (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex items-center"
-                  >
-                    <Loader2 className="h-5 w-5 mr-2 animate-spin" /> 
-                    Finalizing answer...
-                  </motion.div>
-                ) : (
-                  <><Square className="h-4 w-4 mr-2" /> Stop & Next <ChevronRight className="h-4 w-4 ml-1" /></>
-                )}
-              </Button>
-            )}
-            {session.route === 'usa_f1' && session.status === 'active' && (
-              <Button 
-                size="lg" 
-                className="px-8 h-12 text-base font-semibold" 
-                onClick={finalizeAnswer}
-                disabled={processingRef.current || isProcessingTranscript}
-              >
-                {isProcessingTranscript ? (
-                  <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing transcription...</>
-                ) : processingRef.current ? (
-                  <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing...</>
-                ) : (
-                  <>Next Question <ChevronRight className="h-4 w-4 ml-1" /></>
-                )}
-              </Button>
-            )}
           </div>
-        </motion.div>
-      </div>
+        </div>
 
-      <div className="hidden">
-        {/* CRITICAL FIX: Separate connection from recording to eliminate STT startup delay
+        {/* Floating Action Button (Bottom Center) */}
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white dark:bg-gray-900 rounded-full shadow-2xl border border-gray-200 dark:border-gray-700 px-6 py-3">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800">
+                <div className="text-xs text-gray-600 dark:text-gray-400">Progress</div>
+                <div className="text-sm font-semibold">{progressPct}%</div>
+              </div>
+              {session.status === 'preparing' && !permissionsReady && (
+                <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={requestPermissions}>
+                  <Play className="h-5 w-5 mr-2" /> Allow Camera & Microphone
+                </Button>
+              )}
+              {session.status === 'preparing' && permissionsReady && livenessVerified && (
+                <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={beginInterview}>
+                  <Play className="h-5 w-5 mr-2" /> Start Interview
+                </Button>
+              )}
+              {(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'prep' && (
+                <Button size="lg" className="px-8 h-12 text-base font-semibold" onClick={startAnswerNow}>
+                  <Play className="h-5 w-5 mr-2" /> Start Answer
+                </Button>
+              )}
+              {(session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'answer' && (
+                <Button
+                  size="lg"
+                  className="px-8 h-12 text-base font-semibold transition-all hover:scale-105"
+                  onClick={finalizeAnswer}
+                  disabled={isProcessingTranscript}
+                >
+                  {isProcessingTranscript ? (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="flex items-center"
+                    >
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                      Finalizing answer...
+                    </motion.div>
+                  ) : (
+                    <><Square className="h-4 w-4 mr-2" /> Stop & Next <ChevronRight className="h-4 w-4 ml-1" /></>
+                  )}
+                </Button>
+              )}
+              {session.route === 'usa_f1' && session.status === 'active' && (
+                <Button
+                  size="lg"
+                  className="px-8 h-12 text-base font-semibold"
+                  onClick={finalizeAnswer}
+                  disabled={processingRef.current || isProcessingTranscript}
+                >
+                  {isProcessingTranscript ? (
+                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing transcription...</>
+                  ) : processingRef.current ? (
+                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing...</>
+                  ) : (
+                    <>Next Question <ChevronRight className="h-4 w-4 ml-1" /></>
+                  )}
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="hidden">
+          {/* CRITICAL FIX: Separate connection from recording to eliminate STT startup delay
             UK/France Routes:
             - connected={true} during BOTH prep AND answer phases → WebSocket ready
             - running={true} ONLY during answer phase → Audio capture starts immediately
@@ -1932,43 +1938,43 @@ export default function InterviewRunner() {
             
             This ensures UK/France capture the first word when user starts speaking
         */}
-        <AssemblyAITranscription
-          onTranscriptComplete={handleTranscriptComplete}
-          onTranscriptUpdate={(t) => {
-            if (session.status !== 'active') return
-            
-            // PERFORMANCE FIX: Debounce transcript updates to 300ms to reduce re-renders (70% reduction)
-            if (transcriptDebounceRef.current) {
-              window.clearTimeout(transcriptDebounceRef.current)
-            }
-            
-            transcriptDebounceRef.current = window.setTimeout(() => {
-              if (session.route === 'uk_student') {
-                if (phase !== 'answer') return
-                const combined = answerBufferRef.current ? `${answerBufferRef.current} ${t}` : t
-                setCurrentTranscript(combined)
-              } else {
-                setCurrentTranscript(t)
+          <AssemblyAITranscription
+            onTranscriptComplete={handleTranscriptComplete}
+            onTranscriptUpdate={(t) => {
+              if (session.status !== 'active') return
+
+              // PERFORMANCE FIX: Debounce transcript updates to 300ms to reduce re-renders (70% reduction)
+              if (transcriptDebounceRef.current) {
+                window.clearTimeout(transcriptDebounceRef.current)
               }
-            }, 300)
-          }}
-          showControls={false}
-          showTranscripts={false}
-          connected={
-            session.status === 'active' && 
-            (session.route === 'usa_f1' || 
-             session.route === 'uk_student' || 
-             session.route === 'france_ema' || 
-             session.route === 'france_icn')
-          }
-          running={
-            session.status === 'active' && 
-            (session.route === 'usa_f1' || 
-             ((session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'answer'))
-          }
-          resetKey={resetKey}
-        />
-      </div>
+
+              transcriptDebounceRef.current = window.setTimeout(() => {
+                if (session.route === 'uk_student') {
+                  if (phase !== 'answer') return
+                  const combined = answerBufferRef.current ? `${answerBufferRef.current} ${t}` : t
+                  setCurrentTranscript(combined)
+                } else {
+                  setCurrentTranscript(t)
+                }
+              }, 300)
+            }}
+            showControls={false}
+            showTranscripts={false}
+            connected={
+              session.status === 'active' &&
+              (session.route === 'usa_f1' ||
+                session.route === 'uk_student' ||
+                session.route === 'france_ema' ||
+                session.route === 'france_icn')
+            }
+            running={
+              session.status === 'active' &&
+              (session.route === 'usa_f1' ||
+                ((session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'answer'))
+            }
+            resetKey={resetKey}
+          />
+        </div>
       </div>
     </>
   )

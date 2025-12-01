@@ -38,7 +38,7 @@ export class AssemblyAIService {
   private isConnected = false;
   private sessionId: string | null = null;
   private config: AssemblyAIConfig;
-  
+
   // Event handlers
   private onTranscriptHandler?: (result: TranscriptionResult) => void;
   private onErrorHandler?: (error: TranscriptionError) => void;
@@ -73,7 +73,7 @@ export class AssemblyAIService {
 
       if (!tokenResponse.ok) {
         let detail = '';
-        try { detail = JSON.stringify(await tokenResponse.json()); } catch {}
+        try { detail = JSON.stringify(await tokenResponse.json()); } catch { }
         throw new Error(`Failed to get session token: ${tokenResponse.statusText}${detail ? ' - ' + detail : ''}`);
       }
 
@@ -85,7 +85,7 @@ export class AssemblyAIService {
       const socketUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=${sampleRate}&encoding=pcm_s16le&enable_extra_session_information=true&token=${token}`;
 
       this.socket = new WebSocket(socketUrl);
-      
+
       this.socket.onopen = () => {
         console.log('AssemblyAI WebSocket connected');
         this.isConnected = true;
@@ -111,12 +111,12 @@ export class AssemblyAIService {
               language_code: data.language_code,
               language_confidence: data.language_confidence
             } as TranscriptionResult;
-            
+
             // Log language detection for monitoring
             if (isFinal && data.language_code && data.language_code !== 'en') {
               console.warn(`🌐 Non-English language detected: ${data.language_code} (confidence: ${Math.round((data.language_confidence || 0) * 100)}%)`);
             }
-            
+
             this.onTranscriptHandler?.(result);
           } else if (data.type === 'Termination') {
             console.log('AssemblyAI v3 session terminated');
@@ -170,8 +170,16 @@ export class AssemblyAIService {
 
   /**
    * Stop transcription and disconnect
+   * @param disconnect - Whether to close the WebSocket connection (default: true)
    */
-  async stopTranscription(): Promise<void> {
+  async stopTranscription(disconnect: boolean = true): Promise<void> {
+    // If we want to keep the connection alive (hot mic), we don't send Terminate
+    // The hook handles stopping the audio stream
+    if (!disconnect) {
+      console.log('Keeping AssemblyAI connection alive (hot mic)');
+      return;
+    }
+
     if (!this.isConnected || !this.socket) {
       return;
     }
@@ -179,10 +187,35 @@ export class AssemblyAIService {
     // Send termination message
     if (this.socket.readyState === WebSocket.OPEN) {
       // v3 termination message
+      console.log('Sending Terminate message to AssemblyAI...');
       this.socket.send(JSON.stringify({ type: 'Terminate' }));
-    }
 
-    this.disconnect();
+      // CRITICAL FIX: Do NOT disconnect immediately.
+      // Wait for the server to send the "Termination" message which confirms
+      // all final transcripts have been sent.
+
+      // Create a promise that resolves when the socket closes or we get the termination message
+      return new Promise<void>((resolve) => {
+        const timeoutId = setTimeout(() => {
+          console.warn('AssemblyAI termination timed out, forcing disconnect');
+          this.disconnect();
+          resolve();
+        }, 3000); // Wait up to 3 seconds for final transcripts
+
+        // Better approach: The onmessage handler already calls this.disconnect() when it sees 'Termination'.
+        // So we just need to wait for isConnected to become false.
+
+        const checkInterval = setInterval(() => {
+          if (!this.isConnected) {
+            clearTimeout(timeoutId);
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+      });
+    } else {
+      this.disconnect();
+    }
   }
 
   /**
