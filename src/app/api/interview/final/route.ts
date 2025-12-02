@@ -586,28 +586,22 @@ function evaluateHeuristically(
     const strengths: string[] = []
     const weaknesses: string[] = []
     
-    // CRITICAL FIX: Detect "no response" patterns (multiple answers with 0 or near-0 scores)
-    const zeroScoreCount = perAnswerScores.filter(s => s.overall <= 10).length
-    const zeroScorePercentage = (zeroScoreCount / perAnswerScores.length) * 100
-    
-    if (zeroScoreCount >= 3 || zeroScorePercentage >= 30) {
-      weaknesses.push(`Failed to provide adequate responses to ${zeroScoreCount} out of ${perAnswerScores.length} questions`)
-      detailedInsights.push({
-        category: 'Content Quality',
-        type: 'weakness',
-        finding: `${zeroScoreCount} answer${zeroScoreCount !== 1 ? 's' : ''} contained insufficient content (< 10 words each)`,
-        example: 'Multiple questions were answered with silence or very brief responses',
-        actionItem: 'Prepare thoroughly and provide detailed answers (30-100 words) to ALL questions. Silence or very brief answers will result in automatic failure.'
-      })
-    }
-    
     // SCORING ANOMALY DETECTION (Requirement 3.2): Detect scores < 40 with word count > 10
     // This indicates potential scoring issues rather than missing responses
+    // CRITICAL FIX: Do this FIRST before checking for zero scores
     const scoringAnomalies: ScoringAnomaly[] = [];
+    const actualZeroWordAnswers: number[] = []; // Track answers that truly have < 10 words
+    
     answers.forEach((answer: string, index: number) => {
       const score = perAnswerScores[index]?.overall ?? 0;
       const wordCount = answer?.trim().split(/\s+/).filter((w: string) => w.length > 0).length ?? 0;
       
+      // Track truly short answers (< 10 words)
+      if (wordCount < 10) {
+        actualZeroWordAnswers.push(index);
+      }
+      
+      // Detect scoring anomalies (low score but substantive answer)
       if (detectScoringAnomaly(score, wordCount)) {
         scoringAnomalies.push({
           questionIndex: index,
@@ -618,6 +612,22 @@ function evaluateHeuristically(
         });
       }
     });
+    
+    // CRITICAL FIX: Only flag "no response" if answers ACTUALLY have < 10 words
+    // Don't just assume low scores mean no response - check actual word counts
+    const zeroScoreCount = actualZeroWordAnswers.length;
+    const zeroScorePercentage = (zeroScoreCount / perAnswerScores.length) * 100
+    
+    if (zeroScoreCount >= 3 || zeroScorePercentage >= 30) {
+      weaknesses.push(`Failed to provide adequate responses to ${zeroScoreCount} out of ${perAnswerScores.length} questions`)
+      detailedInsights.push({
+        category: 'Content Quality',
+        type: 'weakness',
+        finding: `${zeroScoreCount} answer${zeroScoreCount !== 1 ? 's' : ''} contained insufficient content (< 10 words each)`,
+        example: `Questions ${actualZeroWordAnswers.map(i => `Q${i + 1}`).join(', ')} were answered with very brief or no responses`,
+        actionItem: 'Prepare thoroughly and provide detailed answers (30-100 words) to ALL questions. Silence or very brief answers will result in automatic failure.'
+      })
+    }
     
     if (scoringAnomalies.length > 0) {
       console.warn('⚠️ [Final Evaluation] Scoring anomalies detected:', scoringAnomalies);
@@ -698,9 +708,11 @@ function evaluateHeuristically(
     
     const summary = `Based on detailed per-answer analysis across ${perAnswerScores.length} questions, the candidate achieved an average score of ${Math.round(avgOverall)}/100. ${
       zeroScoreCount >= 3 && scoringAnomalies.length === 0
-        ? `CRITICAL ISSUE: ${zeroScoreCount} question${zeroScoreCount !== 1 ? 's were' : ' was'} answered with insufficient content (< 10 words each), resulting in automatic zero scores. This suggests inadequate preparation or technical issues with the microphone. Content quality scored ${Math.round(avgContent)}/100, speech delivery ${Math.round(avgSpeech)}/100, and body language ${Math.round(avgBody)}/100. The candidate must retake the interview and provide detailed verbal responses to ALL questions.`
+        ? `CRITICAL ISSUE: ${zeroScoreCount} question${zeroScoreCount !== 1 ? 's were' : ' was'} answered with insufficient content (< 10 words each) - specifically ${actualZeroWordAnswers.map(i => `Q${i + 1}`).join(', ')}. This suggests inadequate preparation or technical issues with the microphone. Content quality scored ${Math.round(avgContent)}/100, speech delivery ${Math.round(avgSpeech)}/100, and body language ${Math.round(avgBody)}/100. The candidate must retake the interview and provide detailed verbal responses to ALL questions.`
         : zeroScoreCount >= 3 && scoringAnomalies.length > 0
-        ? `Some questions received low scores. However, ${scoringAnomalies.length} of these had substantive answers (${scoringAnomalies.map(a => `Q${a.questionIndex + 1}: ${a.wordCount} words`).join(', ')}), suggesting potential scoring anomalies rather than missing responses. Content quality scored ${Math.round(avgContent)}/100, speech delivery ${Math.round(avgSpeech)}/100, and body language ${Math.round(avgBody)}/100.${anomalyNote}`
+        ? `Some questions had very brief answers (${actualZeroWordAnswers.map(i => `Q${i + 1}`).join(', ')} with < 10 words each). However, ${scoringAnomalies.length} other question(s) had substantive answers (${scoringAnomalies.map(a => `Q${a.questionIndex + 1}: ${a.wordCount} words`).join(', ')}), suggesting potential scoring anomalies rather than missing responses. Content quality scored ${Math.round(avgContent)}/100, speech delivery ${Math.round(avgSpeech)}/100, and body language ${Math.round(avgBody)}/100.${anomalyNote}`
+        : zeroScoreCount > 0 && zeroScoreCount < 3
+        ? `${zeroScoreCount} question${zeroScoreCount !== 1 ? 's were' : ' was'} answered very briefly (${actualZeroWordAnswers.map(i => `Q${i + 1}`).join(', ')} with < 10 words). Content quality scored ${Math.round(avgContent)}/100, speech delivery ${Math.round(avgSpeech)}/100, and body language ${Math.round(avgBody)}/100. ${decision === 'accepted' ? 'Despite this, the overall performance was strong.' : decision === 'rejected' ? 'This contributed to the low overall score.' : 'Providing more detailed answers would improve the score.'}${anomalyNote}`
         : decision === 'accepted' 
         ? 'The performance demonstrated strong capabilities across content quality (avg: ' + Math.round(avgContent) + '/100), speech delivery (avg: ' + Math.round(avgSpeech) + '/100), and body language (avg: ' + Math.round(avgBody) + '/100). The candidate showed consistent preparation and understanding of the subject matter.' + anomalyNote
         : decision === 'rejected' 

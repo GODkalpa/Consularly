@@ -165,15 +165,20 @@ export const UK_SCORING_CONFIG = {
   },
 
   /**
-   * Penalty and bonus configuration
+   * Scoring configuration
+   * NOTE: LLM now scores on actual merit (0-100) without artificial caps
+   * These values are kept for reference but LLM uses full range scoring
    */
   scoring: {
-    maxPenaltyPerDimension: -40,  // Reduced from -70/-85
-    baseline: 65,                  // Starting point for substantive answers
-    bonuses: {
-      specificDetails: 10,         // +10 for concrete numbers, names, dates
-      ukTerminology: 5,            // +5 for UK-specific terms (28-day rule, CAS, etc.)
-      concreteExamples: 10,        // +10 for real examples from experience
+    maxPenaltyPerDimension: -40,  // Maximum penalty for any single issue
+    baseline: 0,                   // No artificial baseline - score on merit
+    // Reference benchmarks (LLM uses these as guidelines, not hard rules)
+    benchmarks: {
+      perfect: 95,                 // 95-100: Perfect answer with all details
+      excellent: 85,               // 85-94: Excellent answer
+      good: 75,                    // 75-84: Good answer
+      acceptable: 65,              // 65-74: Acceptable answer
+      needsWork: 50,               // 50-64: Needs improvement
     },
   },
 

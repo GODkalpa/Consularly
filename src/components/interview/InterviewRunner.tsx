@@ -141,21 +141,10 @@ export default function InterviewRunner() {
           responses: [],
           status: 'preparing',
         }
-        // seed apiSession with first question in history
-        const seeded = {
-          ...init.apiSession,
-          conversationHistory: [
-            ...init.apiSession.conversationHistory,
-            {
-              question: firstQ.question,
-              answer: '',
-              timestamp: new Date().toISOString(),
-              questionType: firstQ.questionType,
-              difficulty: firstQ.difficulty,
-            },
-          ],
-        }
-        setApiSession(seeded)
+        // Use apiSession as-is - the first question is already added to conversationHistory
+        // by startInterview() in interview-simulation.ts
+        // DO NOT add it again here to avoid duplicate entries
+        setApiSession(init.apiSession)
         setSession(s)
         // Persist context
         if (init.firestoreInterviewId) {
@@ -523,11 +512,29 @@ export default function InterviewRunner() {
 
   // Define computeFinalReport first to avoid circular dependency
   const computeFinalReport = useCallback(async (finalApiSession: any) => {
+    // Debug: Log conversation history details to catch sync issues
+    const historyLength = finalApiSession.conversationHistory?.length || 0
+    const scoresLength = perfList?.length || 0
+    const historyWithAnswers = finalApiSession.conversationHistory?.filter((h: any) => h.answer && h.answer.trim().length > 0).length || 0
+    
     console.log('📄 Starting final report generation...', {
       route: session?.route,
-      conversationLength: finalApiSession.conversationHistory?.length,
-      perAnswerScoresCount: perfList?.length,
+      conversationLength: historyLength,
+      conversationWithAnswers: historyWithAnswers,
+      perAnswerScoresCount: scoresLength,
+      // Warn if there's a mismatch
+      syncStatus: historyLength === scoresLength ? '✅ synced' : `⚠️ MISMATCH: ${historyLength} history vs ${scoresLength} scores`,
     })
+    
+    // Log first few entries to help debug
+    if (historyLength > 0) {
+      console.log('📄 First 3 conversation entries:', finalApiSession.conversationHistory.slice(0, 3).map((h: any, i: number) => ({
+        index: i,
+        question: h.question?.slice(0, 50) + '...',
+        answerLength: h.answer?.length || 0,
+        hasAnswer: !!(h.answer && h.answer.trim().length > 0),
+      })))
+    }
 
     // Set timeout to 35 seconds (backend has 30s + 5s buffer)
     const controller = new AbortController()

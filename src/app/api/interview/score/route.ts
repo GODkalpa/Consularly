@@ -182,7 +182,8 @@ export async function POST(request: NextRequest) {
     let asrBoostApplied = false;
     
     if (isUKInterview) {
-      // NEW: Apply ASR boost per Requirement 5.3 (ASR < 0.5 AND score < 40 → 25% boost)
+      // Apply ASR boost per Requirement 5.3 (ASR < 0.5 AND score < 40 → 25% boost)
+      // This helps compensate for transcription errors that may have caused low scores
       const asrBoostResult = applyASRBoost(contentScore, asrConfidenceValue);
       if (asrBoostResult.boosted) {
         asrBoostApplied = true;
@@ -190,18 +191,11 @@ export async function POST(request: NextRequest) {
         console.log(`🎤 [ASR Boost] Applied ${UK_SCORE_VALIDATION_CONFIG.asrBoost.boostPercentage * 100}% boost: ${asrBoostResult.score - asrBoostResult.boostAmount} → ${asrBoostResult.score} (ASR: ${(asrConfidenceValue * 100).toFixed(0)}%)`);
       }
       
-      // LEGACY: Also apply penalty reduction for low confidence (existing behavior)
+      // For low ASR confidence, note it for diagnostics but don't artificially boost
+      // The LLM should handle transcription uncertainty in its scoring
       if (asrConfidenceValue < UK_SCORING_CONFIG.asrTolerance.lowConfidenceThreshold) {
         asrPenaltyReduction = UK_SCORING_CONFIG.asrTolerance.penaltyReduction;
-        // If content score is below baseline (65), boost it by the penalty reduction amount
-        // This effectively reduces the penalty that was applied
-        if (contentScore < UK_SCORING_CONFIG.scoring.baseline && !asrBoostApplied) {
-          const penaltyApplied = UK_SCORING_CONFIG.scoring.baseline - contentScore;
-          const reducedPenalty = penaltyApplied * (1 - asrPenaltyReduction);
-          const boostedScore = UK_SCORING_CONFIG.scoring.baseline - reducedPenalty;
-          console.log(`🎤 [ASR Low Confidence] Reducing penalties by ${asrPenaltyReduction * 100}%: ${contentScore} → ${Math.round(boostedScore)} (ASR: ${(asrConfidenceValue * 100).toFixed(0)}%)`);
-          contentScore = Math.round(boostedScore);
-        }
+        console.log(`🎤 [ASR Low Confidence] ASR confidence ${(asrConfidenceValue * 100).toFixed(0)}% is below threshold - LLM instructed to be tolerant of transcription errors`);
       }
     }
 
@@ -223,7 +217,8 @@ export async function POST(request: NextRequest) {
       body: bodyScore,
       bodyMissing: bodyLanguageMissing,
       languagePenalty,
-      relevancePenalty: relevanceCheck.penalty,
+      // Only show relevance penalty if it was actually applied (LLM failed)
+      ...((!aiRes && relevanceCheck.penalty > 0) ? { relevancePenaltyApplied: relevanceCheck.penalty } : {}),
       asrPenaltyReduction: asrPenaltyReduction > 0 ? `${asrPenaltyReduction * 100}%` : 'none',
       asrBoostApplied,
       asrConfidence: asrConfidenceValue,

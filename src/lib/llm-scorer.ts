@@ -97,10 +97,51 @@ export class LLMScoringService {
     }
   }
 
+  /**
+   * Detect if a question expects a short factual answer
+   * These questions should score 90+ for correct answers regardless of length
+   */
+  private isFactualQuestion(question: string): boolean {
+    const factualPatterns = [
+      /which.*visa.*application.*centre/i,
+      /which.*visa.*center/i,
+      /what.*university.*name/i,
+      /what.*is.*your.*course/i,
+      /have you.*received.*visa.*refusal/i,
+      /how.*will.*course.*be.*assessed/i,
+      /what.*is.*the.*level.*of.*your/i,
+      /do you know.*rules.*for.*students/i,
+      /what.*is.*your.*agent/i,
+      /who.*is.*your.*agent/i,
+    ];
+    
+    return factualPatterns.some(pattern => pattern.test(question));
+  }
+
   private heuristicFallback(req: AIScoringRequest): AIScoringLLMResponse {
     // Simple heuristic scoring when LLM is unavailable
     const answer = req.answer.toLowerCase();
     const wordCount = answer.split(/\s+/).length;
+    
+    // Check if this is a factual question - give high score for any substantive answer
+    const isFactual = this.isFactualQuestion(req.question);
+    if (isFactual && wordCount >= 2) {
+      return {
+        rubric: {
+          communication: 90,
+          relevance: 95,
+          specificity: 90,
+          consistency: 90,
+          academicPreparedness: 85,
+          financialCapability: 85,
+          intentToReturn: 85,
+        },
+        summary: 'Factual question answered correctly.',
+        recommendations: [],
+        redFlags: [],
+        contentScore: 92,
+      };
+    }
 
     // Check for specific financial indicators
     const hasSpecificAmount = /\$\d+|£\d+|\d+,\d+/.test(answer);
@@ -138,57 +179,81 @@ export class LLMScoringService {
     if (route === 'uk_student') {
       return `You are a FAIR and BALANCED UK student visa officer conducting a credibility interview. Your goal is to accurately assess genuine students while being fair to well-prepared candidates.
 
-SCORING PHILOSOPHY - BALANCED AND FAIR:
-- START at 65/100 (baseline) for any substantive response that attempts to answer the question
-- REWARD good answers: Add points for specific details, UK terminology, concrete examples
-- MODERATE penalties: Maximum penalty is -40 points per dimension (not -70 or -85)
-- SEMANTIC understanding: If the answer addresses the question's intent, give credit even if terminology is imperfect
-- NON-NATIVE speakers: Prioritize substance over style. Grammar errors should NOT reduce scores if meaning is clear
+SCORING PHILOSOPHY - ACCURATE AND FAIR:
+- Score answers on their ACTUAL MERIT from 0-100. Do NOT artificially cap scores.
+- A PERFECT answer that fully addresses the question with specific details SHOULD score 95-100.
+- A GOOD answer with solid content and reasonable detail SHOULD score 80-94.
+- SEMANTIC understanding: If the answer addresses the question's intent correctly, give full credit.
+- NON-NATIVE speakers: Prioritize substance over style. Grammar errors should NOT reduce scores if meaning is clear.
 - ASR TOLERANCE: This is transcribed speech. Numbers/names may be misheard. If a value seems wrong but phonetically similar to correct, assume transcription error and DO NOT PENALIZE.
 
-BONUS POINTS (add to baseline):
-- +10 for specific amounts (£18,000+, exact tuition figures, weekly rent)
-- +10 for naming 2+ specific course modules
-- +5 for UK-specific terminology (28-day rule, CAS, Graduate Route, 20h/week)
-- +10 for concrete examples from personal experience
-- +5 for clear course-career connection
+SCORING SCALE (use the FULL range 0-100):
+- **95-100**: Perfect - Comprehensive answer with specific details, UK terminology, demonstrates deep understanding
+- **85-94**: Excellent - Strong answer with good specifics, addresses all parts of the question
+- **75-84**: Good - Solid answer with reasonable detail, minor gaps acceptable
+- **65-74**: Acceptable - Basic answer, addresses the question but lacks some specifics
+- **50-64**: Needs improvement - Vague or missing key information
+- **30-49**: Weak - Partially addresses question, significant gaps
+- **0-29**: Poor - Off-topic, incoherent, or major red flags
 
-PENALTIES (maximum -40 per issue):
-- -30 for completely vague answers ("good university", "sufficient funds")
-- -40 for completely off-topic or incoherent responses
-- -25 for heavy reliance on agent without independent knowledge
-- -30 for major contradictions with previous answers
+WHAT MAKES A HIGH SCORE (85+):
+- Directly answers the question asked
+- Includes specific details (amounts, names, dates, locations)
+- Uses UK-specific terminology when relevant (28-day rule, CAS, Graduate Route, 20h/week)
+- Provides concrete examples from personal experience
+- Shows clear understanding of the topic
 
-SCORING BENCHMARKS:
-- **85-100**: Excellent - Specific details, UK terminology, clear understanding
-- **70-84**: Good - Addresses question with reasonable detail, minor gaps acceptable
-- **55-69**: Acceptable - Basic answer, lacks some specifics but shows understanding
-- **40-54**: Needs work - Vague or missing key information
-- **0-39**: Weak - Off-topic, incoherent, or major red flags
+WHAT REDUCES SCORES:
+- Vague answers without specifics ("good university", "sufficient funds")
+- Not addressing the actual question asked
+- Major contradictions with previous answers
+- Heavy reliance on agent without independent knowledge
 
-IMPORTANT: For FACTUAL questions (visa center location, university name, etc.), correct answers score 80+ regardless of brevity.
+CRITICAL - FACTUAL QUESTIONS (score 90-100 for correct answers regardless of length):
+These questions expect SHORT, FACTUAL answers. Do NOT penalize brevity:
+- "Which visa Application Centre will you use?" → Correct: "VFS Kathmandu" or "VFS New Delhi" = 95-100
+- "What is your university name?" → Correct: "Coventry University" = 95-100
+- "What is your course name?" → Correct: "MSc International Business" = 95-100
+- "Have you received a visa refusal?" → Correct: "No" or "Yes, in 2020 for tourist visa" = 90-100
+- "How will your course be assessed?" → Correct: "Exams and coursework" = 85-95
+
+For factual questions, a 3-10 word correct answer is PERFECT. Do NOT expect elaboration.
 
 Return ONLY strict JSON - no commentary outside JSON structure.`;
     }
 
     return `You are a FAIR BUT THOROUGH US Embassy Nepal F1 visa officer with 10+ years of interview experience. You've seen thousands of cases and can spot red flags, vague answers, and coached responses.
 
-SCORING PHILOSOPHY - BE FAIR BUT THOROUGH:
-- START at 70/100 (good baseline) and adjust up or down based on SUBSTANCE
-- VALUE concrete specifics: dollar amounts, sponsor names, job titles, company names, degree programs. REWARD students who provide them.
-- CRITICAL: Evaluate RELEVANCE based on SEMANTIC UNDERSTANDING. If the answer addresses the core of the question, give good marks even if terminology is imperfect.
-- CONTEXT: Applicant is a non-native English speaker (Nepal). PRIORITIZE substance over style. Grammar/vocabulary errors should NOT reduce scores if meaning is clear.
-- Reduce points for vague/coached answers: "I will gain knowledge", "good opportunities" - but don't fail students for this alone.
-- Watch for contradictions vs. previous answers (session memory tracking) - this is a red flag
-- Identify common Nepal F1 red flags but don't over-penalize minor issues
-- ASR WARNING: This is a spoken interview transcribed by AI. Numbers (e.g., "123" vs "1023") or names might be misheard. If a number seems nonsensical but sounds similar to a correct one, assume it's a transcription error and DO NOT PENALIZE. Focus on the intent and context.
+SCORING PHILOSOPHY - ACCURATE AND FAIR:
+- Score answers on their ACTUAL MERIT from 0-100. Do NOT artificially cap scores.
+- A PERFECT answer that fully addresses the question with specific details SHOULD score 95-100.
+- A GOOD answer with solid content and reasonable detail SHOULD score 80-94.
+- SEMANTIC understanding: If the answer addresses the question's intent correctly, give full credit.
+- NON-NATIVE speakers: Prioritize substance over style. Grammar/vocabulary errors should NOT reduce scores if meaning is clear.
+- ASR WARNING: This is transcribed speech. Numbers/names may be misheard. If a value seems wrong but phonetically similar to correct, assume transcription error and DO NOT PENALIZE.
 
-3. **Memorized scripts**: "I have always wanted to study in the US since my childhood" (without specific reasons)
+SCORING SCALE (use the FULL range 0-100):
+- **95-100**: Perfect - Comprehensive answer with specific details, demonstrates deep understanding
+- **85-94**: Excellent - Strong answer with good specifics, addresses all parts of the question
+- **75-84**: Good - Solid answer with reasonable detail, minor gaps acceptable
+- **65-74**: Acceptable - Basic answer, addresses the question but lacks some specifics
+- **50-64**: Needs improvement - Vague or missing key information
+- **30-49**: Weak - Partially addresses question, significant gaps
+- **0-29**: Poor - Off-topic, incoherent, or major red flags
 
-SCORING RULES:
-- If answer is factually correct but brief (e.g. "VFS Kathmandu"), score 80-90. DO NOT PENALIZE BREVITY FOR FACTS.
-- If answer is vague ("good education"), score 40-50.
-- If answer is completely irrelevant, score 10-20.
+WHAT MAKES A HIGH SCORE (85+):
+- Directly answers the question asked
+- Includes specific details (dollar amounts, sponsor names, job titles, company names)
+- Provides concrete examples and evidence
+- Shows clear understanding of the topic
+
+WHAT REDUCES SCORES:
+- Vague/coached answers: "I will gain knowledge", "good opportunities"
+- Not addressing the actual question asked
+- Major contradictions with previous answers
+- Memorized scripts without specific reasons
+
+IMPORTANT: For FACTUAL questions (visa center location, university name, etc.), correct answers score 90+ regardless of brevity.
 
 Return ONLY strict JSON - no commentary outside JSON structure.`;
   }
@@ -246,46 +311,57 @@ ${history || '(No previous questions)'}
 
 CURRENT QUESTION BEING EVALUATED:
     Q: ${question}
+    ${this.isFactualQuestion(question) ? '⚡ FACTUAL QUESTION - Score 90-100 for correct answer regardless of length' : ''}
 
 STUDENT'S ANSWER TO SCORE:
     A: ${answer}${contradictionWarning}
 
     ---
 
-      SCORING RUBRIC(Score 0 - 100 for each dimension):
+      SCORING RUBRIC (Score 0-100 for each dimension based on ACTUAL MERIT):
 
-        UK / FRANCE - SPECIFIC RUBRIC ADJUSTMENTS:
-    - Replace academicPreparedness → courseAndUniversityFit(must name modules, explain fit)
-      - Replace financialCapability → financialRequirement(£/€ amount, financial evidence)
-        - Replace intentToReturn → complianceAndIntent(work rules + post - study plans)
+UK/FRANCE DIMENSIONS:
+1. **communication** (0-100): Clarity, structure, confidence
+   - 90-100: Clear, well-structured, confident
+   - 70-89: Good clarity, minor issues
+   - 50-69: Understandable but needs improvement
+   - <50: Unclear or incoherent
 
-FOR UK STUDENT VISA(uk_student route) AND FRANCE STUDENT VISA(france_ema, france_icn routes):
-    1. ** communication ** (0 - 100): Start at 65, adjust based on clarity
-      - Bonus: +10 for natural, confident delivery; +5 for well-structured response
-      - Penalty: -25 for rambling, -30 for incoherent (MAX -40)
+2. **relevance** (0-100): How well answer addresses the question
+   - 90-100: Directly and fully addresses the question
+   - 70-89: Addresses main points, minor gaps
+   - 50-69: Partially relevant
+   - <50: Off-topic or misses the point
 
-    2. ** relevance ** (0 - 100): Start at 65, adjust based on how well answer addresses question
-      - Bonus: +15 for directly addressing all parts of question
-      - Penalty: -30 for tangential, -40 for completely off-topic (MAX -40)
+3. **specificity** (0-100): Concrete details provided
+   - 90-100: Specific amounts, names, dates, locations
+   - 70-89: Good details, some specifics
+   - 50-69: General but not vague
+   - <50: Vague or generic
 
-    3. ** specificity ** (0 - 100): Start at 65, adjust based on concrete details
-      - Bonus: +10 for specific amounts (£18,000+), +10 for module names, +5 for dates/locations
-      - Penalty: -30 for generic phrases, -40 for complete vagueness (MAX -40)
+4. **consistency** (0-100): Alignment with previous answers
+   - 90-100: Fully consistent
+   - 70-89: Minor variations acceptable
+   - 50-69: Some inconsistencies
+   - <50: Major contradictions
 
-    4. ** consistency ** (0 - 100): Start at 70 (no prior context = benefit of doubt)
-      - Penalty: -40 for major contradictions, -25 for minor inconsistencies (MAX -40)
+5. **courseAndUniversityFit** (0-100): Knowledge of course/university
+   - 90-100: Names modules, explains fit, shows research
+   - 70-89: Good understanding, some specifics
+   - 50-69: Basic knowledge
+   - <50: No course knowledge
 
-    5. ** courseAndUniversityFit ** (0 - 100): Start at 65
-      - Bonus: +10 for naming 2+ modules, +10 for explaining course-career fit, +5 for faculty/facility knowledge
-      - Penalty: -30 for only citing ranking, -35 for no course knowledge (MAX -40)
+6. **financialRequirement** (0-100): Financial preparedness
+   - 90-100: Specific amounts, 28-day rule, cost breakdown
+   - 70-89: Good financial awareness
+   - 50-69: Basic understanding
+   - <50: Vague or no financial details
 
-    6. ** financialRequirement ** (0 - 100): Start at 65
-      - Bonus: +10 for specific maintenance amount, +10 for 28-day rule mention, +5 for cost breakdown
-      - Penalty: -30 for "sufficient funds" without amounts, -35 for financial ignorance (MAX -40)
-
-    7. ** complianceAndIntent ** (0 - 100): Start at 65
-      - Bonus: +10 for 20h/week work rule, +5 for CAS knowledge, +10 for clear post-study plans
-      - Penalty: -30 for work rule confusion, -25 for vague intent (MAX -40)
+7. **complianceAndIntent** (0-100): Visa rules and post-study plans
+   - 90-100: Knows 20h/week rule, CAS, clear plans
+   - 70-89: Good compliance awareness
+   - 50-69: Basic understanding
+   - <50: Confusion or vague intent
 
 FOR USA F1 VISA(usa_f1 route):
     1. ** communication ** (0 - 100):
