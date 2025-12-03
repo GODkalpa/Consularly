@@ -88,17 +88,19 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
     intendedMajor: ''
   })
 
-  async function loadStudents() {
+  async function loadStudents(forceRefresh = false) {
     if (!firebaseEnabled) { setLoading(false); return }
     
     const orgId = userProfile?.orgId
     if (!orgId) { setLoading(false); return }
     
-    // Check cache first for instant display
-    const cached = cache.get<OrgStudent[]>(`students_${orgId}`)
-    if (cached.data) {
-      setStudents(cached.data)
-      setLoading(false) // Show cached data instantly
+    // Check cache first for instant display (skip if forcing refresh)
+    if (!forceRefresh) {
+      const cached = cache.get<OrgStudent[]>(`students_${orgId}`)
+      if (cached.data) {
+        setStudents(cached.data)
+        setLoading(false) // Show cached data instantly
+      }
     }
     
     try {
@@ -109,9 +111,15 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
       const rows = await fetchWithCache(
         `students_${orgId}`,
         async () => {
-          const res = await fetch('/api/org/students', {
+          // Add cache-busting timestamp when forcing refresh to bypass browser cache
+          const url = forceRefresh 
+            ? `/api/org/students?_t=${Date.now()}` 
+            : '/api/org/students'
+          const res = await fetch(url, {
             method: 'GET',
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${token}` },
+            // Bypass browser cache when forcing refresh
+            ...(forceRefresh && { cache: 'no-store' })
           })
           const data = await res.json()
           if (!res.ok) throw new Error(data?.error || `Failed to load students (${res.status})`)
@@ -131,7 +139,7 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
             studentProfile: s.studentProfile,
           })) as OrgStudent[]
         },
-        { ttl: 2 * 60 * 1000 } // 2-minute cache
+        { ttl: 2 * 60 * 1000, forceRefresh } // 2-minute cache, force refresh when needed
       )
       
       setStudents(rows)
@@ -240,13 +248,14 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
       setEditOpen(false)
       setSelectedStudent(null)
       
-      // Invalidate cache and reload in background
+      // Invalidate both students and dashboard cache for instant updates
       invalidate('students_')
-      loadStudents()
+      invalidate('dashboard_')
+      loadStudents(true) // Force refresh to bypass browser cache
     } catch (e: any) {
       toast.error('Update failed', { description: e?.message })
       // Reload on error to revert optimistic update
-      await loadStudents()
+      await loadStudents(true)
     } finally {
       setUpdating(false)
     }
@@ -273,13 +282,14 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
       
       toast.success('Student deleted successfully')
       
-      // Invalidate cache and reload in background
+      // Invalidate both students and dashboard cache for instant updates
       invalidate('students_')
-      loadStudents()
+      invalidate('dashboard_')
+      loadStudents(true) // Force refresh to bypass browser cache
     } catch (e: any) {
       toast.error('Delete failed', { description: e?.message })
       // Reload on error to revert optimistic update
-      await loadStudents()
+      await loadStudents(true)
     } finally {
       setDeleting(false)
     }
@@ -580,8 +590,9 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                       
                       toast.success('Student added successfully')
                       
-                      // Invalidate cache and reload in background
+                      // Invalidate both students and dashboard cache for instant updates
                       invalidate('students_')
+                      invalidate('dashboard_')
                       setAddOpen(false)
                       setNewName('')
                       setNewEmail('')
@@ -595,11 +606,11 @@ export function OrgStudentManagement({ onStartInterview }: OrgStudentManagementP
                         fieldOfStudy: '',
                         intendedMajor: ''
                       })
-                      loadStudents()
+                      loadStudents(true) // Force refresh to bypass browser cache
                     } catch (e: any) {
                       toast.error('Add student failed', { description: e?.message })
                       // Reload on error to ensure consistency
-                      await loadStudents()
+                      await loadStudents(true)
                     } finally {
                       setCreating(false)
                     }

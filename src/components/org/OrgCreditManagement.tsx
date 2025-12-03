@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { auth } from '@/lib/firebase'
+import { invalidate } from '@/lib/cache'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
@@ -80,15 +81,20 @@ export function OrgCreditManagement() {
     }
   }, [userProfile])
 
-  const fetchCreditSummary = async () => {
+  const fetchCreditSummary = async (forceRefresh = false) => {
     try {
       const token = await auth.currentUser?.getIdToken()
       if (!token) return
 
-      const response = await fetch('/api/org/credits/summary', {
+      // Add cache-busting when forcing refresh
+      const url = forceRefresh 
+        ? `/api/org/credits/summary?_t=${Date.now()}` 
+        : '/api/org/credits/summary'
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        ...(forceRefresh && { cache: 'no-store' as RequestCache })
       })
 
       if (response.ok) {
@@ -126,7 +132,10 @@ export function OrgCreditManagement() {
       if (response.ok) {
         const data = await response.json()
         toast.success(`Successfully ${isDeallocation ? 'deallocated' : 'allocated'} ${amount} credits`)
-        fetchCreditSummary() // Refresh data
+        // Invalidate dashboard and students cache for instant updates across views
+        invalidate('dashboard_')
+        invalidate('students_')
+        await fetchCreditSummary(true) // Force refresh to bypass browser cache
         setAllocateDialogOpen(false)
         setCreditAmount('')
         setReason('')
@@ -182,7 +191,7 @@ export function OrgCreditManagement() {
           <AlertCircle className="w-12 h-12 mx-auto" />
         </div>
         <p className="text-gray-600">{error}</p>
-        <Button onClick={fetchCreditSummary} className="mt-4">
+        <Button onClick={() => fetchCreditSummary()} className="mt-4">
           Retry
         </Button>
       </div>

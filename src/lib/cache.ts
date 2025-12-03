@@ -14,6 +14,7 @@ interface CacheEntry<T> {
 interface CacheOptions {
   ttl?: number // Time to live in milliseconds
   staleTime?: number // Time before data is considered stale
+  forceRefresh?: boolean // Skip cache and force fresh fetch
 }
 
 const DEFAULT_TTL = 5 * 60 * 1000 // 5 minutes
@@ -161,6 +162,13 @@ export async function fetchWithCache<T>(
   fetcher: () => Promise<T>,
   options?: CacheOptions
 ): Promise<T> {
+  // Force refresh bypasses cache entirely
+  if (options?.forceRefresh) {
+    const data = await fetcher()
+    cache.set(key, data, options)
+    return data
+  }
+
   // Try cache first
   const cached = cache.get<T>(key)
   

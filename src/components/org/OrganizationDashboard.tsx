@@ -115,6 +115,66 @@ function OrganizationDashboard() {
   const brandBackground = branding.backgroundImage
   const brandFontFamily = branding.fontFamily || 'inter'
 
+  // Fetch dashboard data - extracted for reuse
+  const fetchDashboardData = async (forceRefresh = false) => {
+    if (!firebaseEnabled || !orgId) return
+    
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Not authenticated')
+
+      const headers = { Authorization: `Bearer ${token}` }
+      
+      // OPTIMIZED: Single API call for both organization and statistics data
+      const fetchDashboard = async () => {
+        console.log('🔥 [OrganizationDashboard] Making COMBINED API call to /api/org/dashboard')
+        // Add cache-busting when forcing refresh
+        const url = forceRefresh 
+          ? `/api/org/dashboard?_t=${Date.now()}` 
+          : '/api/org/dashboard'
+        const res = await fetch(url, { 
+          headers,
+          ...(forceRefresh && { cache: 'no-store' as RequestCache })
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json?.error || 'Dashboard fetch failed')
+        console.log('✅ [OrganizationDashboard] COMBINED API call completed successfully')
+        return json
+      }
+      
+      // Use cache with background refresh for combined data
+      const dashboardData = await fetchWithCache(`dashboard_${orgId}`, fetchDashboard, { ttl: 60 * 1000, forceRefresh })
+      
+      // WORKAROUND: Fetch branding separately to ensure favicon is included
+      try {
+        const brandingRes = await fetch('/api/org/branding', { headers })
+        if (brandingRes.ok) {
+          const brandingData = await brandingRes.json()
+          if (brandingData.branding) {
+            dashboardData.organization.settings = {
+              ...dashboardData.organization.settings,
+              customBranding: {
+                ...dashboardData.organization.settings?.customBranding,
+                ...brandingData.branding
+              }
+            }
+          }
+        }
+      } catch (brandingError) {
+        console.warn('[OrganizationDashboard] Failed to fetch branding separately:', brandingError)
+      }
+
+      setOrg(dashboardData.organization)
+      if (dashboardData.statistics) {
+        setStatistics(dashboardData.statistics)
+      }
+    } catch (e) {
+      console.error("Failed to load org dashboard data", e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!firebaseEnabled || !orgId) { 
       setLoading(false)
@@ -134,65 +194,22 @@ function OrganizationDashboard() {
     }
     
     // Then fetch fresh data in background (async, non-blocking)
-    async function fetchFreshData() {
-      try {
-        const token = await auth.currentUser?.getIdToken()
-        if (!token) throw new Error('Not authenticated')
-
-        const headers = { Authorization: `Bearer ${token}` }
-        
-        // OPTIMIZED: Single API call for both organization and statistics data
-        const fetchDashboard = async () => {
-          console.log('🔥 [OrganizationDashboard] Making COMBINED API call to /api/org/dashboard')
-          const res = await fetch('/api/org/dashboard', { headers })
-          const json = await res.json()
-          if (!res.ok) throw new Error(json?.error || 'Dashboard fetch failed')
-          console.log('✅ [OrganizationDashboard] COMBINED API call completed successfully')
-          return json
-        }
-        
-        // Use cache with background refresh for combined data
-        const dashboardData = await fetchWithCache(`dashboard_${orgId}`, fetchDashboard, { ttl: 60 * 1000 })
-
-        if (!mounted) return
-        
-        // WORKAROUND: Fetch branding separately to ensure favicon is included
-        // This is needed because the deployed dashboard API may not include favicon
-        try {
-          const brandingRes = await fetch('/api/org/branding', { headers })
-          if (brandingRes.ok) {
-            const brandingData = await brandingRes.json()
-            if (brandingData.branding) {
-              // Merge branding data into organization settings
-              dashboardData.organization.settings = {
-                ...dashboardData.organization.settings,
-                customBranding: {
-                  ...dashboardData.organization.settings?.customBranding,
-                  ...brandingData.branding
-                }
-              }
-              console.log('[OrganizationDashboard] Merged branding with favicon:', brandingData.branding.favicon)
-            }
-          }
-        } catch (brandingError) {
-          console.warn('[OrganizationDashboard] Failed to fetch branding separately:', brandingError)
-        }
-
-        setOrg(dashboardData.organization)
-        if (dashboardData.statistics) {
-          setStatistics(dashboardData.statistics)
-        }
-      } catch (e) {
-        console.error("Failed to load org dashboard data", e)
-      } finally {
-        if (mounted) setLoading(false)
-      }
-    }
-    
-    fetchFreshData()
+    fetchDashboardData()
     
     return () => { mounted = false }
   }, [orgId])
+
+  // Refresh dashboard when returning to overview section (in case data was modified)
+  useEffect(() => {
+    if (activeSection === 'overview' && orgId) {
+      // Check if cache was invalidated (no cached data means it was cleared)
+      const cachedDashboard = cache.get<{ organization: OrganizationWithId, statistics: any }>(`dashboard_${orgId}`)
+      if (!cachedDashboard.data) {
+        // Cache was invalidated, fetch fresh data
+        fetchDashboardData(true)
+      }
+    }
+  }, [activeSection, orgId])
 
   // Listen for branding updates and refresh organization data
   useEffect(() => {
