@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
     let resetLink: string | undefined
     try {
       // Build the continue URL using org subdomain if available
-      let continueUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+      const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com'
+      let continueUrl = process.env.NEXT_PUBLIC_BASE_URL || `https://${baseDomain}`
 
       if (orgId) {
         try {
@@ -85,12 +86,10 @@ export async function POST(req: NextRequest) {
             const orgData = orgSnap.data()
             const subdomain = orgData?.subdomain
             const subdomainEnabled = orgData?.subdomainEnabled
-            const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'localhost:3000'
 
             // Use subdomain URL if subdomain exists and is enabled
             if (subdomain && subdomainEnabled) {
-              const protocol = baseDomain.includes('localhost') ? 'http' : 'https'
-              continueUrl = `${protocol}://${subdomain}.${baseDomain}`
+              continueUrl = `https://${subdomain}.${baseDomain}`
               console.log(`[api/admin/users] Using org subdomain for reset link: ${continueUrl}`)
             }
           }

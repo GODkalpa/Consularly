@@ -197,7 +197,9 @@ export async function POST(req: NextRequest) {
           organizationName: orgData?.name || 'Your Organization',
           organizationBranding: orgData?.settings?.customBranding || {},
           initialCredits: 5, // Will be auto-allocated when password is set
-          invitationToken
+          invitationToken,
+          orgSubdomain: orgData?.subdomain,
+          orgSubdomainEnabled: orgData?.subdomainEnabled
         })
         
         console.log('[Student Creation] ✅ Invitation email sent successfully')

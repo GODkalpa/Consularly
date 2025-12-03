@@ -126,7 +126,8 @@ export async function validateUserAccessToOrg(
 
   try {
     // Fetch user's organization from API with timeout
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `https://${baseDomain}`;
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout

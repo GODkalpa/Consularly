@@ -10,6 +10,8 @@ export interface StudentInvitationData {
   organizationBranding: OrganizationBranding;
   initialCredits: number;
   invitationToken: string;
+  orgSubdomain?: string;        // Organization's subdomain (e.g., 'acme')
+  orgSubdomainEnabled?: boolean; // Whether subdomain is enabled for this org
 }
 
 /**
@@ -45,22 +47,33 @@ export function verifyInvitationToken(token: string): any | null {
  * Uses org branding for white-labeled experience
  */
 export async function sendStudentInvitationEmail(data: StudentInvitationData): Promise<void> {
-  const { studentName, studentEmail, organizationName, organizationBranding, initialCredits, invitationToken } = data;
+  const { studentName, studentEmail, organizationName, organizationBranding, initialCredits, invitationToken, orgSubdomain, orgSubdomainEnabled } = data;
   
   console.log('[StudentInvitation] Starting email send process:', {
     studentEmail,
     organizationName,
     hasToken: !!invitationToken,
-    initialCredits
+    initialCredits,
+    orgSubdomain,
+    orgSubdomainEnabled
   });
   
   // Use existing email service
   try {
     const { sendStudentInvitation } = await import('@/lib/email-service');
     
-    // Generate invitation URL
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const invitationUrl = `${baseUrl}/student/setup?token=${invitationToken}`;
+    // Generate invitation URL - use org subdomain if available and enabled
+    let invitationUrl: string;
+    const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
+    
+    if (orgSubdomain && orgSubdomainEnabled) {
+      // Use org's subdomain URL (e.g., https://acme.consularly.com)
+      invitationUrl = `https://${orgSubdomain}.${baseDomain}/student/setup?token=${invitationToken}`;
+    } else {
+      // Fallback to main app URL
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${baseDomain}`;
+      invitationUrl = `${baseUrl}/student/setup?token=${invitationToken}`;
+    }
     
     console.log('[StudentInvitation] Generated invitation URL:', invitationUrl);
     
@@ -80,13 +93,23 @@ export async function sendStudentInvitationEmail(data: StudentInvitationData): P
   } catch (error) {
     // Fallback: Log invitation details if email service unavailable
     console.error('[StudentInvitation] ❌ Email service error:', error);
+    
+    // Generate fallback URL with subdomain if available
+    const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
+    let setupUrl: string;
+    if (orgSubdomain && orgSubdomainEnabled) {
+      setupUrl = `https://${orgSubdomain}.${baseDomain}/student/setup?token=${invitationToken}`;
+    } else {
+      setupUrl = `${process.env.NEXT_PUBLIC_APP_URL || `https://${baseDomain}`}/student/setup?token=${invitationToken}`;
+    }
+    
     console.log('[Invitation] Manual setup required for:', {
       studentEmail,
       studentName,
       organizationName,
       initialCredits,
       invitationToken,
-      setupUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/student/setup?token=${invitationToken}`
+      setupUrl
     });
     
     // Re-throw error so caller knows email failed
@@ -96,9 +119,16 @@ export async function sendStudentInvitationEmail(data: StudentInvitationData): P
 
 /**
  * Creates a shareable invitation link for testing/manual distribution
+ * Optionally uses org subdomain if provided
  */
-export function createInvitationLink(token: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+export function createInvitationLink(token: string, orgSubdomain?: string, orgSubdomainEnabled?: boolean): string {
+  const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
+  
+  if (orgSubdomain && orgSubdomainEnabled) {
+    return `https://${orgSubdomain}.${baseDomain}/student/setup?token=${token}`;
+  }
+  
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${baseDomain}`;
   return `${baseUrl}/student/setup?token=${token}`;
 }
 

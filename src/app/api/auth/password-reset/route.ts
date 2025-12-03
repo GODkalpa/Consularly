@@ -53,8 +53,32 @@ export async function POST(req: NextRequest) {
 
       // Generate password reset link using Firebase Admin
       // This link will be valid for 1 hour
+      // Use org subdomain if available and enabled
+      let continueUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com'}`
+      
+      if (!userSnap.empty) {
+        const userData = userSnap.docs[0].data()
+        const orgId = userData?.orgId
+        if (orgId) {
+          try {
+            const orgDoc = await adminDb().collection('organizations').doc(orgId).get()
+            if (orgDoc.exists) {
+              const orgData = orgDoc.data()
+              const subdomain = orgData?.subdomain
+              const subdomainEnabled = orgData?.subdomainEnabled
+              if (subdomain && subdomainEnabled) {
+                const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com'
+                continueUrl = `https://${subdomain}.${baseDomain}`
+              }
+            }
+          } catch (e) {
+            console.warn('[password-reset] Failed to fetch org subdomain:', e)
+          }
+        }
+      }
+      
       const resetLink = await adminAuth().generatePasswordResetLink(email, {
-        url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+        url: continueUrl,
       })
 
       // Send custom branded email via Brevo

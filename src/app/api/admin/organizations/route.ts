@@ -234,13 +234,12 @@ export async function POST(req: NextRequest) {
           })
 
           // Generate password reset link with org subdomain
-          let continueUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+          const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com'
+          let continueUrl = process.env.NEXT_PUBLIC_BASE_URL || `https://${baseDomain}`
 
           // Use org subdomain if available and enabled
           if (subdomain && subdomainEnabled) {
-            const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'localhost:3000'
-            const protocol = baseDomain.includes('localhost') ? 'http' : 'https'
-            continueUrl = `${protocol}://${subdomain}.${baseDomain}`
+            continueUrl = `https://${subdomain}.${baseDomain}`
             console.log(`[api/admin/organizations] Using org subdomain for reset link: ${continueUrl}`)
           }
 

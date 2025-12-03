@@ -96,20 +96,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           if (studentEmail) {
             const finalReport = body.finalReport
             
-            // Build report link using organization subdomain if available
+            // Build report link using organization subdomain if available and enabled
             // This ensures links in emails point to the correct subdomain, not localhost
             let reportLink: string
             const orgSubdomain = orgData?.subdomain
+            const orgSubdomainEnabled = orgData?.subdomainEnabled
             
-            if (orgSubdomain) {
+            if (orgSubdomain && orgSubdomainEnabled) {
               // Use subdomain URL for organizations with custom subdomains
               reportLink = buildSubdomainUrl(orgSubdomain, `/org/results?id=${interviewId}`)
             } else {
-              // Fallback to main app URL (ensure it's not localhost in production)
-              const appUrl = process.env.NEXT_PUBLIC_APP_URL || 
-                (process.env.NODE_ENV === 'production' 
-                  ? `https://${process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com'}` 
-                  : 'http://localhost:3000')
+              // Fallback to main app URL
+              const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com'
+              const appUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${baseDomain}`
               reportLink = `${appUrl}/org/results?id=${interviewId}`
             }
 
