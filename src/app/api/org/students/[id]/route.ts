@@ -46,6 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 // DELETE /api/org/students/[id]
+// Permanently deletes student from Firestore AND Firebase Auth
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -72,12 +73,60 @@ export async function DELETE(
     const studentRef = adminDb().collection('orgStudents').doc(id)
     const studentSnap = await studentRef.get()
     if (!studentSnap.exists) return NextResponse.json({ error: 'Student not found' }, { status: 404 })
-    if ((studentSnap.data() as any)?.orgId !== orgId) {
+    
+    const studentData = studentSnap.data() as any
+    if (studentData?.orgId !== orgId) {
       return NextResponse.json({ error: 'Forbidden: cross-organization access' }, { status: 403 })
     }
 
+    // Get the Firebase Auth UID if the student has set up their account
+    const firebaseUid = studentData?.firebaseUid
+    const studentEmail = studentData?.email
+
+    // Delete the Firestore document first
     await studentRef.delete()
-    return NextResponse.json({ ok: true })
+    console.log(`[Student Delete] Deleted Firestore document for student ${id}`)
+
+    // Delete Firebase Auth user if exists
+    if (firebaseUid) {
+      try {
+        await adminAuth().deleteUser(firebaseUid)
+        console.log(`[Student Delete] Deleted Firebase Auth user ${firebaseUid}`)
+      } catch (authError: any) {
+        // User might not exist in Auth (e.g., never completed setup)
+        if (authError.code !== 'auth/user-not-found') {
+          console.warn(`[Student Delete] Failed to delete Auth user ${firebaseUid}:`, authError.message)
+        }
+      }
+    } else if (studentEmail) {
+      // Try to find and delete by email if no firebaseUid stored
+      try {
+        const userRecord = await adminAuth().getUserByEmail(studentEmail)
+        await adminAuth().deleteUser(userRecord.uid)
+        console.log(`[Student Delete] Deleted Firebase Auth user by email ${studentEmail}`)
+      } catch (authError: any) {
+        // User might not exist in Auth
+        if (authError.code !== 'auth/user-not-found') {
+          console.warn(`[Student Delete] Failed to delete Auth user by email ${studentEmail}:`, authError.message)
+        }
+      }
+    }
+
+    // Also delete any related user document in 'users' collection
+    if (firebaseUid) {
+      try {
+        const userDocRef = adminDb().collection('users').doc(firebaseUid)
+        const userDoc = await userDocRef.get()
+        if (userDoc.exists) {
+          await userDocRef.delete()
+          console.log(`[Student Delete] Deleted users collection document for ${firebaseUid}`)
+        }
+      } catch (e) {
+        console.warn(`[Student Delete] Failed to delete users document:`, e)
+      }
+    }
+
+    return NextResponse.json({ ok: true, deleted: { firestore: true, auth: !!firebaseUid || !!studentEmail } })
   } catch (e: any) {
     console.error('[api/org/students/[id]] DELETE error', e)
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
