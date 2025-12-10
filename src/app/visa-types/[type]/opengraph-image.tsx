@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og'
 import { visaTypes } from '../data'
 
-export const runtime = 'edge'
+
 
 export const alt = 'Consularly Visa Interview Guide'
 export const size = {
