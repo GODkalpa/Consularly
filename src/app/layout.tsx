@@ -17,7 +17,7 @@ import { adminDb } from '@/lib/firebase-admin'
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], display: 'swap' })
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://consularly.app'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://consularly.com'),
   title: 'Consularly - Ace Your US Visa Interview',
   description: 'AI-powered visa interview mock test platform for Nepalese F-1 students. Practice with realistic questions, get instant feedback, and increase your success rate.',
   keywords: 'visa interview, F-1 visa, Nepal, USA, mock test, AI feedback, student visa, visa preparation',
@@ -37,6 +37,25 @@ export const metadata: Metadata = {
 // Move themeColor to viewport per Next.js recommendation to silence warnings
 export const viewport: Viewport = {
   themeColor: '#4840A3',
+}
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Consularly',
+  applicationCategory: 'EducationalApplication',
+  operatingSystem: 'Any',
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'USD',
+  },
+  description: 'AI-powered visa interview mock test platform for F-1 students.',
+  author: {
+    '@type': 'Organization',
+    name: 'Consularly',
+    url: 'https://consularly.com',
+  },
 }
 
 export default async function RootLayout({
@@ -108,6 +127,10 @@ export default async function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <ClientAuthProvider>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          />
           {!isSubdomainPage && <ChromeSwitcher position="header" />}
           {children}
         </ClientAuthProvider>
