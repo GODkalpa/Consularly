@@ -253,7 +253,7 @@ export function OrganizationManagement() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token} `,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: newName,
@@ -344,11 +344,11 @@ export function OrganizationManagement() {
       const token = await auth.currentUser?.getIdToken()
       if (!token) throw new Error('Not authenticated')
 
-      const res = await fetch(`/ api / admin / organizations / ${editingOrg.id} `, {
+      const res = await fetch(`/api/admin/organizations/${editingOrg.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token} `,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           quotaLimit: Number(editQuota),
@@ -385,10 +385,10 @@ export function OrganizationManagement() {
       const token = await auth.currentUser?.getIdToken()
       if (!token) throw new Error('Not authenticated')
 
-      const res = await fetch(`/ api / admin / organizations / ${deletingOrg.id} `, {
+      const res = await fetch(`/api/admin/organizations/${deletingOrg.id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token} `,
+          'Authorization': `Bearer ${token}`,
         },
       })
       const data = await res.json()
