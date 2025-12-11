@@ -254,15 +254,13 @@ export async function POST(req: NextRequest) {
             welcomeEmailSent: false, // Track if welcome email has been sent
           })
 
-          // Generate password reset link with org subdomain
+          // Generate password reset link - always use main domain (must be allowlisted in Firebase)
           const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com'
-          let continueUrl = process.env.NEXT_PUBLIC_BASE_URL || `https://${baseDomain}`
-
-          // Use org subdomain if available and enabled
-          if (subdomain && subdomainEnabled) {
-            continueUrl = `https://${subdomain}.${baseDomain}`
-            console.log(`[api/admin/organizations] Using org subdomain for reset link: ${continueUrl}`)
-          }
+          const continueUrl = process.env.NEXT_PUBLIC_BASE_URL || `https://${baseDomain}`
+          
+          // Note: We use the main domain for reset link because subdomains need to be 
+          // individually allowlisted in Firebase Auth. The email will include subdomain info.
+          console.log(`[api/admin/organizations] Using main domain for reset link: ${continueUrl}`)
 
           resetLink = await adminAuth().generatePasswordResetLink(orgEmail, {
             url: continueUrl,
