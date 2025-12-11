@@ -193,11 +193,14 @@ export async function POST(req: NextRequest) {
       const orgContactPerson = body.contactPerson ? String(body.contactPerson).trim() : 'Organization Admin'
 
       try {
-        // Check if user with this email already exists
+        // Check if user with this email already exists in Firestore
         const usersRef = adminDb().collection('users')
+        console.log('[api/admin/organizations] Checking if user exists in Firestore:', orgEmail)
         const existingUserSnap = await usersRef.where('email', '==', orgEmail).limit(1).get()
-
+        console.log('[api/admin/organizations] User exists in Firestore:', !existingUserSnap.empty)
+        
         if (!existingUserSnap.empty) {
+          console.log('[api/admin/organizations] Found existing user doc ID:', existingUserSnap.docs[0].id)
           // User exists - assign them to this organization
           const existingUserDoc = existingUserSnap.docs[0]
           const existingData = existingUserDoc.data()

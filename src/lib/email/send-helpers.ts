@@ -1,9 +1,13 @@
 /**
  * Email Send Helpers
  * Convenient functions to send various types of emails throughout the application
+ * All functions use nodemailer directly for reliability
+ * 
+ * @version 2.0.0 - Migrated to direct nodemailer usage (Dec 2024)
  */
 
-import { getEmailService } from './index';
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 import { generateWelcomeEmail } from './templates/welcome';
 import { generateAccountCreationEmail } from './templates/account-creation';
 import { generateOrgWelcomeEmail } from './templates/org-welcome';
@@ -11,31 +15,77 @@ import { generateOrgAccountSetupEmail } from './templates/org-account-setup';
 import { generateInterviewResultsEmail } from './templates/interview-results';
 import { generateQuotaAlertEmail } from './templates/quota-alert';
 import { generatePasswordResetEmail } from './templates/password-reset';
-import type { OrganizationBranding } from './index';
+import type { OrganizationBranding } from '@/types/firestore';
 
-// Build base URL with proper fallback for production
-// Ensures emails never contain localhost links in production
+export type { OrganizationBranding };
+
 const getBaseUrl = (): string => {
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL;
   }
-  // Always use the base domain, never localhost
   const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
   return `https://${baseDomain}`;
 };
 
 const BASE_URL = getBaseUrl();
 
-/**
- * Send welcome email to new signup users
- */
+let emailTransporter: Transporter | null = null;
+
+function getTransporter(): Transporter {
+  if (!emailTransporter) {
+    const config = {
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '465'),
+      secure: true,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASSWORD,
+      },
+    };
+
+    if (!config.host || !config.auth.user || !config.auth.pass) {
+      console.error('[Email] SMTP not configured:', {
+        host: !!config.host,
+        user: !!config.auth.user,
+        pass: !!config.auth.pass,
+      });
+      throw new Error('SMTP credentials not configured');
+    }
+
+    emailTransporter = nodemailer.createTransport(config);
+  }
+  return emailTransporter;
+}
+
+
+async function sendEmail(params: {
+  to: string | string[];
+  cc?: string[];
+  subject: string;
+  html: string;
+  text: string;
+  from?: string;
+  replyTo?: string;
+}) {
+  const transporter = getTransporter();
+  const defaultFrom = `"${process.env.DEFAULT_SENDER_NAME || 'Consularly'}" <${process.env.DEFAULT_SENDER_EMAIL || 'info@consularly.com'}>`;
+
+  await transporter.sendMail({
+    from: params.from || defaultFrom,
+    to: params.to,
+    cc: params.cc,
+    subject: params.subject,
+    html: params.html,
+    text: params.text,
+    replyTo: params.replyTo || process.env.ORG_SUPPORT_EMAIL || 'support@consularly.com',
+  });
+}
+
 export async function sendWelcomeEmail(params: {
   to: string;
   displayName: string;
   userId: string;
 }) {
-  const emailService = getEmailService();
-
   const { subject, html, text } = generateWelcomeEmail({
     displayName: params.displayName,
     email: params.to,
@@ -43,17 +93,11 @@ export async function sendWelcomeEmail(params: {
     dashboardLink: `${BASE_URL}/dashboard`,
   });
 
-  return await emailService.sendEmail({
-    to: params.to,
-    subject,
-    html,
-    text,
-  });
+  console.log(`[sendWelcomeEmail] Sending to ${params.to}`);
+  await sendEmail({ to: params.to, subject, html, text });
+  console.log(`[sendWelcomeEmail] Successfully sent to ${params.to}`);
 }
 
-/**
- * Send account creation notification when admin creates a user
- */
 export async function sendAccountCreationEmail(params: {
   to: string;
   displayName: string;
@@ -61,8 +105,6 @@ export async function sendAccountCreationEmail(params: {
   role: string;
   orgName?: string;
 }) {
-  const emailService = getEmailService();
-
   const dashboardLink = params.orgName ? `${BASE_URL}/org` : `${BASE_URL}/dashboard`;
 
   const { subject, html, text } = generateAccountCreationEmail({
@@ -74,17 +116,11 @@ export async function sendAccountCreationEmail(params: {
     dashboardLink,
   });
 
-  return await emailService.sendEmail({
-    to: params.to,
-    subject,
-    html,
-    text,
-  });
+  console.log(`[sendAccountCreationEmail] Sending to ${params.to}`);
+  await sendEmail({ to: params.to, subject, html, text });
+  console.log(`[sendAccountCreationEmail] Successfully sent to ${params.to}`);
 }
 
-/**
- * Send password reset email with custom branding
- */
 export async function sendPasswordResetEmail(params: {
   to: string;
   displayName?: string;
@@ -92,8 +128,6 @@ export async function sendPasswordResetEmail(params: {
   orgName?: string;
   orgBranding?: OrganizationBranding;
 }) {
-  const emailService = getEmailService();
-
   const { subject, html, text } = generatePasswordResetEmail({
     displayName: params.displayName,
     email: params.to,
@@ -102,17 +136,11 @@ export async function sendPasswordResetEmail(params: {
     orgBranding: params.orgBranding,
   });
 
-  return await emailService.sendEmail({
-    to: params.to,
-    subject,
-    html,
-    text,
-  });
+  console.log(`[sendPasswordResetEmail] Sending to ${params.to}`);
+  await sendEmail({ to: params.to, subject, html, text });
+  console.log(`[sendPasswordResetEmail] Successfully sent to ${params.to}`);
 }
 
-/**
- * Send organization welcome email when new org is created
- */
 export async function sendOrgWelcomeEmail(params: {
   to: string;
   adminName: string;
@@ -121,8 +149,6 @@ export async function sendOrgWelcomeEmail(params: {
   plan: 'basic' | 'premium' | 'enterprise';
   quotaLimit: number;
 }) {
-  const emailService = getEmailService();
-
   const { subject, html, text } = generateOrgWelcomeEmail({
     adminName: params.adminName,
     orgName: params.orgName,
@@ -134,19 +160,12 @@ export async function sendOrgWelcomeEmail(params: {
     studentsLink: `${BASE_URL}/org?tab=students`,
   });
 
-  return await emailService.sendEmail({
-    to: params.to,
-    subject,
-    html,
-    text,
-  });
+  console.log(`[sendOrgWelcomeEmail] Sending to ${params.to}`);
+  await sendEmail({ to: params.to, subject, html, text });
+  console.log(`[sendOrgWelcomeEmail] Successfully sent to ${params.to}`);
 }
 
-/**
- * Send organization account setup email when new org is created
- * This combines password setup with organization details and subdomain info
- * Uses nodemailer directly for reliability (same as other working email functions)
- */
+
 export async function sendOrgAccountSetupEmail(params: {
   to: string;
   adminName: string;
@@ -157,30 +176,6 @@ export async function sendOrgAccountSetupEmail(params: {
   subdomain?: string;
   resetLink: string;
 }) {
-  // Use nodemailer directly (same pattern as working email functions in email-service.ts)
-  const nodemailer = await import('nodemailer');
-  
-  const smtpConfig = {
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '465'),
-    secure: true,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASSWORD,
-    },
-  };
-
-  if (!smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass) {
-    console.error('[sendOrgAccountSetupEmail] SMTP not configured:', {
-      host: !!smtpConfig.host,
-      user: !!smtpConfig.auth.user,
-      pass: !!smtpConfig.auth.pass,
-    });
-    throw new Error('SMTP credentials not configured');
-  }
-
-  const transporter = nodemailer.default.createTransport(smtpConfig);
-
   const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
   const subdomainUrl = params.subdomain ? `https://${params.subdomain}.${baseDomain}` : undefined;
   const dashboardBase = subdomainUrl || BASE_URL;
@@ -200,28 +195,11 @@ export async function sendOrgAccountSetupEmail(params: {
     studentsLink: `${dashboardBase}/org?tab=students`,
   });
 
-  const senderEmail = process.env.DEFAULT_SENDER_EMAIL || 'info@consularly.com';
-  const senderName = process.env.DEFAULT_SENDER_NAME || 'Consularly';
-
-  const mailOptions = {
-    from: `"${senderName}" <${senderEmail}>`,
-    to: params.to,
-    subject,
-    html,
-    text,
-    replyTo: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.com',
-  };
-
-  console.log(`[sendOrgAccountSetupEmail] Sending to ${params.to} from ${senderEmail}`);
-  
-  await transporter.sendMail(mailOptions);
-  
+  console.log(`[sendOrgAccountSetupEmail] Sending to ${params.to}`);
+  await sendEmail({ to: params.to, subject, html, text });
   console.log(`[sendOrgAccountSetupEmail] Successfully sent to ${params.to}`);
 }
 
-/**
- * Send interview results email after completion
- */
 export async function sendInterviewResultsEmail(params: {
   to: string;
   cc?: string[];
@@ -237,8 +215,6 @@ export async function sendInterviewResultsEmail(params: {
   orgBranding?: OrganizationBranding;
   interviewDate?: string;
 }) {
-  const emailService = getEmailService();
-
   const { subject, html, text } = generateInterviewResultsEmail({
     studentName: params.studentName,
     interviewType: params.interviewType,
@@ -257,29 +233,18 @@ export async function sendInterviewResultsEmail(params: {
     }),
   });
 
-  // Build custom 'from' address using organization email alias if available
   let fromAddress: string | undefined = undefined;
   if (params.orgBranding?.emailAlias) {
     const senderName = params.orgBranding.companyName || params.orgName || 'Consularly';
     fromAddress = `"${senderName}" <${params.orgBranding.emailAlias}>`;
-    console.log(`[Email] Sending interview results from org alias: ${fromAddress}`);
-  } else {
-    console.log('[Email] No org email alias configured, using default sender');
+    console.log(`[sendInterviewResultsEmail] Using org alias: ${fromAddress}`);
   }
 
-  return await emailService.sendEmail({
-    to: params.to,
-    cc: params.cc,
-    subject,
-    html,
-    text,
-    from: fromAddress, // Pass custom sender address or undefined to use default
-  });
+  console.log(`[sendInterviewResultsEmail] Sending to ${params.to}`);
+  await sendEmail({ to: params.to, cc: params.cc, subject, html, text, from: fromAddress });
+  console.log(`[sendInterviewResultsEmail] Successfully sent to ${params.to}`);
 }
 
-/**
- * Send quota alert email when thresholds are reached
- */
 export async function sendQuotaAlertEmail(params: {
   to: string | string[];
   orgName: string;
@@ -289,8 +254,6 @@ export async function sendQuotaAlertEmail(params: {
   quotaLimit: number;
   orgId: string;
 }) {
-  const emailService = getEmailService();
-
   const { subject, html, text } = generateQuotaAlertEmail({
     orgName: params.orgName,
     adminName: params.adminName,
@@ -301,17 +264,12 @@ export async function sendQuotaAlertEmail(params: {
     upgradeLink: `${BASE_URL}/org?tab=settings&action=upgrade`,
   });
 
-  return await emailService.sendEmail({
-    to: params.to,
-    subject,
-    html,
-    text,
-  });
+  console.log(`[sendQuotaAlertEmail] Sending to ${params.to}`);
+  await sendEmail({ to: params.to, subject, html, text });
+  console.log(`[sendQuotaAlertEmail] Successfully sent to ${params.to}`);
 }
 
-/**
- * Send generic notification email
- */
+
 export async function sendNotificationEmail(params: {
   to: string | string[];
   subject: string;
@@ -319,8 +277,6 @@ export async function sendNotificationEmail(params: {
   actionText?: string;
   actionLink?: string;
 }) {
-  const emailService = getEmailService();
-
   const html = `
 <!DOCTYPE html>
 <html>
@@ -358,18 +314,11 @@ Best regards,
 The Consularly Team
   `;
 
-  return await emailService.sendEmail({
-    to: params.to,
-    subject: params.subject,
-    html,
-    text,
-  });
+  console.log(`[sendNotificationEmail] Sending to ${params.to}`);
+  await sendEmail({ to: params.to, subject: params.subject, html, text });
+  console.log(`[sendNotificationEmail] Successfully sent to ${params.to}`);
 }
 
-/**
- * Check quota and send alerts if thresholds reached
- * Returns true if alert was sent
- */
 export async function checkAndSendQuotaAlert(params: {
   orgId: string;
   orgName: string;
@@ -381,7 +330,6 @@ export async function checkAndSendQuotaAlert(params: {
 }): Promise<boolean> {
   const percentage = (params.quotaUsed / params.quotaLimit) * 100;
 
-  // Determine threshold
   let threshold: '75%' | '90%' | '100%' | null = null;
   if (percentage >= 100) threshold = '100%';
   else if (percentage >= 90) threshold = '90%';
@@ -389,17 +337,15 @@ export async function checkAndSendQuotaAlert(params: {
 
   if (!threshold) return false;
 
-  // Check if we already sent this alert recently (within 24 hours)
   const now = Date.now();
   const twentyFourHours = 24 * 60 * 60 * 1000;
   if (
     params.lastAlertSent?.threshold === threshold &&
     now - params.lastAlertSent.timestamp < twentyFourHours
   ) {
-    return false; // Don't spam alerts
+    return false;
   }
 
-  // Send alert
   await sendQuotaAlertEmail({
     to: params.adminEmails,
     orgName: params.orgName,
