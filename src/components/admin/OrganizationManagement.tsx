@@ -351,13 +351,9 @@ export function OrganizationManagement() {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
+          name: editName,
           quotaLimit: Number(editQuota),
           plan: editPlan,
-          settings: {
-            customBranding: {
-              companyName: editName
-            }
-          }
         }),
       })
       const data = await res.json()

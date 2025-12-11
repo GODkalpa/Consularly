@@ -46,6 +46,11 @@ export async function PATCH(
       updatedAt: FieldValue.serverTimestamp(),
     }
 
+    // Update name
+    if (body.name && typeof body.name === 'string' && body.name.trim()) {
+      update.name = body.name.trim()
+    }
+
     // Update quota fields
     if (typeof body.quotaLimit === 'number' && body.quotaLimit >= 0) {
       update.quotaLimit = body.quotaLimit
@@ -55,7 +60,7 @@ export async function PATCH(
     }
 
     // Update plan
-    if (body.plan && ['basic', 'premium', 'enterprise'].includes(body.plan)) {
+    if (body.plan && ['basic', 'plus', 'premium', 'enterprise'].includes(body.plan)) {
       update.plan = body.plan
     }
 
