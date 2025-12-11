@@ -42,7 +42,7 @@ export function generateOrgAccountSetupEmail(data: OrgAccountSetupEmailData): { 
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
     <!-- Header -->
     <div style="background-color: #4840A3; padding: 40px 20px; text-align: center;">
-      <img src="https://res.cloudinary.com/dpkstuci5/image/upload/v1749617997/Consularly_1_iqvpqt.png" alt="Consularly" style="max-width: 180px; height: auto; margin-bottom: 10px;" />
+      <img src="https://res.cloudinary.com/dpkstuci5/image/upload/v1761822845/email-assets/consularly-logo.png" alt="Consularly" style="max-width: 180px; height: auto; margin-bottom: 10px; background-color: white; padding: 8px; border-radius: 8px;" />
       <h1 style="color: #ffffff; margin: 10px 0 0 0; font-size: 28px;">🎉 Welcome to Consularly!</h1>
       <p style="color: rgba(255,255,255,0.9); margin: 10px 0;">Your organization account is ready</p>
     </div>
