@@ -51,7 +51,18 @@ export async function POST(req: NextRequest) {
         
         if (!orgDoc.exists) {
           console.warn('[send-welcome] Organization not found:', orgId)
-          return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+          // Don't fail - just mark as complete without sending org email
+          // The org might have been deleted or there's a data issue
+          await adminDb().collection('users').doc(uid).update({
+            welcomeEmailSent: true,
+            passwordSet: true,
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+          return NextResponse.json({ 
+            success: true, 
+            message: 'Organization not found, skipping welcome email',
+            orgNotFound: true 
+          })
         }
 
         const orgData = orgDoc.data()

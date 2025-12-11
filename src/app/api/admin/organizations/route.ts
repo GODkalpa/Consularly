@@ -215,6 +215,25 @@ export async function POST(req: NextRequest) {
 
           await usersRef.doc(existingUserDoc.id).update(updates)
           console.log('[api/admin/organizations] Assigned existing user to org:', orgEmail)
+          
+          // Send org welcome email to existing user
+          try {
+            console.log('[api/admin/organizations] Sending org welcome email to existing user:', orgEmail)
+            const { sendOrgWelcomeEmail } = await import('@/lib/email/send-helpers')
+            await sendOrgWelcomeEmail({
+              to: orgEmail,
+              adminName: existingData?.displayName || orgContactPerson,
+              orgName: name,
+              orgId: ref.id,
+              plan: plan as 'basic' | 'premium' | 'enterprise',
+              quotaLimit: quotaLimit,
+            })
+            emailSent = true
+            console.log('[api/admin/organizations] Org welcome email sent to existing user:', orgEmail)
+          } catch (e: any) {
+            emailError = e.message || 'Unknown error'
+            console.error('[api/admin/organizations] Failed to send org welcome email:', e.message)
+          }
         } else {
           // User doesn't exist - create new account
           const authUser = await adminAuth().createUser({
