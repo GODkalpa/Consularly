@@ -19,83 +19,75 @@ export function generateWelcomeEmail(data: WelcomeEmailData): { subject: string;
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
-    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-    .header { background-color: #4840A3; padding: 40px 20px; text-align: center; }
-    .header h1 { color: #ffffff; margin: 10px 0 0 0; font-size: 28px; }
-    .logo { max-width: 180px; height: auto; margin-bottom: 10px; background-color: white; padding: 8px; border-radius: 8px; }
-    .content { padding: 40px 30px; }
-    .button { display: inline-block; padding: 14px 32px; background-color: #4840A3; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 0; }
-    .button:hover { background-color: #3a327d; }
-    .feature-box { background-color: #D8EFF7; border-left: 4px solid #9CBBFC; padding: 15px 20px; margin: 15px 0; }
-    .footer { background-color: #f8fafc; padding: 30px; text-align: center; font-size: 14px; color: #64748b; }
-    .footer a { color: #4840A3; text-decoration: none; }
-  </style>
 </head>
-<body>
-  <div class="container">
-    <div class="header">
-      <img src="https://res.cloudinary.com/dpkstuci5/image/upload/v1761822845/email-assets/consularly-logo.png" alt="Consularly" class="logo" />
-      <h1>Welcome to Consularly! 🎉</h1>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+    <!-- Header -->
+    <div style="background-color: #4840A3; padding: 40px 20px; text-align: center;">
+      <img src="https://res.cloudinary.com/dpkstuci5/image/upload/v1761822845/email-assets/consularly-logo.png" alt="Consularly" style="max-width: 180px; height: auto; margin-bottom: 10px; background-color: white; padding: 8px; border-radius: 8px;" />
+      <h1 style="color: #ffffff; margin: 10px 0 0 0; font-size: 28px;">Welcome to Consularly! 🎉</h1>
     </div>
     
-    <div class="content">
-      <h2>Hi ${data.displayName},</h2>
+    <!-- Content -->
+    <div style="padding: 40px 30px;">
+      <h2 style="color: #1e293b; margin-top: 0;">Hi ${data.displayName},</h2>
       
-      <p>Welcome to Consularly - your AI-powered visa interview preparation platform! We're thrilled to have you on board.</p>
+      <p style="color: #475569;">Welcome to Consularly - your AI-powered visa interview preparation platform! We're thrilled to have you on board.</p>
       
-      <p>You're now part of a community that's mastering visa interviews with cutting-edge AI technology.</p>
+      <p style="color: #475569;">You're now part of a community that's mastering visa interviews with cutting-edge AI technology.</p>
       
-      <h3>🚀 Get Started in 3 Easy Steps:</h3>
+      <h3 style="color: #1e293b; margin-top: 30px;">🚀 Get Started in 3 Easy Steps:</h3>
       
-      <div class="feature-box">
-        <strong>1. Complete Your Profile</strong><br>
-        Set up your student profile to get personalized interview questions tailored to your visa type and background.
+      <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #166534;">1. Complete Your Profile</strong><br>
+        <span style="color: #15803d;">Set up your student profile to get personalized interview questions tailored to your visa type and background.</span>
       </div>
       
-      <div class="feature-box">
-        <strong>2. Choose Your Visa Type</strong><br>
-        Select from USA F1, UK Student, or France student visa interview preparation.
+      <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #1e40af;">2. Choose Your Visa Type</strong><br>
+        <span style="color: #1d4ed8;">Select from USA F1, UK Student, or France student visa interview preparation.</span>
       </div>
       
-      <div class="feature-box">
-        <strong>3. Start Practicing</strong><br>
-        Begin your first AI-powered mock interview with real-time feedback on your responses, speech quality, and body language.
+      <div style="background-color: #faf5ff; border-left: 4px solid #a855f7; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #7e22ce;">3. Start Practicing</strong><br>
+        <span style="color: #9333ea;">Begin your first AI-powered mock interview with real-time feedback on your responses, speech quality, and body language.</span>
       </div>
       
+      <!-- CTA Button -->
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${data.profileSetupLink}" class="button">Complete Your Profile →</a>
+        <a href="${data.profileSetupLink}" style="display: inline-block; padding: 16px 40px; background-color: #4840A3; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Complete Your Profile →</a>
       </div>
       
-      <h3>✨ What You'll Get:</h3>
-      <ul>
-        <li><strong>AI-Powered Interviews:</strong> Practice with realistic visa interview scenarios</li>
-        <li><strong>Real-Time Feedback:</strong> Get instant analysis of your answers, speech, and body language</li>
-        <li><strong>Detailed Reports:</strong> Receive comprehensive performance reports with actionable insights</li>
-        <li><strong>Progress Tracking:</strong> Monitor your improvement over time</li>
-        <li><strong>Country-Specific Prep:</strong> Tailored questions for USA, UK, and France visa interviews</li>
+      <h3 style="color: #1e293b; margin-top: 30px;">✨ What You'll Get:</h3>
+      <ul style="color: #475569; padding-left: 20px;">
+        <li style="margin: 8px 0;"><strong>AI-Powered Interviews:</strong> Practice with realistic visa interview scenarios</li>
+        <li style="margin: 8px 0;"><strong>Real-Time Feedback:</strong> Get instant analysis of your answers, speech, and body language</li>
+        <li style="margin: 8px 0;"><strong>Detailed Reports:</strong> Receive comprehensive performance reports with actionable insights</li>
+        <li style="margin: 8px 0;"><strong>Progress Tracking:</strong> Monitor your improvement over time</li>
+        <li style="margin: 8px 0;"><strong>Country-Specific Prep:</strong> Tailored questions for USA, UK, and France visa interviews</li>
       </ul>
       
-      <p><strong>Need Help?</strong><br>
+      <p style="color: #475569;"><strong style="color: #1e293b;">Need Help?</strong><br>
       If you have any questions or need assistance, just reply to this email or visit our dashboard for support resources.</p>
       
+      <!-- Secondary CTA -->
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${data.dashboardLink}" class="button">Go to Dashboard</a>
+        <a href="${data.dashboardLink}" style="display: inline-block; padding: 16px 40px; background-color: #4840A3; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Go to Dashboard</a>
       </div>
       
-      <p>Good luck with your visa interview preparation!</p>
+      <p style="color: #475569;">Good luck with your visa interview preparation!</p>
       
-      <p>Best regards,<br>
-      <strong>The Consularly Team</strong></p>
+      <p style="color: #475569; margin-top: 30px;">Best regards,<br>
+      <strong style="color: #1e293b;">The Consularly Team</strong></p>
     </div>
     
-    <div class="footer">
-      <p>© ${new Date().getFullYear()} Consularly. All rights reserved.</p>
-      <p>
-        <a href="${data.dashboardLink}">Dashboard</a> • 
-        <a href="mailto:support@consularly.com">Support</a> • 
-        <a href="#">Privacy Policy</a>
+    <!-- Footer -->
+    <div style="background-color: #f8fafc; padding: 30px; text-align: center; font-size: 14px; color: #64748b; border-top: 1px solid #e2e8f0;">
+      <p style="margin: 0;">© ${new Date().getFullYear()} Consularly. All rights reserved.</p>
+      <p style="margin: 10px 0 0 0;">
+        <a href="${data.dashboardLink}" style="color: #4840A3; text-decoration: none;">Dashboard</a> • 
+        <a href="mailto:support@consularly.com" style="color: #4840A3; text-decoration: none;">Support</a> • 
+        <a href="#" style="color: #4840A3; text-decoration: none;">Privacy Policy</a>
       </p>
     </div>
   </div>

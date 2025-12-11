@@ -282,23 +282,19 @@ export async function sendNotificationEmail(params: {
 <html>
 <head>
   <meta charset="utf-8">
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .button { display: inline-block; padding: 12px 24px; background-color: #1d4ed8; color: #ffffff; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body>
-  <div class="container">
-    <p>${params.message.replace(/\n/g, '<br>')}</p>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
+    <p style="color: #475569;">${params.message.replace(/\n/g, '<br>')}</p>
     ${params.actionText && params.actionLink ? `
-      <div style="text-align: center;">
-        <a href="${params.actionLink}" class="button">${params.actionText}</a>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${params.actionLink}" style="display: inline-block; padding: 14px 28px; background-color: #4840A3; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600;">${params.actionText}</a>
       </div>
     ` : ''}
     <p style="margin-top: 30px; color: #64748b; font-size: 14px;">
       Best regards,<br>
-      The Consularly Team
+      <strong style="color: #1e293b;">The Consularly Team</strong>
     </p>
   </div>
 </body>

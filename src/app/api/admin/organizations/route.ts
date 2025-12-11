@@ -3,6 +3,7 @@ import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/fireb
 import { sendOrgAccountSetupEmail } from '@/lib/email/send-helpers'
 import { generateEmailAlias } from '@/lib/email-alias-generator'
 import { generateSubdomainFromName, validateSubdomainFormat } from '@/lib/subdomain-utils'
+import { generatePasswordResetToken, generatePasswordResetUrl } from '@/lib/password-reset-token'
 
 // Map plan names to default interview quotas
 function getDefaultQuotaForPlan(plan: string): number {
@@ -257,18 +258,18 @@ export async function POST(req: NextRequest) {
             welcomeEmailSent: false, // Track if welcome email has been sent
           })
 
-          // Generate password reset link - always use main domain (must be allowlisted in Firebase)
-          const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com'
-          const continueUrl = process.env.NEXT_PUBLIC_BASE_URL || `https://${baseDomain}`
-          
-          // Note: We use the main domain for reset link because subdomains need to be 
-          // individually allowlisted in Firebase Auth. The email will include subdomain info.
-          console.log(`[api/admin/organizations] Using main domain for reset link: ${continueUrl}`)
-
-          resetLink = await adminAuth().generatePasswordResetLink(orgEmail, {
-            url: continueUrl,
-            handleCodeInApp: false,
+          // Generate custom password reset token and URL
+          // This uses our own reset page instead of Firebase's ugly default
+          const resetToken = generatePasswordResetToken({
+            email: orgEmail,
+            uid: authUser.uid,
+            orgId: ref.id,
+            subdomain: subdomain || undefined,
           })
+          
+          // Generate URL - uses subdomain if available for branded experience
+          resetLink = generatePasswordResetUrl(resetToken, subdomain || undefined)
+          console.log(`[api/admin/organizations] Generated custom reset link for: ${orgEmail}`)
           userCreated = true
           console.log('[api/admin/organizations] Created new user for org:', orgEmail)
 

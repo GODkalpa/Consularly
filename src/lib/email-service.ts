@@ -113,7 +113,7 @@ interface StudentInvitationParams extends EmailBaseParams {
 }
 
 /**
- * Generate white-labeled HTML email template
+ * Generate white-labeled HTML email template with inline styles for email client compatibility
  */
 function generateEmailTemplate(
   content: string,
@@ -133,129 +133,22 @@ function generateEmailTemplate(
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Interview Notification - ${companyName}</title>
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: #333;
-          background-color: #f5f5f5;
-          margin: 0;
-          padding: 0;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background-color: #ffffff;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}dd 100%);
-          padding: 30px 20px;
-          text-align: center;
-        }
-        .logo {
-          max-width: 150px;
-          max-height: 60px;
-          margin-bottom: 10px;
-        }
-        .header-title {
-          color: #ffffff;
-          font-size: 24px;
-          font-weight: bold;
-          margin: 10px 0 0 0;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .button {
-          display: inline-block;
-          padding: 14px 28px;
-          background-color: ${primaryColor};
-          color: #ffffff !important;
-          text-decoration: none;
-          border-radius: 6px;
-          font-weight: 600;
-          margin: 20px 0;
-          transition: opacity 0.2s;
-        }
-        .button:hover {
-          opacity: 0.9;
-        }
-        .button-secondary {
-          background-color: #6b7280;
-          margin-left: 10px;
-        }
-        .info-box {
-          background-color: #f9fafb;
-          border-left: 4px solid ${primaryColor};
-          padding: 20px;
-          margin: 20px 0;
-          border-radius: 4px;
-        }
-        .info-row {
-          display: flex;
-          padding: 8px 0;
-          border-bottom: 1px solid #e5e7eb;
-        }
-        .info-row:last-child {
-          border-bottom: none;
-        }
-        .info-label {
-          font-weight: 600;
-          min-width: 120px;
-          color: #6b7280;
-        }
-        .info-value {
-          color: #111827;
-        }
-        .footer {
-          background-color: #f9fafb;
-          padding: 25px 30px;
-          text-align: center;
-          font-size: 14px;
-          color: #6b7280;
-          border-top: 1px solid #e5e7eb;
-        }
-        .footer a {
-          color: ${primaryColor};
-          text-decoration: none;
-        }
-        .alert {
-          background-color: #fef3c7;
-          border-left: 4px solid #f59e0b;
-          padding: 15px;
-          margin: 20px 0;
-          border-radius: 4px;
-          color: #92400e;
-        }
-        @media only screen and (max-width: 600px) {
-          .content {
-            padding: 30px 20px;
-          }
-          .button {
-            display: block;
-            margin: 10px 0;
-          }
-          .button-secondary {
-            margin-left: 0;
-          }
-        }
-      </style>
     </head>
-    <body>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; margin: 0; padding: 0;">
       <div style="padding: 20px;">
-        <div class="container">
-          <div class="header">
-            ${logoUrl ? `<img src="${logoUrl}" alt="${companyName}" class="logo">` : `<h1 style="color: #ffffff; margin: 0;">${companyName}</h1>`}
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}dd 100%); padding: 30px 20px; text-align: center;">
+            ${logoUrl ? `<img src="${logoUrl}" alt="${companyName}" style="max-width: 150px; max-height: 60px; margin-bottom: 10px;">` : `<h1 style="color: #ffffff; margin: 0;">${companyName}</h1>`}
           </div>
-          <div class="content">
+          <!-- Content -->
+          <div style="padding: 40px 30px;">
             ${content}
           </div>
-          <div class="footer">
+          <!-- Footer -->
+          <div style="background-color: #f9fafb; padding: 25px 30px; text-align: center; font-size: 14px; color: #6b7280; border-top: 1px solid #e5e7eb;">
             <p style="margin: 0 0 10px 0;">${footerText}</p>
-            ${website ? `<p style="margin: 0;"><a href="${website}" target="_blank">${website}</a></p>` : ''}
+            ${website ? `<p style="margin: 0;"><a href="${website}" target="_blank" style="color: ${primaryColor}; text-decoration: none;">${website}</a></p>` : ''}
           </div>
         </div>
       </div>
@@ -289,24 +182,25 @@ export async function sendInterviewConfirmation(params: InterviewConfirmationPar
     joinLink
   } = params
 
+  const primaryColor = orgBranding?.primaryColor || '#3b82f6'
   const content = `
     <h2 style="color: #111827; margin-top: 0;">Hello ${studentName},</h2>
     <p style="font-size: 16px; color: #374151;">
       Your <strong>${routeDisplay}</strong> visa interview has been successfully scheduled!
     </p>
     
-    <div class="info-box">
-      <div class="info-row">
-        <span class="info-label">📅 Date:</span>
-        <span class="info-value">${interviewDate}</span>
+    <div style="background-color: #f9fafb; border-left: 4px solid ${primaryColor}; padding: 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+      <div style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+        <span style="font-weight: 600; color: #6b7280;">📅 Date:</span>
+        <span style="color: #111827; margin-left: 10px;">${interviewDate}</span>
       </div>
-      <div class="info-row">
-        <span class="info-label">🕐 Time:</span>
-        <span class="info-value">${interviewTime} ${timezone}</span>
+      <div style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+        <span style="font-weight: 600; color: #6b7280;">🕐 Time:</span>
+        <span style="color: #111827; margin-left: 10px;">${interviewTime} ${timezone}</span>
       </div>
-      <div class="info-row">
-        <span class="info-label">🎯 Interview Type:</span>
-        <span class="info-value">${routeDisplay}</span>
+      <div style="padding: 8px 0;">
+        <span style="font-weight: 600; color: #6b7280;">🎯 Interview Type:</span>
+        <span style="color: #111827; margin-left: 10px;">${routeDisplay}</span>
       </div>
     </div>
 
@@ -317,13 +211,13 @@ export async function sendInterviewConfirmation(params: InterviewConfirmationPar
     </p>
 
     <div style="text-align: center; margin: 30px 0;">
-      ${joinLink ? `<a href="${joinLink}" class="button">Join Interview</a>` : ''}
-      ${rescheduleLink ? `<a href="${rescheduleLink}" class="button button-secondary">Reschedule</a>` : ''}
+      ${joinLink ? `<a href="${joinLink}" style="display: inline-block; padding: 14px 28px; background-color: ${primaryColor}; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 5px;">Join Interview</a>` : ''}
+      ${rescheduleLink ? `<a href="${rescheduleLink}" style="display: inline-block; padding: 14px 28px; background-color: #6b7280; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 5px;">Reschedule</a>` : ''}
     </div>
 
-    <div class="alert">
-      <strong>⏰ Important:</strong> Please join 5 minutes early to test your camera and microphone.
-      You'll need a stable internet connection and a quiet environment.
+    <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+      <strong style="color: #92400e;">⏰ Important:</strong>
+      <span style="color: #a16207;"> Please join 5 minutes early to test your camera and microphone. You'll need a stable internet connection and a quiet environment.</span>
     </div>
 
     <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
@@ -381,6 +275,7 @@ export async function send24HourReminder(params: ReminderParams): Promise<void> 
     rescheduleLink
   } = params
 
+  const primaryColor = orgBranding?.primaryColor || '#3b82f6'
   const content = `
     <h2 style="color: #111827; margin-top: 0;">Reminder: Interview Tomorrow</h2>
     <p style="font-size: 16px; color: #374151;">
@@ -390,14 +285,14 @@ export async function send24HourReminder(params: ReminderParams): Promise<void> 
       This is a friendly reminder that your <strong>${routeDisplay}</strong> interview is scheduled for tomorrow.
     </p>
     
-    <div class="info-box">
-      <div class="info-row">
-        <span class="info-label">📅 Date:</span>
-        <span class="info-value">${interviewDate}</span>
+    <div style="background-color: #f9fafb; border-left: 4px solid ${primaryColor}; padding: 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+      <div style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+        <span style="font-weight: 600; color: #6b7280;">📅 Date:</span>
+        <span style="color: #111827; margin-left: 10px;">${interviewDate}</span>
       </div>
-      <div class="info-row">
-        <span class="info-label">🕐 Time:</span>
-        <span class="info-value">${interviewTime} ${timezone}</span>
+      <div style="padding: 8px 0;">
+        <span style="font-weight: 600; color: #6b7280;">🕐 Time:</span>
+        <span style="color: #111827; margin-left: 10px;">${interviewTime} ${timezone}</span>
       </div>
     </div>
 
@@ -405,19 +300,19 @@ export async function send24HourReminder(params: ReminderParams): Promise<void> 
       <strong>Preparation checklist:</strong>
     </p>
     <ul style="font-size: 16px; color: #374151; padding-left: 20px;">
-      <li>Test your camera and microphone</li>
-      <li>Choose a quiet, well-lit location</li>
-      <li>Have your documents ready (if applicable)</li>
-      <li>Review common interview questions</li>
-      <li>Dress professionally</li>
+      <li style="margin: 8px 0;">Test your camera and microphone</li>
+      <li style="margin: 8px 0;">Choose a quiet, well-lit location</li>
+      <li style="margin: 8px 0;">Have your documents ready (if applicable)</li>
+      <li style="margin: 8px 0;">Review common interview questions</li>
+      <li style="margin: 8px 0;">Dress professionally</li>
     </ul>
 
     <div style="text-align: center; margin: 30px 0;">
-      ${joinLink ? `<a href="${joinLink}" class="button">View Interview Details</a>` : ''}
+      ${joinLink ? `<a href="${joinLink}" style="display: inline-block; padding: 14px 28px; background-color: ${primaryColor}; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">View Interview Details</a>` : ''}
     </div>
 
     <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
-      Need to reschedule? ${rescheduleLink ? `<a href="${rescheduleLink}" style="color: #3b82f6;">Click here</a>` : 'Contact us as soon as possible.'}
+      Need to reschedule? ${rescheduleLink ? `<a href="${rescheduleLink}" style="color: ${primaryColor}; text-decoration: none;">Click here</a>` : 'Contact us as soon as possible.'}
     </p>
   `
 
@@ -468,6 +363,7 @@ export async function send1HourReminder(params: ReminderParams): Promise<void> {
     joinLink
   } = params
 
+  const primaryColor = orgBranding?.primaryColor || '#3b82f6'
   const content = `
     <h2 style="color: #111827; margin-top: 0;">Your Interview Starts in 1 Hour!</h2>
     <p style="font-size: 16px; color: #374151;">
@@ -477,23 +373,23 @@ export async function send1HourReminder(params: ReminderParams): Promise<void> {
       Your ${routeDisplay} interview starts at ${interviewTime} ${timezone}
     </p>
 
-    <div class="alert">
-      <strong>⚠️ Join now to test your setup!</strong><br>
-      We recommend joining 5 minutes early to ensure your camera and microphone are working properly.
+    <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+      <strong style="color: #92400e;">⚠️ Join now to test your setup!</strong><br>
+      <span style="color: #a16207;">We recommend joining 5 minutes early to ensure your camera and microphone are working properly.</span>
     </div>
 
     <div style="text-align: center; margin: 30px 0;">
-      ${joinLink ? `<a href="${joinLink}" class="button">Join Interview Now</a>` : ''}
+      ${joinLink ? `<a href="${joinLink}" style="display: inline-block; padding: 14px 28px; background-color: ${primaryColor}; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Join Interview Now</a>` : ''}
     </div>
 
     <p style="font-size: 16px; color: #374151;">
       <strong>Quick reminders:</strong>
     </p>
     <ul style="font-size: 16px; color: #374151; padding-left: 20px;">
-      <li>✅ Camera and microphone working</li>
-      <li>✅ Quiet, well-lit environment</li>
-      <li>✅ Professional appearance</li>
-      <li>✅ Documents within reach</li>
+      <li style="margin: 8px 0;">✅ Camera and microphone working</li>
+      <li style="margin: 8px 0;">✅ Quiet, well-lit environment</li>
+      <li style="margin: 8px 0;">✅ Professional appearance</li>
+      <li style="margin: 8px 0;">✅ Documents within reach</li>
     </ul>
 
     <p style="font-size: 16px; color: #374151; margin-top: 30px;">
@@ -548,6 +444,7 @@ export async function sendCancellationEmail(params: CancellationParams): Promise
     rebookLink
   } = params
 
+  const primaryColor = orgBranding?.primaryColor || '#3b82f6'
   const content = `
     <h2 style="color: #111827; margin-top: 0;">Interview Cancelled</h2>
     <p style="font-size: 16px; color: #374151;">
@@ -558,9 +455,9 @@ export async function sendCancellationEmail(params: CancellationParams): Promise
     </p>
 
     ${reason ? `
-      <div class="info-box">
-        <strong>Reason:</strong><br>
-        ${reason}
+      <div style="background-color: #f9fafb; border-left: 4px solid ${primaryColor}; padding: 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #1e293b;">Reason:</strong><br>
+        <span style="color: #475569;">${reason}</span>
       </div>
     ` : ''}
 
@@ -569,7 +466,7 @@ export async function sendCancellationEmail(params: CancellationParams): Promise
         We apologize for any inconvenience. You can book a new slot using the link below:
       </p>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${rebookLink}" class="button">Book New Interview</a>
+        <a href="${rebookLink}" style="display: inline-block; padding: 14px 28px; background-color: ${primaryColor}; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Book New Interview</a>
       </div>
     ` : `
       <p style="font-size: 16px; color: #374151;">
@@ -631,6 +528,7 @@ export async function sendRescheduleConfirmation(params: RescheduleConfirmationP
     routeDisplay
   } = params
 
+  const primaryColor = orgBranding?.primaryColor || '#3b82f6'
   const content = `
     <h2 style="color: #111827; margin-top: 0;">Interview Rescheduled</h2>
     <p style="font-size: 16px; color: #374151;">
@@ -640,7 +538,7 @@ export async function sendRescheduleConfirmation(params: RescheduleConfirmationP
       Your <strong>${routeDisplay}</strong> interview has been successfully rescheduled.
     </p>
     
-    <div class="info-box">
+    <div style="background-color: #f9fafb; border-left: 4px solid ${primaryColor}; padding: 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
       <h3 style="margin-top: 0; color: #6b7280; font-size: 14px;">Previous Time:</h3>
       <p style="margin: 5px 0; text-decoration: line-through; color: #9ca3af;">
         ${oldDate} at ${oldTime} ${timezone}
