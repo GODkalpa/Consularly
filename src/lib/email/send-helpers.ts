@@ -7,6 +7,7 @@ import { getEmailService } from './index';
 import { generateWelcomeEmail } from './templates/welcome';
 import { generateAccountCreationEmail } from './templates/account-creation';
 import { generateOrgWelcomeEmail } from './templates/org-welcome';
+import { generateOrgAccountSetupEmail } from './templates/org-account-setup';
 import { generateInterviewResultsEmail } from './templates/interview-results';
 import { generateQuotaAlertEmail } from './templates/quota-alert';
 import { generatePasswordResetEmail } from './templates/password-reset';
@@ -131,6 +132,49 @@ export async function sendOrgWelcomeEmail(params: {
     dashboardLink: `${BASE_URL}/org`,
     brandingLink: `${BASE_URL}/org?tab=branding`,
     studentsLink: `${BASE_URL}/org?tab=students`,
+  });
+
+  return await emailService.sendEmail({
+    to: params.to,
+    subject,
+    html,
+    text,
+  });
+}
+
+/**
+ * Send organization account setup email when new org is created
+ * This combines password setup with organization details and subdomain info
+ */
+export async function sendOrgAccountSetupEmail(params: {
+  to: string;
+  adminName: string;
+  orgName: string;
+  orgId: string;
+  plan: string;
+  quotaLimit: number;
+  subdomain?: string;
+  resetLink: string;
+}) {
+  const emailService = getEmailService();
+
+  const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
+  const subdomainUrl = params.subdomain ? `https://${params.subdomain}.${baseDomain}` : undefined;
+  const dashboardBase = subdomainUrl || BASE_URL;
+
+  const { subject, html, text } = generateOrgAccountSetupEmail({
+    adminName: params.adminName,
+    email: params.to,
+    orgName: params.orgName,
+    orgId: params.orgId,
+    plan: params.plan,
+    quotaLimit: params.quotaLimit,
+    subdomain: params.subdomain,
+    subdomainUrl,
+    resetLink: params.resetLink,
+    dashboardLink: `${dashboardBase}/org`,
+    brandingLink: `${dashboardBase}/org?tab=branding`,
+    studentsLink: `${dashboardBase}/org?tab=students`,
   });
 
   return await emailService.sendEmail({

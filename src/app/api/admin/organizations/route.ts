@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureFirebaseAdmin, adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin'
-import { sendOrgWelcomeEmail, sendPasswordResetEmail } from '@/lib/email/send-helpers'
+import { sendOrgAccountSetupEmail } from '@/lib/email/send-helpers'
 import { generateEmailAlias } from '@/lib/email-alias-generator'
 import { generateSubdomainFromName, validateSubdomainFormat } from '@/lib/subdomain-utils'
 
@@ -250,22 +250,21 @@ export async function POST(req: NextRequest) {
           userCreated = true
           console.log('[api/admin/organizations] Created new user for org:', orgEmail)
 
-          // Send password reset email (NOT account creation email)
+          // Send organization account setup email with password link, subdomain, and setup info
           try {
-            await sendPasswordResetEmail({
+            await sendOrgAccountSetupEmail({
               to: orgEmail,
-              displayName: orgContactPerson,
-              resetLink,
+              adminName: orgContactPerson,
               orgName: name,
-              orgBranding: {
-                logoUrl: body?.settings?.customBranding?.logoUrl,
-                primaryColor: body?.settings?.customBranding?.primaryColor || '#4840A3',
-                companyName: name,
-              },
+              orgId: ref.id,
+              plan: plan,
+              quotaLimit: quotaLimit,
+              subdomain: subdomain || undefined,
+              resetLink,
             })
-            console.log('[api/admin/organizations] Password reset email sent to:', orgEmail)
+            console.log('[api/admin/organizations] Account setup email sent to:', orgEmail)
           } catch (e: any) {
-            console.warn('[api/admin/organizations] Password reset email failed:', e.message)
+            console.warn('[api/admin/organizations] Account setup email failed:', e.message)
           }
         }
       } catch (e: any) {
