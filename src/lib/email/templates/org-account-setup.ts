@@ -37,124 +37,119 @@ export function generateOrgAccountSetupEmail(data: OrgAccountSetupEmailData): { 
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
-    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-    .header { background-color: #4840A3; padding: 40px 20px; text-align: center; }
-    .header h1 { color: #ffffff; margin: 10px 0 0 0; font-size: 28px; }
-    .logo { max-width: 180px; height: auto; margin-bottom: 10px; background-color: white; padding: 8px; border-radius: 8px; }
-    .content { padding: 40px 30px; }
-    .button { display: inline-block; padding: 14px 32px; background-color: #4840A3; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 5px; }
-    .button-secondary { background-color: #F9CD6A; color: #000; }
-    .feature-box { background-color: #D8EFF7; border-left: 4px solid #9CBBFC; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0; }
-    .info-box { background-color: #f0f9ff; border: 2px solid #9CBBFC; border-radius: 8px; padding: 20px; margin: 20px 0; }
-    .alert-box { background-color: #FFF8E1; border-left: 4px solid #F9CD6A; padding: 15px 20px; margin: 20px 0; }
-    .subdomain-box { background: linear-gradient(135deg, #4840A3 0%, #6366f1 100%); border-radius: 12px; padding: 25px; margin: 25px 0; color: white; text-align: center; }
-    .subdomain-url { font-size: 20px; font-weight: bold; background: rgba(255,255,255,0.2); padding: 12px 20px; border-radius: 8px; margin-top: 10px; display: inline-block; }
-    .stat-box { background-color: #D8EFF7; border-radius: 8px; padding: 20px; text-align: center; margin: 10px; display: inline-block; min-width: 120px; }
-    .stat-number { font-size: 28px; font-weight: bold; color: #4840A3; }
-    .footer { background-color: #f8fafc; padding: 30px; text-align: center; font-size: 14px; color: #64748b; }
-  </style>
 </head>
-<body>
-  <div class="container">
-    <div class="header">
-      <img src="https://res.cloudinary.com/dpkstuci5/image/upload/v1761822845/email-assets/consularly-logo.png" alt="Consularly" class="logo" />
-      <h1>🎉 Welcome to Consularly!</h1>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+    <!-- Header -->
+    <div style="background-color: #4840A3; padding: 40px 20px; text-align: center;">
+      <img src="https://res.cloudinary.com/dpkstuci5/image/upload/v1749617997/Consularly_1_iqvpqt.png" alt="Consularly" style="max-width: 180px; height: auto; margin-bottom: 10px;" />
+      <h1 style="color: #ffffff; margin: 10px 0 0 0; font-size: 28px;">🎉 Welcome to Consularly!</h1>
       <p style="color: rgba(255,255,255,0.9); margin: 10px 0;">Your organization account is ready</p>
     </div>
     
-    <div class="content">
-      <h2>Hi ${data.adminName},</h2>
+    <!-- Content -->
+    <div style="padding: 40px 30px;">
+      <h2 style="color: #1e293b; margin-top: 0;">Hi ${data.adminName},</h2>
       
-      <p>Great news! Your organization <strong>${data.orgName}</strong> has been created on Consularly. You're just one step away from helping your students ace their visa interviews.</p>
+      <p style="color: #475569;">Great news! Your organization <strong style="color: #4840A3;">${data.orgName}</strong> has been created on Consularly. You're just one step away from helping your students ace their visa interviews.</p>
       
-      <div class="alert-box">
-        <strong>🔐 First Step: Set Up Your Password</strong><br>
-        Click the button below to create your password and activate your account.
+      <!-- Password Setup Alert -->
+      <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #92400e;">🔐 First Step: Set Up Your Password</strong><br>
+        <span style="color: #a16207;">Click the button below to create your password and activate your account.</span>
       </div>
       
+      <!-- CTA Button -->
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${data.resetLink}" class="button">Set Up My Password →</a>
+        <a href="${data.resetLink}" style="display: inline-block; padding: 16px 40px; background-color: #4840A3; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Set Up My Password →</a>
       </div>
       
       ${data.subdomain && data.subdomainUrl ? `
-      <div class="subdomain-box">
-        <div style="font-size: 14px; opacity: 0.9;">🌐 Your Organization's Custom URL</div>
-        <div class="subdomain-url">${data.subdomainUrl}</div>
-        <p style="margin: 15px 0 0 0; font-size: 14px; opacity: 0.9;">Share this link with your students for a branded experience</p>
+      <!-- Subdomain Box -->
+      <div style="background: linear-gradient(135deg, #4840A3 0%, #7c3aed 100%); border-radius: 12px; padding: 25px; margin: 25px 0; text-align: center;">
+        <div style="color: rgba(255,255,255,0.9); font-size: 14px;">🌐 Your Organization's Custom URL</div>
+        <a href="${data.subdomainUrl}" style="display: inline-block; font-size: 18px; font-weight: bold; background: rgba(255,255,255,0.2); padding: 12px 24px; border-radius: 8px; margin-top: 12px; color: #ffffff; text-decoration: none;">${data.subdomainUrl}</a>
+        <p style="margin: 15px 0 0 0; font-size: 14px; color: rgba(255,255,255,0.8);">Share this link with your students for a branded experience</p>
       </div>
       ` : ''}
       
-      <div class="info-box">
-        <h3 style="margin-top: 0;">📋 Your Account Details</h3>
+      <!-- Account Details -->
+      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #1e293b; font-size: 16px;">📋 Your Account Details</h3>
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
-            <td style="padding: 8px 0; color: #64748b;">Organization:</td>
-            <td style="padding: 8px 0; font-weight: 600;">${data.orgName}</td>
+            <td style="padding: 10px 0; color: #64748b; border-bottom: 1px solid #e2e8f0;">Organization:</td>
+            <td style="padding: 10px 0; font-weight: 600; color: #1e293b; border-bottom: 1px solid #e2e8f0;">${data.orgName}</td>
           </tr>
           <tr>
-            <td style="padding: 8px 0; color: #64748b;">Email:</td>
-            <td style="padding: 8px 0; font-weight: 600;">${data.email}</td>
+            <td style="padding: 10px 0; color: #64748b; border-bottom: 1px solid #e2e8f0;">Email:</td>
+            <td style="padding: 10px 0; font-weight: 600; color: #1e293b; border-bottom: 1px solid #e2e8f0;">${data.email}</td>
           </tr>
           <tr>
-            <td style="padding: 8px 0; color: #64748b;">Plan:</td>
-            <td style="padding: 8px 0; font-weight: 600;">${data.plan.toUpperCase()}</td>
+            <td style="padding: 10px 0; color: #64748b; border-bottom: 1px solid #e2e8f0;">Plan:</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;"><span style="background-color: #4840A3; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;">${data.plan.toUpperCase()}</span></td>
           </tr>
           <tr>
-            <td style="padding: 8px 0; color: #64748b;">Interview Credits:</td>
-            <td style="padding: 8px 0; font-weight: 600;">${data.quotaLimit}</td>
+            <td style="padding: 10px 0; color: #64748b; border-bottom: 1px solid #e2e8f0;">Interview Credits:</td>
+            <td style="padding: 10px 0; font-weight: 600; color: #059669; border-bottom: 1px solid #e2e8f0;">${data.quotaLimit}</td>
           </tr>
-          ${data.subdomain ? `
+          ${data.subdomainUrl ? `
           <tr>
-            <td style="padding: 8px 0; color: #64748b;">Subdomain:</td>
-            <td style="padding: 8px 0; font-weight: 600;">${data.subdomain}</td>
+            <td style="padding: 10px 0; color: #64748b;">Custom URL:</td>
+            <td style="padding: 10px 0;"><a href="${data.subdomainUrl}" style="color: #4840A3; font-weight: 600; text-decoration: none;">${data.subdomainUrl}</a></td>
           </tr>
           ` : ''}
         </table>
       </div>
       
-      <h3>🚀 Getting Started (After Password Setup)</h3>
+      <!-- Getting Started -->
+      <h3 style="color: #1e293b; margin-top: 30px;">🚀 Getting Started (After Password Setup)</h3>
       
-      <div class="feature-box">
-        <strong>1. Customize Your Branding</strong><br>
-        Add your logo, colors, and company information to create a branded experience.
+      <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #166534;">1. Customize Your Branding</strong><br>
+        <span style="color: #15803d;">Add your logo, colors, and company information to create a branded experience.</span>
       </div>
       
-      <div class="feature-box">
-        <strong>2. Add Your Students</strong><br>
-        Create student accounts and assign interview credits.
+      <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #1e40af;">2. Add Your Students</strong><br>
+        <span style="color: #1d4ed8;">Create student accounts and assign interview credits.</span>
       </div>
       
-      <div class="feature-box">
-        <strong>3. Start Interview Simulations</strong><br>
-        Help students practice for USA, UK, or France visa interviews.
+      <div style="background-color: #faf5ff; border-left: 4px solid #a855f7; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #7e22ce;">3. Start Interview Simulations</strong><br>
+        <span style="color: #9333ea;">Help students practice for USA, UK, or France visa interviews.</span>
       </div>
       
-      <h3>✨ Your ${data.plan.toUpperCase()} Plan Includes</h3>
-      <ul>
-        ${features.map(feature => `<li>${feature}</li>`).join('')}
+      <!-- Plan Features -->
+      <h3 style="color: #1e293b; margin-top: 30px;">✨ Your ${data.plan.toUpperCase()} Plan Includes</h3>
+      <ul style="color: #475569; padding-left: 20px;">
+        ${features.map(feature => `<li style="margin: 8px 0;">${feature}</li>`).join('')}
       </ul>
       
-      <div class="alert-box">
-        <strong>⏰ Important:</strong> The password setup link expires in 1 hour. If it expires, you can request a new one from the login page.
+      <!-- Important Notice -->
+      <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #92400e;">⏰ Important:</strong>
+        <span style="color: #a16207;"> The password setup link expires in 1 hour. If it expires, you can request a new one from the login page.</span>
       </div>
       
-      <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 15px 20px; margin: 20px 0;">
-        <strong>💡 Pro Tip:</strong> After setting up your password, bookmark your dashboard for quick access: ${data.dashboardLink}
+      <!-- Pro Tip -->
+      <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #166534;">💡 Pro Tip:</strong>
+        <span style="color: #15803d;"> After setting up your password, bookmark your dashboard for quick access.</span>
       </div>
       
-      <p><strong>Need Help?</strong><br>
-      Our support team is here to help you get started. Reply to this email or contact us at support@consularly.com</p>
+      <p style="color: #475569;"><strong style="color: #1e293b;">Need Help?</strong><br>
+      Our support team is here to help you get started. Reply to this email or contact us at <a href="mailto:support@consularly.com" style="color: #4840A3;">support@consularly.com</a></p>
       
-      <p>Best regards,<br>
-      <strong>The Consularly Team</strong></p>
+      <p style="color: #475569; margin-top: 30px;">Best regards,<br>
+      <strong style="color: #1e293b;">The Consularly Team</strong></p>
     </div>
     
-    <div class="footer">
-      <p>© ${new Date().getFullYear()} Consularly. All rights reserved.</p>
-      <p>
-        <a href="mailto:support@consularly.com" style="color: #4840A3;">Support</a>
+    <!-- Footer -->
+    <div style="background-color: #f8fafc; padding: 30px; text-align: center; font-size: 14px; color: #64748b; border-top: 1px solid #e2e8f0;">
+      <p style="margin: 0;">© ${new Date().getFullYear()} Consularly. All rights reserved.</p>
+      <p style="margin: 10px 0 0 0;">
+        <a href="mailto:support@consularly.com" style="color: #4840A3; text-decoration: none;">Support</a>
       </p>
     </div>
   </div>
@@ -173,7 +168,7 @@ Great news! Your organization ${data.orgName} has been created on Consularly.
 Click this link to create your password and activate your account:
 ${data.resetLink}
 
-${data.subdomain && data.subdomainUrl ? `
+${data.subdomainUrl ? `
 🌐 YOUR ORGANIZATION'S CUSTOM URL
 ${data.subdomainUrl}
 Share this link with your students for a branded experience.
@@ -184,7 +179,7 @@ Share this link with your students for a branded experience.
 - Email: ${data.email}
 - Plan: ${data.plan.toUpperCase()}
 - Interview Credits: ${data.quotaLimit}
-${data.subdomain ? `- Subdomain: ${data.subdomain}` : ''}
+${data.subdomainUrl ? `- Custom URL: ${data.subdomainUrl}` : ''}
 
 🚀 GETTING STARTED (After Password Setup)
 
@@ -203,8 +198,6 @@ ${features.map(f => `- ${f}`).join('\n')}
 ⏰ IMPORTANT: The password setup link expires in 1 hour.
 
 Dashboard: ${data.dashboardLink}
-Branding: ${data.brandingLink}
-Students: ${data.studentsLink}
 
 Need help? Reply to this email or contact support@consularly.com
 
