@@ -145,6 +145,7 @@ export async function sendOrgWelcomeEmail(params: {
 /**
  * Send organization account setup email when new org is created
  * This combines password setup with organization details and subdomain info
+ * Uses nodemailer directly for reliability (same as other working email functions)
  */
 export async function sendOrgAccountSetupEmail(params: {
   to: string;
@@ -156,7 +157,29 @@ export async function sendOrgAccountSetupEmail(params: {
   subdomain?: string;
   resetLink: string;
 }) {
-  const emailService = getEmailService();
+  // Use nodemailer directly (same pattern as working email functions in email-service.ts)
+  const nodemailer = await import('nodemailer');
+  
+  const smtpConfig = {
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '465'),
+    secure: true,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASSWORD,
+    },
+  };
+
+  if (!smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass) {
+    console.error('[sendOrgAccountSetupEmail] SMTP not configured:', {
+      host: !!smtpConfig.host,
+      user: !!smtpConfig.auth.user,
+      pass: !!smtpConfig.auth.pass,
+    });
+    throw new Error('SMTP credentials not configured');
+  }
+
+  const transporter = nodemailer.default.createTransport(smtpConfig);
 
   const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'consularly.com';
   const subdomainUrl = params.subdomain ? `https://${params.subdomain}.${baseDomain}` : undefined;
@@ -177,12 +200,23 @@ export async function sendOrgAccountSetupEmail(params: {
     studentsLink: `${dashboardBase}/org?tab=students`,
   });
 
-  return await emailService.sendEmail({
+  const senderEmail = process.env.DEFAULT_SENDER_EMAIL || 'info@consularly.com';
+  const senderName = process.env.DEFAULT_SENDER_NAME || 'Consularly';
+
+  const mailOptions = {
+    from: `"${senderName}" <${senderEmail}>`,
     to: params.to,
     subject,
     html,
     text,
-  });
+    replyTo: process.env.ORG_SUPPORT_EMAIL || 'support@consularly.com',
+  };
+
+  console.log(`[sendOrgAccountSetupEmail] Sending to ${params.to} from ${senderEmail}`);
+  
+  await transporter.sendMail(mailOptions);
+  
+  console.log(`[sendOrgAccountSetupEmail] Successfully sent to ${params.to}`);
 }
 
 /**

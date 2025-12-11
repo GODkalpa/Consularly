@@ -186,6 +186,8 @@ export async function POST(req: NextRequest) {
     // Create or assign user account for the organization email
     let userCreated = false
     let resetLink = ''
+    let emailSent = false
+    let emailError = ''
     if (body.email) {
       const orgEmail = String(body.email).trim()
       const orgContactPerson = body.contactPerson ? String(body.contactPerson).trim() : 'Organization Admin'
@@ -252,6 +254,8 @@ export async function POST(req: NextRequest) {
 
           // Send organization account setup email with password link, subdomain, and setup info
           try {
+            console.log('[api/admin/organizations] Attempting to send account setup email to:', orgEmail)
+            
             await sendOrgAccountSetupEmail({
               to: orgEmail,
               adminName: orgContactPerson,
@@ -262,9 +266,12 @@ export async function POST(req: NextRequest) {
               subdomain: subdomain || undefined,
               resetLink,
             })
-            console.log('[api/admin/organizations] Account setup email sent to:', orgEmail)
+            emailSent = true
+            console.log('[api/admin/organizations] Account setup email sent successfully to:', orgEmail)
           } catch (e: any) {
-            console.warn('[api/admin/organizations] Account setup email failed:', e.message)
+            emailError = e.message || 'Unknown error'
+            console.error('[api/admin/organizations] Account setup email failed:', e.message)
+            console.error('[api/admin/organizations] Full error:', e)
           }
         }
       } catch (e: any) {
@@ -281,9 +288,11 @@ export async function POST(req: NextRequest) {
       id: ref.id,
       userCreated,
       resetLink: userCreated ? resetLink : undefined,
-      emailAlias: emailAlias || undefined, // Return generated email alias
-      subdomain: subdomain || undefined, // Return generated subdomain
+      emailAlias: emailAlias || undefined,
+      subdomain: subdomain || undefined,
       subdomainEnabled: subdomainEnabled,
+      emailSent,
+      emailError: emailError || undefined,
     }, { status: 201 })
   } catch (e: any) {
     console.error('[api/admin/organizations] POST error', e)
