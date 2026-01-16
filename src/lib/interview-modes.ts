@@ -25,7 +25,7 @@ export const COUNTRY_CONFIGS: Record<InterviewCountry, CountryInterviewConfig> =
   uk: {
     country: 'uk',
     name: 'UK Student Visa',
-    questionCount: 16, // Results in exactly 15 questions asked (counter starts at 1, ends when counter reaches this value)
+    questionCount: 15, // Exactly 15 questions
     prepTime: 15, // 15 seconds to prepare
     answerTime: 90, // 90 seconds to answer
   },
