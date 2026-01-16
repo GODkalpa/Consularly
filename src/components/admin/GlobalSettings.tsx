@@ -20,8 +20,10 @@ import {
   Mail,
   Key,
   Users,
-  TestTube
+  TestTube,
+  Volume2
 } from "lucide-react"
+import { TTSSettings } from "./TTSSettings"
 
 interface PlatformSettings {
   general: {
@@ -125,12 +127,13 @@ export function GlobalSettings() {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="features">Features</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="branding">Branding</TabsTrigger>
+          <TabsTrigger value="tts">TTS</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
@@ -473,6 +476,10 @@ export function GlobalSettings() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="tts" className="space-y-6">
+          <TTSSettings />
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-6">

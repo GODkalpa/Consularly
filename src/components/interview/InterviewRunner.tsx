@@ -19,6 +19,8 @@ import { auth } from '@/lib/firebase'
 import { FaceLivenessCheck } from '@/components/interview/FaceLivenessCheck'
 import { InterviewAnalyzingScreen } from '@/components/interview/InterviewAnalyzingScreen'
 import { DynamicFavicon } from '@/components/branding/DynamicFavicon'
+import { useTTS } from '@/hooks/useTTS'
+import { Volume2 } from 'lucide-react'
 
 // Dynamically import the heavy InterviewStage (TensorFlow/MediaPipe) client-only to reduce initial bundle size
 const InterviewStage = dynamic<InterviewStageProps>(
@@ -111,8 +113,41 @@ export default function InterviewRunner() {
   const preflightRef = useRef<boolean>(false)
   const permissionRequestingRef = useRef<boolean>(false)
   const [permissionsReady, setPermissionsReady] = useState<boolean>(false)
+  // TTS state for USA F1 interview voice synthesis
+  const [ttsEnabled, setTtsEnabled] = useState<boolean>(true)
+  const [ttsFallbackMode, setTtsFallbackMode] = useState<boolean>(false)
+  const lastSpokenQuestionRef = useRef<string>('')
   const [permError, setPermError] = useState<string | null>(null)
   const { running: micRunning, level: micLevel, error: micError, start: startMic, stop: stopMic } = useMicLevel()
+
+  // TTS hook for USA F1 interview - speaks questions aloud
+  const {
+    speak: ttsSpeak,
+    stop: ttsStop,
+    isPlaying: ttsIsPlaying,
+    isLoading: ttsIsLoading,
+    isFallbackMode: ttsIsFallback,
+  } = useTTS({
+    onStart: () => {
+      console.log('[TTS] Started speaking question')
+    },
+    onEnd: () => {
+      console.log('[TTS] Finished speaking question')
+      // Start the answer timer after TTS completes for USA F1
+      if (session?.route === 'usa_f1' && session?.status === 'active') {
+        startUSF1QuestionTimer()
+      }
+    },
+    onError: (error) => {
+      console.error('[TTS] Error:', error)
+      setTtsFallbackMode(true)
+      // Start timer even if TTS fails
+      if (session?.route === 'usa_f1' && session?.status === 'active') {
+        startUSF1QuestionTimer()
+      }
+    },
+  })
+
   const [livenessVerified, setLivenessVerified] = useState<boolean>(false)
   const [evaluationError, setEvaluationError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState<number>(0)
@@ -476,8 +511,16 @@ export default function InterviewRunner() {
       const prepDuration = session.route === 'uk_student' ? 15 : 30
       startPhase('prep', prepDuration)
     } else if (session.route === 'usa_f1') {
-      // USA F1: 40s soft cap per question with 30s warning
-      startUSF1QuestionTimer()
+      // USA F1: Speak the first question via TTS, then start timer after TTS completes
+      const firstQuestion = session.questions[0]?.question
+      if (firstQuestion && ttsEnabled && !ttsFallbackMode) {
+        lastSpokenQuestionRef.current = firstQuestion
+        // TTS will trigger startUSF1QuestionTimer in onEnd callback
+        ttsSpeak(firstQuestion)
+      } else {
+        // Fallback: start timer immediately if TTS disabled
+        startUSF1QuestionTimer()
+      }
     }
   }
 
@@ -516,7 +559,7 @@ export default function InterviewRunner() {
     const historyLength = finalApiSession.conversationHistory?.length || 0
     const scoresLength = perfList?.length || 0
     const historyWithAnswers = finalApiSession.conversationHistory?.filter((h: any) => h.answer && h.answer.trim().length > 0).length || 0
-    
+
     console.log('📄 Starting final report generation...', {
       route: session?.route,
       conversationLength: historyLength,
@@ -525,7 +568,7 @@ export default function InterviewRunner() {
       // Warn if there's a mismatch
       syncStatus: historyLength === scoresLength ? '✅ synced' : `⚠️ MISMATCH: ${historyLength} history vs ${scoresLength} scores`,
     })
-    
+
     // Log first few entries to help debug
     if (historyLength > 0) {
       console.log('📄 First 3 conversation entries:', finalApiSession.conversationHistory.slice(0, 3).map((h: any, i: number) => ({
@@ -551,9 +594,12 @@ export default function InterviewRunner() {
         body: JSON.stringify({
           route: session?.route,
           studentProfile: finalApiSession.studentProfile,
-          // CRITICAL FIX: Only include conversation history that has a corresponding score
-          // This prevents the "zero response" issue where the last (unanswered) question is counted
-          conversationHistory: finalApiSession.conversationHistory.slice(0, perfList.length),
+          // CRITICAL FIX: Filter to only include entries that have actual answers
+          // This prevents the "zero response" bug where empty answer entries are counted
+          // Also slice to match perfList length to exclude any unanswered questions
+          conversationHistory: finalApiSession.conversationHistory
+            .slice(0, Math.max(perfList.length, historyWithAnswers))
+            .filter((h: any) => h.answer && h.answer.trim().length > 0),
           perAnswerScores: perfList,  // Include detailed per-answer scoring data
         }),
         signal: controller.signal,
@@ -807,11 +853,18 @@ export default function InterviewRunner() {
         setSession((prev) => prev ? { ...prev, status: 'analyzing' } : prev)
         setEvaluationError(null)
 
-        // compute final report - this will trigger setFinalReport
+        // CRITICAL FIX: Wait for scoring to complete BEFORE generating final report
+        // This ensures all answer scores are captured and perfList is fully populated
+        try {
+          await scoringPromise
+          console.log('✅ All scoring complete, generating final report...')
+        } catch (err) {
+          console.warn('⚠️ Final answer scoring failed, continuing with available data:', err)
+        }
+
+        // compute final report - now perfList is guaranteed to be complete
         try {
           await computeFinalReport(updated)
-          // Wait for scoring to complete
-          try { await scoringPromise } catch { }
           // Set session to completed - the finalization useEffect will wait for finalReport
           setSession((prev) => prev ? { ...prev, status: 'completed' } : prev)
         } catch (error: any) {
@@ -839,8 +892,16 @@ export default function InterviewRunner() {
         const prepDuration = session.route === 'uk_student' ? 15 : 30
         startPhase('prep', prepDuration)
       } else if (session.route === 'usa_f1') {
-        // USA F1: restart 40s timer for next question
-        startUSF1QuestionTimer()
+        // USA F1: Speak the new question via TTS, then start timer after TTS completes
+        const questionText = nextQ.question
+        if (questionText && ttsEnabled && !ttsFallbackMode) {
+          lastSpokenQuestionRef.current = questionText
+          // TTS will trigger startUSF1QuestionTimer in onEnd callback
+          ttsSpeak(questionText)
+        } else {
+          // Fallback: start timer immediately if TTS disabled
+          startUSF1QuestionTimer()
+        }
       }
 
       // Scoring continues in background - no need to await
@@ -1752,7 +1813,24 @@ export default function InterviewRunner() {
                         </div>
                       </div>
                     )}
-                    {session.route === 'usa_f1' && session.status === 'active' && typeof secondsRemaining === 'number' && (
+                    {session.route === 'usa_f1' && session.status === 'active' && (ttsIsPlaying || ttsIsLoading) && (
+                      <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-100 rounded-lg border border-blue-200">
+                        <div className="text-sm text-blue-700 dark:text-blue-800 leading-relaxed flex items-start gap-2">
+                          <motion.div
+                            animate={{ scale: [1, 1.2, 1] }}
+                            transition={{ repeat: Infinity, duration: 1.5 }}
+                            className="flex-shrink-0"
+                          >
+                            <Volume2 className="h-5 w-5 text-blue-600" />
+                          </motion.div>
+                          <div>
+                            <span className="font-semibold block text-blue-900 mb-1">Visa Officer Speaking</span>
+                            <span className="text-blue-600">Please listen to the question. Your microphone will be enabled after the officer finishes speaking.</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {session.route === 'usa_f1' && session.status === 'active' && !ttsIsPlaying && !ttsIsLoading && typeof secondsRemaining === 'number' && (
                       <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-100 rounded-lg border border-gray-200">
                         <div className="text-sm text-gray-700 dark:text-gray-800 leading-relaxed flex items-start gap-2">
                           <span className="text-lg flex-shrink-0">⏱️</span>
@@ -1760,6 +1838,14 @@ export default function InterviewRunner() {
                             <span className="font-semibold block text-gray-900 mb-1">Time Remaining</span>
                             <span className="text-gray-600">You have <span className="font-bold text-primary">{Math.max(0, secondsRemaining)} seconds</span>. Click <span className="font-semibold">Next Question</span> when ready.</span>
                           </div>
+                        </div>
+                      </div>
+                    )}
+                    {session.route === 'usa_f1' && (ttsFallbackMode || ttsIsFallback) && (
+                      <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-100 rounded-lg border border-yellow-200">
+                        <div className="text-xs text-yellow-700 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          <span>Audio unavailable - please read the question above</span>
                         </div>
                       </div>
                     )}
@@ -1919,9 +2005,11 @@ export default function InterviewRunner() {
                   size="lg"
                   className="px-8 h-12 text-base font-semibold"
                   onClick={finalizeAnswer}
-                  disabled={processingRef.current || isProcessingTranscript}
+                  disabled={processingRef.current || isProcessingTranscript || ttsIsPlaying || ttsIsLoading}
                 >
-                  {isProcessingTranscript ? (
+                  {ttsIsPlaying || ttsIsLoading ? (
+                    <><Volume2 className="h-5 w-5 mr-2 animate-pulse" /> Officer Speaking...</>
+                  ) : isProcessingTranscript ? (
                     <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing transcription...</>
                   ) : processingRef.current ? (
                     <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing...</>
@@ -1976,6 +2064,8 @@ export default function InterviewRunner() {
             }
             running={
               session.status === 'active' &&
+              // Disable microphone while TTS is playing for USA F1
+              !(session.route === 'usa_f1' && (ttsIsPlaying || ttsIsLoading)) &&
               (session.route === 'usa_f1' ||
                 ((session.route === 'uk_student' || session.route === 'france_ema' || session.route === 'france_icn') && phase === 'answer'))
             }

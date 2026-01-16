@@ -25,7 +25,7 @@ export const COUNTRY_CONFIGS: Record<InterviewCountry, CountryInterviewConfig> =
   uk: {
     country: 'uk',
     name: 'UK Student Visa',
-    questionCount: 16, // 16 questions (not 37 - that's the pool size)
+    questionCount: 16, // Results in exactly 15 questions asked (counter starts at 1, ends when counter reaches this value)
     prepTime: 15, // 15 seconds to prepare
     answerTime: 90, // 90 seconds to answer
   },
@@ -54,7 +54,7 @@ export function getCountryConfig(country: string): CountryInterviewConfig {
     'france_icn': 'france',
     'france': 'france',
   };
-  
+
   const countryCode = countryMap[country.toLowerCase()] || 'usa';
   return COUNTRY_CONFIGS[countryCode];
 }
